@@ -17,4 +17,5 @@ Put `WANDB_API_KEY=...` in `.env` (gitignored). Serverless RL needs a W&B team e
 - `notebooks/01_serverless_rl_smoke.ipynb` - GRPO smoke test on `Qwen/Qwen3.8-27B` and `Qwen/Qwen3.6-35B-A3B`
 - `notebooks/02_sdpo_serverless.ipynb` - SDPO on W&B serverless via teacher-logprob injection
 - `notebooks/03_rlm_three_way.ipynb` - GRPO vs SDPO vs RLSD on the RLM environment (`rlm_rl/rlm_env.py`)
-- `documentation/` - research notes, SDPO/RLM compatibility, and three-way results
+- `scripts/run_rlsd_vs_grpo.py` - resumable 20-step RLSD vs GRPO run on the ticket tasks (`rlm_rl/ticket_tasks.py`)
+- `documentation/` - research notes, SDPO/RLM compatibility, three-way and 20-step results

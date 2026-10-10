@@ -34,7 +34,7 @@ from .rollout import attach_token_ids, chat_with_retry
 MAX_TURNS = 6
 MAX_SUBCALLS = 20
 ROOT_MAX_TOKENS = 1536
-SUBCALL_MAX_TOKENS = 512
+SUBCALL_MAX_TOKENS = 1024
 SUBCALL_MAX_CHARS = 24_000
 OUTPUT_MAX_CHARS = 2_000
 CELL_TIMEOUT_S = 120
@@ -170,14 +170,18 @@ def _parse_number(value: str | None) -> float | None:
 
 
 def score_answer(task: RLMTask, submitted: str | None) -> float:
-    """1 for exact, up to 0.5 partial credit for being close, 0 if missing."""
+    """1 for exact, partial credit for being close, 0 if missing."""
     value = _parse_number(submitted)
     if value is None:
         return 0.0
-    tolerance = 0.5 if task.family == "count" else 0.011
+    tolerance = 0.011 if task.family == "sum" else 0.5
     if abs(value - task.answer) <= tolerance:
         return 1.0
     rel_err = abs(value - task.answer) / max(abs(task.answer), 1.0)
+    if task.family.startswith("tickets"):
+        # Exact counts over hundreds of tickets are hard, so closeness carries most of the signal:
+        # 5% off -> 0.64, 10% off -> 0.48, 25% or more off -> 0.
+        return round(0.8 * max(0.0, 1.0 - 4.0 * rel_err), 4)
     return round(0.5 * max(0.0, 1.0 - 2.0 * rel_err), 4)
 
 
