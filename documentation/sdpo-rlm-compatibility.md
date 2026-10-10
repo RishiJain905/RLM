@@ -105,4 +105,14 @@ The task is a toy one, 4-digit multiplication, chosen only to exercise the pipel
 - With the importance weight pinned to 1, old logprobs can only change the loss through the `kimi_k2_tau` term. The SDPO loss differs from the GRPO pair by about 4x their own gap, so tau is being applied. This rests on one sample. A larger-tau run would make it unambiguous.
 - Teacher re-scoring aligned on 27 of 28 attempts. The mean token log-ratio was -0.05. The minimum was -13, which is the teacher strongly rejecting a wrong digit.
 
+**Same check on Qwen3.8-27B, with two tau values.** Four LoRAs were trained on identical rollouts (5-digit task, 8 groups x 4).
+
+| Metric | grpo-a | grpo-b | sdpo tau=0.11 | sdpo tau=1.0 |
+|---|---|---|---|---|
+| `loss/train` | -0.01894 | -0.01886 | -0.01936 | **-0.02765** |
+| `loss/grad_norm` | 0.271 | 0.248 | 0.256 | **0.403** |
+| `loss/probs_corr` | 0.995 | 0.995 | 0.933 | 0.938 |
+
+The loss moves away from GRPO in proportion to tau, far beyond the gap between the two GRPO copies. This confirms the server applies the SDPO term on Qwen3.8-27B. Teacher re-scoring aligned on 22 of 24 attempts.
+
 **Notebook 02 (b): three steps of SDPO-hybrid vs GRPO on Qwen3.6-35B-A3B.** Both arms started at 0.75 eval accuracy. After 3 steps GRPO reached 0.84 and SDPO 0.81. That is within noise, so it shows only that SDPO training runs stably. It says nothing yet about which method is better. Most groups were all-correct, so this task is too easy for the 35B model. The real comparison should run on the RLM environment.
