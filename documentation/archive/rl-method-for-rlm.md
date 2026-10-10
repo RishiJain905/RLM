@@ -1,6 +1,6 @@
 # Which RL method fits RLM best?
 
-> Theory-only decision doc (2026-10-10). Nothing here was run. Builds on [rlm-paper.md](rlm-paper.md), [rlm-inference-strategy.md](rlm-inference-strategy.md) and [sdpo-rlm-compatibility.md](sdpo-rlm-compatibility.md). Setting: Qwen3.8-27B, W&B serverless RL (ART 0.5.20, one scalar reward per rollout), straight RL with no SFT, sub-calls on the same base model.
+> Theory-only decision doc (2026-10-10). Nothing here was run. Builds on [rlm-paper.md](../rlm-paper.md), [rlm-inference-strategy.md](rlm-inference-strategy.md) and [sdpo-rlm-compatibility.md](sdpo-rlm-compatibility.md). Setting: Qwen3.8-27B, W&B serverless RL (ART 0.5.20, one scalar reward per rollout), straight RL with no SFT, sub-calls on the same base model.
 
 ---
 

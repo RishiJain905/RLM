@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RLM Project Map</title>
+<style>
+:root {
+  --bg: #f7f6f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #66645d; --line: #dcd9d0;
+  --p1: #2f6fb0; --p1-soft: #e6eef8; --p2: #7a4fb3; --p2-soft: #f0eaf8;
+  --done: #2e7d4f; --run: #b7791f; --next: #2f6fb0; --later: #8a877e;
+  --link: #c0562f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --panel: #201f1c; --ink: #ecebe6; --muted: #a3a097; --line: #3a3833;
+    --p1: #6ea6e0; --p1-soft: #1c2a3a; --p2: #b393e3; --p2-soft: #2a2238;
+    --done: #5cbf85; --run: #e0a948; --next: #6ea6e0; --later: #8e8b82; --link: #e58a63;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --panel: #201f1c; --ink: #ecebe6; --muted: #a3a097; --line: #3a3833;
+  --p1: #6ea6e0; --p1-soft: #1c2a3a; --p2: #b393e3; --p2-soft: #2a2238;
+  --done: #5cbf85; --run: #e0a948; --next: #6ea6e0; --later: #8e8b82; --link: #e58a63;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 20px; margin: 40px 0 12px; }
+h3 { font-size: 15px; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+.sub { color: var(--muted); margin-bottom: 24px; }
+code { font: 13px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+  background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
+nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+nav a { color: var(--ink); text-decoration: none; border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--panel); }
+nav a:hover { border-color: var(--muted); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.goal { font-size: 16px; }
+
+/* Overview diagram */
+.overview { display: grid; grid-template-columns: 1fr 64px 1fr; align-items: stretch; gap: 0; }
+.part { border-radius: 12px; padding: 16px; border: 1px solid var(--line); }
+.part.p1 { background: var(--p1-soft); border-color: color-mix(in srgb, var(--p1) 35%, var(--line)); }
+.part.p2 { background: var(--p2-soft); border-color: color-mix(in srgb, var(--p2) 35%, var(--line)); }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 6px; color: #fff; margin-bottom: 8px; }
+.p1 .tag { background: var(--p1); } .p2 .tag { background: var(--p2); }
+.part h3 { font-size: 17px; }
+.flow { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.node { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; }
+.node b { display: block; font-size: 14px; }
+.node.out { border-width: 2px; }
+.p1 .node.out { border-color: var(--p1); } .p2 .node.out { border-color: var(--p2); }
+.down { text-align: center; color: var(--muted); font-size: 14px; line-height: 1; }
+.bridge-arrow { display: flex; align-items: center; justify-content: center; }
+.bridge-arrow svg { width: 64px; height: 120px; }
+.join { margin-top: 14px; text-align: center; font-size: 14px; color: var(--muted); }
+.join b { color: var(--ink); }
+
+/* Cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.card p { font-size: 14px; color: var(--muted); margin: 0; }
+.card .state { font-size: 12.5px; margin-top: 8px; color: var(--ink); }
+.p1c { border-top: 3px solid var(--p1); } .p2c { border-top: 3px solid var(--p2); }
+
+/* Architecture diagram */
+.arch svg { width: 100%; height: auto; display: block; }
+.arch text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+.arch .muted { fill: var(--muted); font-size: 12px; }
+.arch .mono { font: 12px ui-monospace, Consolas, monospace; fill: var(--ink); }
+.arch .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.arch .host { fill: var(--p2-soft); stroke: color-mix(in srgb, var(--p2) 40%, var(--line)); }
+.arch .accent { stroke: var(--p2); stroke-width: 1.6; fill: var(--panel); }
+.arch .later { stroke-dasharray: 4 3; }
+.arch .wire { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.arch .wire-acc { stroke: var(--p2); stroke-width: 1.8; fill: none; }
+.arch .arrowhead { fill: var(--muted); } .arch .arrowhead-acc { fill: var(--p2); }
+
+/* Roadmap */
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.d-done { background: var(--done); } .d-run { background: var(--run); }
+.d-next { background: var(--next); } .d-later { background: transparent; border: 2px solid var(--later); }
+.lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lane h3 { margin-bottom: 10px; }
+.steps { list-style: none; margin: 0; padding: 0; position: relative; }
+.steps li { position: relative; padding: 0 0 12px 26px; font-size: 14px; }
+.steps li::before { content: ""; position: absolute; left: 5px; top: 16px; bottom: -2px; width: 2px; background: var(--line); }
+.steps li:last-child::before { display: none; }
+.steps li .dot { position: absolute; left: 0; top: 5px; margin: 0; width: 12px; height: 12px; }
+.steps li .n { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.steps li.here { font-weight: 600; }
+.steps li small { display: block; color: var(--muted); font-weight: 400; }
+
+/* Connection */
+.links { counter-reset: k; display: grid; gap: 10px; }
+.links .card { position: relative; padding-left: 46px; }
+.links .card::before { counter-increment: k; content: counter(k); position: absolute; left: 14px; top: 14px;
+  width: 22px; height: 22px; border-radius: 50%; background: var(--link); color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.warn { border-left: 3px solid var(--run); }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tablewrap { overflow-x: auto; }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .overview { grid-template-columns: 1fr; }
+  .bridge-arrow svg { transform: rotate(90deg); height: 64px; }
+  .lanes { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>RLM Project Map</h1>
+  <p class="sub">High-level view of the whole two-part project, as of 2026-10-10. Text version and sources: <code>project-map.md</code>.</p>
+  <nav>
+    <a href="#overview">Overview</a><a href="#decisions">Decisions</a><a href="#part1">Part 1</a>
+    <a href="#part2">Part 2</a><a href="#connect">How they connect</a><a href="#roadmap">Roadmap</a><a href="#open">Open questions</a>
+  </nav>
+
+  <h2 id="overview">The goal</h2>
+  <div class="panel goal">
+    <p>A <b>Recursive Language Model</b> never reads a long input directly. The input sits in a Python REPL as a <code>context</code> variable; the model writes code to inspect it and calls itself on pieces of it, then returns the answer with <code>submit()</code>.</p>
+    <p style="margin:0">We build it in two parts: <b>train the root model</b> with RL, then <b>build the harness</b> it runs in. The trained model becomes the harness's default root.</p>
+  </div>
+
+  <div class="overview" style="margin-top:16px">
+    <section class="part p1">
+      <span class="tag">Part 1</span>
+      <h3>Train the RLM root with RL</h3>
+      <div class="flow">
+        <div class="node"><b>Task suite</b>Long-context tasks that need sub-calls, curriculum by difficulty</div>
+        <div class="down">↓</div>
+        <div class="node"><b>RL environment</b>Sandboxed REPL with <code>context</code>, <code>llm_query</code>, <code>llm_batch</code>, <code>submit</code>, budgets</div>
+        <div class="down">↓ rollouts + reward</div>
+        <div class="node"><b>RLSD policy update</b>Reward sets each token's direction, self-teacher scales its size</div>
+        <div class="down">↓ W&amp;B serverless · ART · LoRA</div>
+        <div class="node out"><b>Trained RLM root</b>Qwen3.8-27B LoRA + eval report</div>
+      </div>
+    </section>
+
+    <div class="bridge-arrow" aria-hidden="true">
+      <svg viewBox="0 0 64 120"><defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--link)"/></marker></defs>
+        <line x1="6" y1="60" x2="56" y2="60" stroke="var(--link)" stroke-width="2.5" marker-end="url(#ah)"/></svg>
+    </div>
+
+    <section class="part p2">
+      <span class="tag">Part 2</span>
+      <h3>Build the RLM harness</h3>
+      <div class="flow">
+        <div class="node"><b>Root loop (host)</b>Prompt → model → code → run → truncated output → repeat</div>
+        <div class="down">↕</div>
+        <div class="node"><b>Sandbox REPL</b>Persistent Python kernel holding <code>context</code>; no keys, no network</div>
+        <div class="down">↕ HTTP bridge</div>
+        <div class="node"><b>Primitives</b><code>llm</code> · <code>llm_batch</code> · <code>rlm</code> · <code>submit</code>, later MCP tools, skills, profiles, delegation</div>
+        <div class="down">↓</div>
+        <div class="node out"><b>Model-agnostic harness</b>Runs our LoRA or any model that writes Python</div>
+      </div>
+    </section>
+  </div>
+  <p class="join">The arrow is the join: <b>the trained root plugs into the harness</b>, and both share one bridge API.</p>
+
+  <h2 id="decisions">Locked decisions</h2>
+  <div class="panel tablewrap">
+    <table>
+      <tr><th>Area</th><th>Decision</th></tr>
+      <tr><td>Base model</td><td>Qwen3.8-27B, LoRA</td></tr>
+      <tr><td>Platform</td><td>W&amp;B serverless RL via OpenPipe ART (pinned 0.5.20)</td></tr>
+      <tr><td>Training style</td><td>Straight RL, no SFT</td></tr>
+      <tr><td>Policy update</td><td>RLSD (reward-anchored self-distillation) on a CISPO backbone</td></tr>
+      <tr><td>Sub-calls</td><td>Same base model as the root; only the root is trained</td></tr>
+      <tr><td>Harness core</td><td>Our own loop, persistent REPL, HTTP bridge (alexzhang13/rlm for reference only)</td></tr>
+      <tr><td>Harness surface</td><td>As much of Claude Science's design as we can use</td></tr>
+      <tr><td>Termination</td><td><code>submit()</code> bridge call, not <code>FINAL(...)</code> text parsing</td></tr>
+    </table>
+  </div>
+
+  <h2 id="part1">Part 1: RL training of the root</h2>
+  <p>Goal: a LoRA that beats the base model at probing <code>context</code>, decomposing, using sub-calls when code alone can't, and submitting a correct answer.</p>
+  <div class="grid">
+    <div class="card p1c"><h3>Task suite</h3><p>Answers live in <code>context</code>. Some tasks must need reading comprehension so sub-calls matter. Keep pass rate in the 20-80% band.</p><div class="state">Now: toy tasks; datasets being researched</div></div>
+    <div class="card p1c"><h3>RL environment</h3><p>REPL subprocess, metadata-only first message, truncated output, limits on turns and sub-calls.</p><div class="state">Now: working prototype (<code>rlm_rl/archive/rlm_env.py</code>)</div></div>
+    <div class="card p1c"><h3>Reward</h3><p>Correctness on <code>submit</code>, small penalties for no submit, syntax errors, budget overruns.</p><div class="state">Now: prototype in the env</div></div>
+    <div class="card p1c"><h3>RLSD update</h3><p>Teacher is the same checkpoint with a sibling's code or env feedback in context, never the gold answer.</p><div class="state">Now: working via logprob injection</div></div>
+    <div class="card p1c"><h3>Training infra</h3><p>W&amp;B serverless, CISPO, group size 8, concurrency cap 8, token ids rebuilt from prompt logprobs.</p><div class="state">Now: working (notebooks 01-03)</div></div>
+    <div class="card p1c"><h3>Evaluation</h3><p>Held-out tasks, including longer contexts than training. Accuracy, sub-calls per episode, leakage.</p><div class="state">Now: 48 episodes; grow to 100+</div></div>
+  </div>
+
+  <h2 id="part2">Part 2: the RLM harness</h2>
+  <p>Goal: one small loop that runs any Python-writing chat model as an RLM, tuned for ours, and later does real agentic work through Claude Science-style primitives.</p>
+  <div class="panel arch">
+    <svg viewBox="0 0 960 380" role="img" aria-label="Harness architecture: host with root loop, model clients and budgets; sandbox REPL connected through an HTTP bridge to primitives">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-acc"/></marker>
+      </defs>
+      <rect x="10" y="10" width="940" height="360" rx="14" class="host"/>
+      <text x="30" y="36" style="font-weight:700">Host (harness process)</text>
+      <text x="30" y="54" class="muted">owns models, budgets, depth, logging, tool access</text>
+
+      <rect x="30" y="76" width="230" height="86" rx="10" class="box"/>
+      <text x="46" y="102" style="font-weight:600">Root loop</text>
+      <text x="46" y="122" class="muted">prompt → model → code →</text>
+      <text x="46" y="140" class="muted">run → truncated output</text>
+
+      <rect x="30" y="196" width="230" height="74" rx="10" class="box"/>
+      <text x="46" y="222" style="font-weight:600">Model clients</text>
+      <text x="46" y="242" class="muted">OpenAI-compatible: our LoRA,</text>
+      <text x="46" y="258" class="muted">vLLM, hosted APIs + profiles</text>
+
+      <rect x="30" y="296" width="230" height="56" rx="10" class="box"/>
+      <text x="46" y="320" style="font-weight:600">Trajectory log</text>
+      <text x="46" y="338" class="muted">turn + bridge-call tree</text>
+
+      <rect x="300" y="76" width="290" height="196" rx="10" class="box" style="stroke-width:1.6"/>
+      <text x="318" y="102" style="font-weight:600">Sandbox REPL</text>
+      <text x="318" y="120" class="muted">persistent Python kernel · no keys · no network</text>
+      <text x="318" y="152" class="mono">context = &lt;long input&gt;</text>
+      <text x="318" y="174" class="mono">notes = ...  # work in progress</text>
+      <text x="318" y="206" class="mono">llm(...)  llm_batch(...)</text>
+      <text x="318" y="228" class="mono">rlm(...)  submit(...)</text>
+      <text x="318" y="256" class="muted">host.* stubs forward to the bridge</text>
+
+      <path d="M260 119 H300" class="wire" marker-end="url(#m1)"/>
+      <text x="266" y="110" class="muted">code</text>
+      <path d="M300 140 H260" class="wire" marker-end="url(#m1)"/>
+
+      <path d="M592 174 H668" class="wire-acc" marker-start="url(#m2)" marker-end="url(#m2)"/>
+      <text x="630" y="164" text-anchor="middle" style="fill:var(--p2);font-weight:600;font-size:12px">HTTP bridge</text>
+
+      <rect x="670" y="76" width="266" height="122" rx="10" class="accent"/>
+      <text x="686" y="102" style="font-weight:600">Phase A: RLM core</text>
+      <text x="686" y="126" class="mono">llm / llm_batch → sub-calls</text>
+      <text x="686" y="148" class="mono">rlm → sub-RLM, depth + 1</text>
+      <text x="686" y="170" class="mono">submit → ends the loop</text>
+      <text x="686" y="190" class="muted">host serves calls, enforces budgets</text>
+
+      <rect x="670" y="214" width="266" height="138" rx="10" class="accent later"/>
+      <text x="686" y="240" style="font-weight:600">Phase B: Claude Science</text>
+      <text x="686" y="264" class="mono">tool / tools → MCP servers</text>
+      <text x="686" y="286" class="mono">skill_save / skill_load</text>
+      <text x="686" y="308" class="mono">profile → agent profiles</text>
+      <text x="686" y="330" class="mono">delegate → async sub-agents</text>
+
+    </svg>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <div class="card p2c"><h3>Model-agnostic by interface</h3><p>One OpenAI-compatible client. Per-model profiles hold context size, chunk guidance and batching hints; the loop and bridge never change.</p></div>
+    <div class="card p2c"><h3>Batched sub-calls from day one</h3><p><code>llm_batch</code> with a host-side concurrency limit. The paper's runs were all sequential.</p></div>
+    <div class="card p2c"><h3>Sandbox in two steps</h3><p>Subprocess kernel with timeouts first, Docker with network off later. The bridge is the only way out.</p></div>
+    <div class="card p2c"><h3>Logging is a feature</h3><p>Every turn and bridge call, with token ids and logprobs, so transcripts can be re-scored and reused for RL.</p></div>
+  </div>
+
+  <h2 id="connect">How the two parts connect</h2>
+  <div class="links">
+    <div class="card"><h3>Same contract</h3><p>The RL environment is a narrow version of the harness core: REPL, <code>context</code>, sub-calls, <code>submit</code>, truncation, budgets. It already serves sub-calls over a local HTTP endpoint. The env should call the harness loop rather than reimplement it.</p></div>
+    <div class="card warn"><h3>The model learns the bridge API</h3><p>Names, signatures, prompt format and truncation rules from training are what the model expects at inference. Today the env says <code>llm_query</code> and the harness design says <code>llm</code>. Freeze one API before the production run.</p></div>
+    <div class="card"><h3>Logs feed training</h3><p>Harness logs carry exact token ids and logprobs, so real harness transcripts can become future RL data.</p></div>
+    <div class="card"><h3>Integration milestone</h3><p>Serve the LoRA behind an OpenAI-compatible endpoint, plug it in as the root, and compare it with the base model inside the full harness.</p></div>
+  </div>
+
+  <h2 id="roadmap">Roadmap</h2>
+  <div class="legend">
+    <span><span class="dot d-done"></span>Done</span><span><span class="dot d-run"></span>Running</span>
+    <span><span class="dot d-next"></span>Next</span><span><span class="dot d-later"></span>Later</span>
+  </div>
+  <div class="lanes">
+    <div class="panel lane">
+      <h3 style="color:var(--p1)">Part 1: RL training</h3>
+      <ul class="steps">
+        <li><span class="dot d-done"></span><span class="n">1.1</span>Platform smoke tests (GRPO, both Qwens)</li>
+        <li><span class="dot d-done"></span><span class="n">1.2</span>SDPO on serverless via logprob injection</li>
+        <li><span class="dot d-done"></span><span class="n">1.3</span>Pick the method in theory: RLSD</li>
+        <li><span class="dot d-done"></span><span class="n">1.4</span>Three-way test<small>base 0.35 · GRPO 0.46 · SDPO 0.38 · RLSD 0.54 (3 steps)</small></li>
+        <li><span class="dot d-run"></span><span class="n">1.5</span>Confirm RLSD: 20 steps, sub-call tasks, bigger eval</li>
+        <li><span class="dot d-next"></span><span class="n">1.6</span>Lessons doc from testing</li>
+        <li class="here"><span class="dot d-next"></span><span class="n">1.7</span>Deep dive: RLSD + RL environment<small>tasks, reward, RLSD settings, eval</small></li>
+        <li><span class="dot d-later"></span><span class="n">1.8</span>Build the official environment and tasks</li>
+        <li><span class="dot d-later"></span><span class="n">1.9</span>Pilot run, then production run<small>needs credit sign-off</small></li>
+        <li><span class="dot d-later"></span><span class="n">1.10</span>Final eval, export the LoRA</li>
+      </ul>
+    </div>
+    <div class="panel lane">
+      <h3 style="color:var(--p2)">Part 2: harness</h3>
+      <ul class="steps">
+        <li><span class="dot d-later"></span><span class="n">2.1</span>Minimal loop: REPL, HTTP bridge, <code>llm</code> + <code>submit</code><small>can start alongside Part 1</small></li>
+        <li><span class="dot d-later"></span><span class="n">2.2</span><code>llm_batch</code>, <code>rlm</code>, budgets, truncation, log</li>
+        <li><span class="dot d-later"></span><span class="n">2.3</span>Model profiles and clients</li>
+        <li><span class="dot d-later"></span><span class="n">2.4</span>Claude Science primitives<small>MCP tools, skills, profiles, delegation</small></li>
+        <li><span class="dot d-later"></span><span class="n">2.5</span>Docker sandbox, network off</li>
+        <li><span class="dot d-later"></span><span class="n">★</span>Integration: trained root inside the harness</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="open">Open questions for the deep dives</h2>
+  <div class="grid">
+    <div class="card"><h3>Bridge API freeze</h3><p><code>llm</code> vs <code>llm_query</code>; whether <code>rlm</code> (depth &gt; 1) appears in training.</p></div>
+    <div class="card"><h3>Datasets</h3><p>Real tasks that force sub-calls and long context.</p></div>
+    <div class="card"><h3>RLSD at scale</h3><p>Clip range, lambda, all-fail-group add-on, teacher lag.</p></div>
+    <div class="card"><h3>Tools in training?</h3><p>Probably not in Part 1; a later RL round could train tool use.</p></div>
+    <div class="card"><h3>Serving</h3><p>W&amp;B inference vs a local server for the harness.</p></div>
+  </div>
+
+  <footer>Sources: rlm-paper.md · rlm-inference-strategy.md · sdpo-rlm-compatibility.md · rl-method-for-rlm.md · rlm-three-way-results.md</footer>
+</main>
+</body>
+</html>

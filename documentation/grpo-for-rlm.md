@@ -1,6 +1,6 @@
 # Does GRPO work well for training an RLM?
 
-> Written 2026-10-10. Based on our 20-step run ([rlsd-vs-grpo-20-step-results.md](rlsd-vs-grpo-20-step-results.md), `results/rlsd_vs_grpo_20.json`, the 1,280 logged training rollouts) and published RLM and long-context RL work.
+> Written 2026-10-10. Based on our 20-step run ([rlsd-vs-grpo-20-step-results.md](archive/rlsd-vs-grpo-20-step-results.md), `results/archive/rlsd_vs_grpo_20.json`, the 1,280 logged training rollouts) and published RLM and long-context RL work.
 
 ## Answer
 

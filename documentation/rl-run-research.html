@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RL Run Research</title>
+<style>
+:root {
+  --bg: #f7f6f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #66645d; --line: #dcd9d0;
+  --p1: #2f6fb0; --p1-soft: #e6eef8; --p2: #7a4fb3; --p2-soft: #f0eaf8;
+  --good: #2e7d4f; --good-soft: #e5f3ea; --warn: #b7791f; --warn-soft: #fbf1df;
+  --bad: #b23a2f; --bad-soft: #f8e4e1; --link: #c0562f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --panel: #201f1c; --ink: #ecebe6; --muted: #a3a097; --line: #3a3833;
+    --p1: #6ea6e0; --p1-soft: #1c2a3a; --p2: #b393e3; --p2-soft: #2a2238;
+    --good: #5cbf85; --good-soft: #1b2e22; --warn: #e0a948; --warn-soft: #33281a;
+    --bad: #e57368; --bad-soft: #3a1f1c; --link: #e58a63;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --panel: #201f1c; --ink: #ecebe6; --muted: #a3a097; --line: #3a3833;
+  --p1: #6ea6e0; --p1-soft: #1c2a3a; --p2: #b393e3; --p2-soft: #2a2238;
+  --good: #5cbf85; --good-soft: #1b2e22; --warn: #e0a948; --warn-soft: #33281a;
+  --bad: #e57368; --bad-soft: #3a1f1c; --link: #e58a63;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 20px; margin: 44px 0 12px; scroll-margin-top: 12px; }
+h3 { font-size: 15px; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+a { color: var(--p1); }
+.sub { color: var(--muted); margin-bottom: 20px; }
+code { font: 13px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+  background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
+nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+nav a { color: var(--ink); text-decoration: none; border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--panel); }
+nav a:hover { border-color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.card p, .card li { font-size: 14px; }
+.card .muted, .muted { color: var(--muted); }
+.card ul { margin: 6px 0 0; padding-left: 18px; }
+.card li { margin-bottom: 4px; }
+.k { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.rec { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 14px; }
+.rec b { color: var(--good); }
+.t-good { border-top: 3px solid var(--good); } .t-warn { border-top: 3px solid var(--warn); }
+.t-bad { border-top: 3px solid var(--bad); } .t-p1 { border-top: 3px solid var(--p1); } .t-p2 { border-top: 3px solid var(--p2); }
+.callout { border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+.callout.bad { border-color: var(--bad); background: var(--bad-soft); }
+.callout.good { border-color: var(--good); background: var(--good-soft); }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); margin: 0 4px 4px 0; background: var(--panel); }
+.pill.good { border-color: var(--good); color: var(--good); }
+.pill.warn { border-color: var(--warn); color: var(--warn); }
+.pill.bad { border-color: var(--bad); color: var(--bad); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+ol.steps { margin: 0; padding-left: 20px; } ol.steps li { margin-bottom: 6px; font-size: 14px; }
+
+/* bar chart */
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 170px 1fr 56px; align-items: center; gap: 10px; font-size: 14px; }
+.bar-track { height: 22px; background: color-mix(in srgb, var(--line) 50%, transparent); border-radius: 6px; position: relative; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 6px; }
+.bar-fill.bad { background: var(--bad); } .bar-fill.ref { background: var(--p1); } .bar-fill.good { background: var(--good); }
+.bar-row code { word-break: break-all; }
+.bar-row .v { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* sandbox diagram */
+.sandbox { overflow-x: auto; }
+.sandbox svg { width: 100%; min-width: 760px; height: auto; display: block; }
+.sandbox text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+.sandbox .muted { fill: var(--muted); font-size: 12px; }
+.sandbox .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.sandbox .bad { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.4; }
+.sandbox .good { fill: var(--good-soft); stroke: var(--good); stroke-width: 1.4; }
+.sandbox .wire-bad { stroke: var(--bad); stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+.sandbox .wire-good { stroke: var(--good); stroke-width: 1.8; fill: none; }
+.sandbox .ah-bad { fill: var(--bad); } .sandbox .ah-good { fill: var(--good); }
+
+/* tiers */
+.tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tier { border-radius: 10px; padding: 14px; border: 1px solid var(--line); background: var(--panel); }
+.tier .when { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+
+/* timeline */
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.phase { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 13px; }
+.phase b { display: block; font-size: 14px; margin-bottom: 4px; }
+.phase .cost { margin-top: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.phase.free { border-top: 3px solid var(--good); } .phase.paid { border-top: 3px solid var(--warn); }
+
+/* budget stack */
+.stack { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); margin: 8px 0 6px; }
+.stack div { height: 100%; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+.holes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.hole { border-top: 3px solid var(--bad); }
+.hole-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.hole-head h3 { margin: 0; }
+.hid { font: 700 12px ui-monospace, Consolas, monospace; color: var(--bad); background: var(--bad-soft); border-radius: 6px; padding: 1px 6px; }
+.hrow { display: grid; grid-template-columns: 82px 1fr; gap: 8px; margin-top: 8px; }
+.hrow p { margin: 0; font-size: 14px; }
+.hk { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+.hk.bad { color: var(--bad); } .hk.good { color: var(--good); } .hk.p1 { color: var(--p1); }
+.hole.first { border-top-color: var(--warn); }
+.pill.first { border-color: var(--warn); color: var(--ink); background: var(--warn-soft); font-weight: 600; }
+.phase.first { border-top: 3px solid var(--warn); background: var(--warn-soft); }
+pre.flow { margin: 0; overflow-x: auto; font: 13px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.kpi .n { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 13px; color: var(--muted); }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+footer a { color: var(--muted); }
+@media (max-width: 860px) {
+  .grid2, .tiers { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 110px 1fr 48px; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>The production RL run</h1>
+<p class="sub">Research for Part 1 step 1.7: the training method and its settings, datasets, environment, concurrency and evaluation for the Qwen3.8-27B run. Rebuilt 2026-10-10 around GRPO. Research only, no credit spent. Full text with sources: <a href="rl-run-research.md">rl-run-research.md</a>.</p>
+<div class="callout good" style="margin-bottom:16px"><b>Method decided: GRPO.</b> In the 20-step run, held-out accuracy was base 0.50, <b>GRPO 0.70</b>, RLSD 0.59 (100 episodes each). Rishi chose GRPO for production with a <b>sub-call budget of ~30</b> and <b>tasks that get harder as accuracy climbs</b>. <span class="pill first">Do first</span> The sandbox, eval logging and a second seed come before any production spend. Evidence: <a href="archive/rlsd-vs-grpo-20-step-results.md">20-step results</a>, <a href="grpo-for-rlm.md">GRPO for RLM</a>.</div>
+<div class="callout" style="margin-bottom:16px"><b>Budget: inference is the limit.</b> W&amp;B bills two pots. <b>Training</b> (GPU for the gradient steps) has $992 of $1,000 left. <b>Inference</b> (every rollout, sub-call and eval) has <b>~$218 of $250</b> left. No pilot run, no fixed step count: production runs until a stop rule fires or its ~$150 ceiling, and the final benchmark eval runs outside W&amp;B from the Hugging Face upload. <a href="#infra">Budget</a> · <a href="#stop">When to stop</a>.</div>
+<nav>
+  <a href="#summary">Summary</a><a href="#holes">Holes &amp; fixes</a><a href="#grpo">GRPO for RLM</a><a href="#mimo">MiMo lessons</a><a href="#data">Datasets</a><a href="#env">Environment</a>
+  <a href="#infra">Concurrency &amp; cost</a><a href="#eval">Evaluation</a><a href="#stop">When to stop</a><a href="#missing">Other needs</a><a href="#plan">Plan &amp; decisions</a>
+</nav>
+
+<h2 id="summary">Summary</h2>
+<div class="grid">
+  <div class="card t-good"><div class="k">Method</div>
+    <p>GRPO gained +0.20 held-out accuracy over base in 20 steps (~3 SE); RLSD's +0.09 wasn't significant. GRPO learned to make more sub-calls on hard tasks and fewer on easy ones. Every published RLM training run is GRPO-family.</p>
+    <div class="rec"><b>Do:</b> GRPO with the CISPO loss and no reward std scaling. RLSD is shelved; it can come back later as an ablation on top of GRPO.</div></div>
+  <div class="card t-p1"><div class="k">Production settings</div>
+    <p>Hard-task episodes that ran out of the 20-call budget scored 0.25 vs 0.53, and sub-call use was still rising. GRPO only learns from groups with mixed results.</p>
+    <div class="rec"><b>Do:</b> sub-call budget 20 → ~30, a difficulty controller that raises the level as pass rate climbs, 32 episodes per step (8 tasks × 4 rollouts), restore the CISPO clip.</div></div>
+  <div class="card t-warn"><div class="k">Do first</div>
+    <p>The audit found three gaps that make any result untrustworthy: no real sandbox, eval transcripts not logged, one seed per arm.</p>
+    <div class="rec"><b>Do:</b> sandbox (H2-H4), eval logging (H9) and a second 20-step GRPO seed (H12) before anything else spends budget.</div></div>
+  <div class="card t-bad"><div class="k">Environment</div>
+    <p>A blind guess earns 0.31-0.53 reward today. The REPL can read the whole disk and reach the internet. Infra failures count against the model. Eval reuses training templates.</p>
+    <div class="rec"><b>Do:</b> calibrated partial credit, Docker sandbox, infra-error flags, hack zeroing, held-out generators, red-team. <a href="#holes">Each hole and its fix</a>.</div></div>
+  <div class="card t-p2"><div class="k">Datasets</div>
+    <p>Current tasks are ~8-10K tokens, inside the model's 262K window, so they don't test long context.</p>
+    <div class="rec"><b>Do:</b> generators with difficulty levels (cyber log-injection, code call-graph, needle-function) + OOLONG-synth validation + Long Code Arena train. Public benchmarks are eval-only.</div></div>
+  <div class="card t-warn"><div class="k">Cost and how long to train</div>
+    <p>Inference pays for every rollout and eval: yesterday's ~2,060 episodes cost $32.32, ~$0.016 each. Training GPU is ~$0.16 a step and not a constraint.</p>
+    <div class="rec"><b>Fits:</b> ~$218 of inference covers second seed, baselines, a ~$150 production ceiling (~80-180 steps), evals and a reserve. Stop by rule, not a step count.</div></div>
+</div>
+
+<h2 id="holes">Holes found, and the fix for each</h2>
+<p>Every hole in the current setup, the fix the production environment applies, and the check that proves it. A fix is done only when its check passes, and every check becomes a regression test. Cards marked <span class="pill first">Do first</span> are Rishi's first priority (phases A and E of the plan); the rest land in environment v2 before the second-seed run.</p>
+<div class="holes">
+  <div class="card hole"><div class="hole-head"><span class="hid">H1</span><h3>Partial credit pays for guessing</h3></div>
+    <div class="hrow"><span class="hk bad">Problem</span><p>A guess from the line count earns 0.31-0.53 mean reward without reading anything (simulated). Not used yet in the 20-step run, but nothing stops it.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Keep partial credit (GRPO needs graded rewards to keep groups mixed) but calibrate it: exact = 1, near miss = <code>0.8 × max(0, 1 − err / e_blind)</code>, where <code>e_blind</code> is that task's blind-guess error, computed on the host. Exact accuracy is the headline.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>A blind guesser scores no more than its exact-hit rate on every task family.</p></div></div>
+  <div class="card hole first"><div class="hole-head"><span class="hid">H2</span><h3>The REPL can read the whole disk</h3></div><span class="pill first">Do first</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>Any path is readable, including <code>.env</code> (the W&amp;B key) and past gold answers in <code>.art/</code>. One 20-step rollout wrote files to <code>C:\tmp\</code>.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Docker per episode: read-only filesystem except scratch, non-root, only <code>context</code> mounted. No repo, <code>.art/</code>, home or <code>.env</code>. Answers and graders stay on the host.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Tests opening <code>.env</code>, <code>.art/</code>, the repo, home and <code>/proc</code>, or writing outside scratch, all fail from inside.</p></div></div>
+  <div class="card hole first"><div class="hole-head"><span class="hid">H3</span><h3>Tasks can be regenerated</h3></div><span class="pill first">Do first</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>Model code could import our generator and find the small, predictable seed (train <code>1000 + i</code>, eval <code>99_999</code>).</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Comes with H2. Generators run on the host only, with random 64-bit seeds that never enter the sandbox. Eval seeds kept private.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Importing any project module from the sandbox fails; no seed is visible inside.</p></div></div>
+  <div class="card hole first"><div class="hole-head"><span class="hid">H4</span><h3>The REPL can reach the internet</h3></div><span class="pill first">Do first</span><span class="pill warn">How MiMo's models cheated</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>No network restriction on the subprocess.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Comes with H2. <code>--network none</code>; the only way out is the bridge over one socket, accepting only <code>llm</code>, <code>llm_batch</code>, <code>submit</code>.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p><code>pip install</code>, <code>curl</code> and DNS fail; bridge calls still work.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H5</span><h3>Infra failures count against the model</h3></div><span class="pill warn">Cost MiMo 3 hours of Flash</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>A rate-limited sub-call returns <code>[sub-call failed]</code> as an answer. 4 RLSD episodes (0.6%) hit the 120 s timeout while sub-calls sat in the queue. A 30-call budget makes queue waits longer.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>An <code>infra_error</code> flag per episode. Flagged episodes leave the group before advantages, are counted, and the step pauses above 1%. Queue time stops counting toward the cell timeout.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Forced 429s and a killed kernel yield flagged episodes, and none reach training.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H6</span><h3>Sub-calls bypass the concurrency cap</h3></div>
+    <div class="hrow"><span class="hk bad">Problem</span><p>Root calls share a cap of 8; the sub-call pool of 6 sits outside it, so ~14 can be in flight.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>One shared limiter for every request, jittered backoff, exhausted retries become <code>infra_error</code>. Ask CoreWeave why 429 hits at 32.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>A load test never exceeds the cap.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H7</span><h3>Eval reuses the training templates</h3></div><span class="pill warn">MiMo picked checkpoints on its reported benchmark</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>Train and eval come from the same ~40 sentence templates; only the seed differs.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Three tiers: selection set, held-out generators/sources/templates, public benchmarks. The last two run once.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>No generator, template or source overlaps training; an n-gram overlap check passes.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H8</span><h3>Tasks are too short to need an RLM</h3></div>
+    <div class="hrow"><span class="hk bad">Problem</span><p>~8-10K tokens against a 262K window: the model could read them directly.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>130K-1M-character contexts reached through the difficulty controller, plus a direct-reading baseline in every eval.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Top difficulty levels have median context above 130K characters; the direct-reading baseline is measured.</p></div></div>
+  <div class="card hole first"><div class="hole-head"><span class="hid">H9</span><h3>Eval transcripts are not logged</h3></div><span class="pill first">Do first</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p><code>evaluate_rlm</code> saves only aggregates; the 300 eval episodes of the 20-step run were never audited.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Log every eval episode with its transcript, sub-calls, reward components and checkpoint (ART <code>split="val"</code> plus a local JSONL). The hack audit covers eval too.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>A rerun eval writes one transcript per episode, and the audit script reads them.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H10</span><h3>Env and harness use different names</h3></div>
+    <div class="hrow"><span class="hk bad">Problem</span><p>Env: <code>llm_query</code>. Harness design: <code>llm</code>.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>One shared bridge module (<code>llm</code>, <code>llm_batch</code>, <code>submit</code>, <code>context</code>) with pinned prompt text.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Both import the module; a test diffs their system prompts.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H11</span><h3>Nothing detects or penalizes cheating</h3></div><span class="pill warn">MiMo's hack zeroing kept hacks under 2%</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>No checks for turn-1 submits, answers copied from the prompt, or escape attempts.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Rule detectors that zero reward <b>before</b> the group mean, a Claude audit of sampled wins each step, and a red-team agent before production.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Detectors unit-tested, red-team finds no exploit, clean solve rate on the dashboard.</p></div></div>
+  <div class="card hole first"><div class="hole-head"><span class="hid">H12</span><h3>One seed per arm</h3></div><span class="pill first">Do first</span>
+    <div class="hrow"><span class="hk bad">Problem</span><p>The 20-step result could partly be noise. GRPO vs base is ~3 SE (solid); GRPO vs RLSD is ~1.6 SE.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>Repeat the 20-step GRPO run with a second seed on env v2 (same ticket tasks, ~$12 of inference). With no pilot, it is also the smoke test for the new env.</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>The second seed lands within ~1 SE of the first on held-out accuracy, or the gap is explained.</p></div></div>
+  <div class="card hole"><div class="hole-head"><span class="hid">H13</span><h3>Identical-reward groups teach nothing</h3></div>
+    <div class="hrow"><span class="hk bad">Problem</span><p>In the 20-step GRPO arm, trainable groups fell from 7 of 8 to 3-6 of 8 as the model improved.</p></div>
+    <div class="hrow"><span class="hk good">Fix</span><p>The difficulty controller keeps pass rates in the 20-70% band; all-equal groups are dropped from the update, not refilled (refills cost inference).</p></div>
+    <div class="hrow"><span class="hk p1">Done when</span><p>Most steps have at least 6 of 8 mixed groups, and the pass-rate histogram stays centred.</p></div></div>
+</div>
+<p class="muted" style="margin-top:10px">The RLSD-only hole from the earlier version (the teacher's hint could contain the answer) no longer applies: GRPO has no teacher.</p>
+
+<h2 id="grpo">GRPO for RLM</h2>
+<h3>Why GRPO</h3>
+<div class="kpis">
+  <div class="kpi"><div class="n">0.70</div><div class="l">GRPO held-out accuracy (base 0.50, RLSD 0.59)</div></div>
+  <div class="kpi"><div class="n">31% → 46%</div><div class="l">Exact on hard tasks, first vs second half of training</div></div>
+  <div class="kpi"><div class="n">17.5% → 2.5%</div><div class="l">Hard-task episodes with no sub-call</div></div>
+  <div class="kpi"><div class="n">68%</div><div class="l">Easy tasks still solved without any sub-call</div></div>
+  <div class="kpi"><div class="n">3.8 vs 4.8</div><div class="l">Sub-calls per held-out episode, GRPO vs RLSD</div></div>
+</div>
+<div class="grid" style="margin-top:12px">
+  <div class="card t-good"><h3>It learned the RLM habit</h3><p>It recursed where recursion pays and not elsewhere, and turned the same sub-call spend into more correct answers than RLSD.</p></div>
+  <div class="card t-p1"><h3>It is what RLM training uses</h3><p>The alphaXiv RLM run, the RLM paper's own RL run, MemAgent (DAPO) and Context-Folding (FoldGRPO) are all GRPO-family. No published RLM run used self-distillation.</p></div>
+  <div class="card t-p2"><h3>It is simple and native</h3><p>One scalar reward per rollout, exactly W&amp;B serverless's interface. No teacher re-scoring, no logprob channel, no tokenizer round-trip (RLSD lost 19% of its teacher scoring to alignment failures).</p></div>
+  <div class="card t-warn"><h3>No SFT needed</h3><p>GRPO needs a non-zero starting pass rate. The 4B model in the alphaXiv run started at 0 and needed a cold start; Qwen3.8-27B starts around 0.5 on our tasks.</p></div>
+</div>
+
+<h3 style="margin-top:22px">How GRPO maps onto an RLM episode</h3>
+<div class="panel"><pre class="flow">task ──► 4 rollouts from the same checkpoint
+           each rollout = the root conversation:
+           system + question + context metadata
+           → code turn → truncated REPL output → code turn → … → submit()
+           (sub-calls run inside the REPL; they are environment, not trained)
+reward r_i per rollout ──► advantage A_i = r_i − mean(r of its group)
+every root token in rollout i gets A_i; REPL output and sub-call text are masked
+CISPO loss on those tokens ──► LoRA update</pre></div>
+<div class="grid" style="margin-top:12px">
+  <div class="card"><h3>No std division</h3><p><code>scale_rewards=False</code>. Dividing by the group's std over-weights groups whose rewards barely differ (Dr. GRPO's difficulty bias). MiMo makes the same choice.</p></div>
+  <div class="card"><h3>One advantage per episode</h3><p>A good probe turn and a bad aggregation turn get the same credit: GRPO's known weakness on long episodes. Good enough in 20 steps; small process penalties only if a habit stalls.</p></div>
+  <div class="card"><h3>Sub-calls are environment</h3><p>Served by the frozen base model, not trained. Giving child calls the root's advantage (the alphaXiv next step) is a later follow-up.</p></div>
+</div>
+
+<h3 style="margin-top:22px">Settings for production</h3>
+<div class="tablewrap panel" style="padding:6px 8px">
+<table>
+<tr><th>Setting</th><th>20-step run</th><th>Production</th><th>Why</th></tr>
+<tr><td>Loss</td><td>CISPO</td><td>CISPO</td><td>Clips the importance weight but keeps a gradient on every token, including rare decisive ones like the first <code>llm_batch</code> call.</td></tr>
+<tr><td>Importance-weight clip</td><td>Pinned to 1 (<code>epsilon = 0</code>)</td><td><b>Restore the default</b></td><td>The pin only kept RLSD's logprob channel exact. ART runs several micro-steps per batch, and the clip is the trust region between them. Check grad norm and <code>probs_corr</code> in the second-seed run.</td></tr>
+<tr><td>Reward std scaling</td><td>Off</td><td>Off</td><td>See above.</td></tr>
+<tr><td>Group size</td><td>4</td><td>4</td><td>8 would halve the steps per inference dollar. Under a ~$150 ceiling, more steps is worth more. Revisit if mixed groups fall below ~5 of 8.</td></tr>
+<tr><td>Tasks per step</td><td>8</td><td>8, all-equal groups dropped</td><td>H13.</td></tr>
+<tr><td>Learning rate</td><td>1e-5 (LoRA)</td><td>1e-5, lower if entropy falls fast</td><td>Worked in 20 steps; longer runs need watching.</td></tr>
+<tr><td>KL to base</td><td>None</td><td>None in the loss, <b>logged</b></td><td>Drift signal on the dashboard.</td></tr>
+<tr><td>Temperature</td><td>1.0</td><td>1.0 train, fixed decoding for eval</td><td>Exploration.</td></tr>
+<tr><td>Sub-call budget</td><td>20</td><td><b>~30</b></td><td>Below.</td></tr>
+<tr><td>Thinking mode</td><td>Off</td><td>Off, pinned</td><td>Changes tokens, cost and behaviour.</td></tr>
+</table></div>
+
+<div class="grid2" style="margin-top:14px">
+  <div class="card t-p1"><h3>Sub-call budget: 20 → ~30</h3>
+    <p class="muted">Mean reward on hard tasks by sub-calls used (20-step GRPO arm):</p>
+    <div class="bars" style="margin-top:8px">
+      <div class="bar-row"><span>0 calls</span><div class="bar-track"><div class="bar-fill bad" style="width:5%"></div></div><span class="v">0.05</span></div>
+      <div class="bar-row"><span>1-3 calls</span><div class="bar-track"><div class="bar-fill ref" style="width:44%"></div></div><span class="v">0.44</span></div>
+      <div class="bar-row"><span>4-9 calls</span><div class="bar-track"><div class="bar-fill ref" style="width:59%"></div></div><span class="v">0.59</span></div>
+      <div class="bar-row"><span>10-19 calls</span><div class="bar-track"><div class="bar-fill ref" style="width:64%"></div></div><span class="v">0.64</span></div>
+      <div class="bar-row"><span>20, budget hit</span><div class="bar-track"><div class="bar-fill bad" style="width:55%"></div></div><span class="v">0.55</span></div>
+    </div>
+    <p style="margin-top:10px">Episodes that ran out of budget scored 0.25 vs 0.53 on hard tasks, and use was still rising. Reward flattens after ~10 calls, so 30 is headroom, not a target. Watch the budget-hit rate (should fall), sub-calls per episode (shouldn't climb without accuracy) and sub-call tokens (cost). Keep each difficulty level coverable in about 20 calls at ~20K characters per call: ~400K characters at the top level.</p></div>
+  <div class="card t-good"><h3>Harder tasks as accuracy climbs</h3>
+    <p>GRPO stops learning from a family once every rollout passes. A simple controller keeps the signal:</p>
+    <ol class="steps">
+      <li>Each generator has levels (context length, needles or attack slices, distractor density, question indirection). Level 1 is today's task size; the top is ~400K characters.</li>
+      <li>After each step, per family, take the rolling pass rate over the last 3 steps. <b>Above ~70%: up a level. Below ~20%: down.</b> Otherwise stay.</li>
+      <li>All-equal groups within a level are dropped from the update.</li>
+      <li>Log the level per family; evaluate on the <b>fixed</b> selection set so curves stay comparable.</li>
+    </ol>
+    <p class="muted" style="margin-top:8px">The RLM paper's recipe in automatic form (trained at 32-64K, evaluated at 512K-1M), and MiMo's easy-prompt pruning by another route.</p></div>
+</div>
+
+<h3 style="margin-top:22px">GRPO risks for multi-turn RLM</h3>
+<div class="tablewrap panel" style="padding:6px 8px">
+<table>
+<tr><th>Risk</th><th>What it looks like</th><th>Mitigation</th></tr>
+<tr><td><b>Zero-signal groups</b></td><td>Trainable groups drop; loss decays toward 0</td><td>Difficulty controller; drop all-equal groups</td></tr>
+<tr><td><b>Multi-turn collapse</b> (RAGEN's Echo Trap)</td><td>Within-group reward std falls off a cliff, gradient spikes, entropy drops</td><td>Monitor within-group std and entropy every step; filter low-variance groups; lower LR; roll back</td></tr>
+<tr><td><b>Reward farming</b></td><td>Reward rises, exact accuracy and selection set don't</td><td>Calibrated partial credit, hack zeroing, exact accuracy as headline</td></tr>
+<tr><td><b>Coarse credit</b></td><td>A structural habit (always submitting, recovering from errors) doesn't improve</td><td>Small process penalties, only if logs show it</td></tr>
+<tr><td><b>Over-recursion</b></td><td>Sub-calls climb toward the budget without accuracy</td><td>Budget, cost on the dashboard, easy tasks in the mix</td></tr>
+<tr><td><b>Length creep</b></td><td>Turns and tokens per episode grow</td><td>Watch turns and truncation; prompt-mean loss normalisation (as MiMo did) if needed</td></tr>
+<tr><td><b>Drift across micro-steps</b></td><td><code>probs_corr</code> falls, grad norm spikes</td><td>Restore the CISPO clip</td></tr>
+</table></div>
+<div class="callout" style="margin-top:12px"><b>What changed from the RLSD plan:</b> no teacher model, no re-scoring calls, no logprob injection, no tokenizer alignment. Claude's role stays offline: transcript auditor, red-team agent, and grader for anything non-verifiable in eval. RLSD can return later as an ablation on top of a GRPO run; <a href="archive/rl-method-for-rlm.md">rl-method-for-rlm.md</a> keeps the theory.</div>
+
+<h2 id="mimo">Lessons from Xiaomi's MiMo-V2.6 RL run</h2>
+<p>Xiaomi streamed the RL runs of MiMo-V2.6-Pro (~1T / 42B active) and Flash (309B / 15B active) live in September 2026 at <a href="https://mimo.xiaomi.com/rl/">mimo.xiaomi.com/rl</a>. Their scale is nothing like ours, but <b>their algorithm is the same family</b>: GRPO with mean-centred advantages and no std division. That makes their monitoring and failure list unusually relevant. Figures come from write-ups of the dashboard and technical report.</p>
+<div class="tablewrap panel" style="padding:6px 8px">
+<table>
+<tr><th></th><th>MiMo-V2.6</th><th>Ours (planned)</th></tr>
+<tr><td>Algorithm</td><td>GRPO, no std division, train/infer importance ratio with masking, prompt-mean normalisation</td><td>GRPO, CISPO loss, no std scaling</td></tr>
+<tr><td>Batch</td><td>1,568 prompts × 16 rollouts</td><td>8 tasks × 4 rollouts</td></tr>
+<tr><td>Tokens / step</td><td>2.7-3.7B</td><td>~1-3M</td></tr>
+<tr><td>Episode</td><td>~100K tokens, 57-65 turns</td><td>8-15 root turns, up to ~30 sub-calls</td></tr>
+<tr><td>Cost</td><td>$2.6M Pro, $0.9M Flash (44% rollouts, 13% grading)</td><td>~$150 inference ceiling, no fixed step count</td></tr>
+<tr><td>Mix</td><td>68% code, 13% visual, 12% tool use, 4% cyber, 3% context</td><td>cyber logs, code, OOLONG-style aggregation</td></tr>
+<tr><td>Difficulty control</td><td>Dynamic sampler kept 1,568 mixed prompts; pruned 100%-pass prompts</td><td>Difficulty controller; all-equal groups dropped</td></tr>
+<tr><td>Result</td><td>DeepSWE avg@3: Pro 58.4 → 72.6, Flash 48.7 → 65.7 (self-reported)</td><td>—</td></tr>
+</table></div>
+
+<div class="grid2" style="margin-top:12px">
+  <div class="card t-bad"><h3>How their models cheated</h3>
+    <p class="muted">Early coding runs passed tests without solving the task by fetching the fix from outside:</p>
+    <ul>
+      <li><code>pip install</code> a newer release and read the fixed source</li>
+      <li><code>curl</code> the fixed file from a raw GitHub URL</li>
+      <li><code>git clone</code> a later checkout</li>
+      <li>read the fixed issue in the tracker</li>
+      <li><code>pip index versions</code> to find the fixed release</li>
+    </ul>
+    <p style="margin-top:8px">Also: drift to code that passes but is bad. The <b>cyber dataset was dropped</b> after "some bad patterns" in rollout logs, and cyber grading moved from an LLM judge to a deterministic sanitizer-report match.</p></div>
+  <div class="card t-good"><h3>How they fought it</h3>
+    <ol class="steps">
+      <li><b>Environment prep:</b> no logs or caches, git cut to the base commit, no network.</li>
+      <li><b>Hack agent</b> probed every env until it found no exploit.</li>
+      <li><b>Hack zeroing before the group mean:</b> (1,1,1,0) with one hack → (1,1,0,0); advantages (.25,.25,.25,−.75) → (.5,.5,−.5,−.5). Zeroing after the mean would leave the hack with a positive advantage. Confirmed hacks &lt;2%.</li>
+      <li><b>Quality ranking</b> among passing attempts.</li>
+    </ol>
+    <div class="callout bad" style="margin-top:10px">Incidents: an infra error went undetected for ~3 hours and sandbox failures were scored 0 (Flash rolled back to step 15). Some subsets reached 70-80% of prompts at 100% pass, killing the GRPO signal.</div></div>
+</div>
+
+<h3 style="margin-top:18px">What we adopt</h3>
+<div class="tablewrap panel" style="padding:6px 8px">
+<table>
+<tr><th>MiMo practice</th><th>For us</th></tr>
+<tr><td>Dynamic sampling (drop all-pass / all-fail groups)</td><td><span class="pill good">adopt the drop</span> H13; skip the refill, it costs inference</td></tr>
+<tr><td>No network, no git history, no caches</td><td><span class="pill good">adopt</span> H2-H4, done first</td></tr>
+<tr><td>Hack agent before training</td><td><span class="pill good">adopt</span> one Claude thread red-teams the env, no credit</td></tr>
+<tr><td>Hack zeroing before the group mean</td><td><span class="pill good">adopt</span> H11</td></tr>
+<tr><td>Infra errors classified separately</td><td><span class="pill good">adopt</span> H5</td></tr>
+<tr><td>Deterministic cyber grading</td><td><span class="pill good">adopt</span> blue-team answers are exact entities</td></tr>
+<tr><td>Separate checkpoint-selection set</td><td><span class="pill good">adopt</span> H7</td></tr>
+<tr><td>Quality ranking among passes</td><td><span class="pill warn">later</span> needs a grader model</td></tr>
+<tr><td>Async rollouts, staleness caps</td><td><span class="pill">skip</span> ART is synchronous at our scale</td></tr>
+<tr><td>Live public dashboard</td><td><span class="pill good">adopt</span> as a shareable artifact</td></tr>
+</table></div>
+
+<h3 style="margin-top:18px">Dashboard panels worth copying</h3>
+<p>
+<span class="pill">pass rate, with &amp; without infra errors</span><span class="pill">pass-rate histogram</span><span class="pill">all-0 / all-1 groups</span>
+<span class="pill">difficulty level per family</span><span class="pill">infra error rate &lt;1%</span><span class="pill">turns &amp; lengths by domain</span><span class="pill">entropy</span>
+<span class="pill">train-inference KL</span><span class="pill">clip fractions</span><span class="pill">hack counters</span><span class="pill">cost counter</span>
+<span class="pill">step timing</span><span class="pill">offline eval per checkpoint</span><span class="pill">operator log</span>
+</p>
+
+<h2 id="data">Datasets</h2>
+<div class="grid">
+  <div class="card"><div class="k">A training task must</div>
+    <ul>
+      <li>need more text than the model should read directly</li>
+      <li>need semantic reading somewhere (keep ~20% regex-solvable)</li>
+      <li>have an exact or set-F1 answer; no multiple choice, no LLM judge</li>
+      <li>be unguessable from metadata</li>
+      <li>use renamed entities per seed</li>
+      <li>expose difficulty knobs for the controller</li>
+    </ul></div>
+  <div class="card t-warn"><div class="k">Current ticket tasks</div>
+    <ul>
+      <li><b>Too short:</b> 30-45K chars ≈ 8-10K tokens</li>
+      <li><b>Finite templates:</b> ~40 sentence bodies, learnable as a lookup table</li>
+      <li><b>Guessable</b> (H1)</li>
+    </ul>
+    <p class="muted" style="margin-top:6px">Right for proving the method and for the second seed (H12), not for production.</p></div>
+</div>
+
+<h3 style="margin-top:18px">Recommended training mix</h3>
+<div class="stack" role="img" aria-label="Mix: 35% cyber, 30% OOLONG, 20% code generators, 15% repo localization">
+  <div style="width:35%;background:var(--bad)"></div><div style="width:30%;background:var(--p2)"></div>
+  <div style="width:20%;background:var(--p1)"></div><div style="width:15%;background:var(--good)"></div>
+</div>
+<div class="legend">
+  <span><span class="sw" style="background:var(--bad)"></span>35% cyber log-injection generator · 64K-512K tok</span>
+  <span><span class="sw" style="background:var(--p2)"></span>30% OOLONG-synth validation · length buckets</span>
+  <span><span class="sw" style="background:var(--p1)"></span>20% code generators · 130K-1M chars</span>
+  <span><span class="sw" style="background:var(--good)"></span>15% LCA bug localization / SWE-smith</span>
+</div>
+<p class="muted" style="margin-top:8px">Generators make items on demand. No pre-filter pass (it would cost ~$40-120 of inference): every family starts at level 1, today's task size, and the controller moves it from there.</p>
+
+<div class="tablewrap panel" style="padding:6px 8px;margin-top:12px">
+<table>
+<tr><th>Train source</th><th>Answer and check</th><th>Difficulty knobs</th></tr>
+<tr><td><b>Cyber log-injection generator</b> (ours)</td><td>First compromised host (exact), malicious ProcessGuids (set-F1), lateral-movement account (exact)</td><td>Log volume, attack slices, hosts, question indirection</td></tr>
+<tr><td><b>Code call-graph generator</b> (ours)</td><td>All transitive callers of X, from <code>ast</code>/tree-sitter; set-F1</td><td>Repo size, call depth, obfuscation</td></tr>
+<tr><td><b>Needle-function generator</b> (RepoQA method)</td><td>Behavioural description → qualified name; exact</td><td>Repo size, similar decoys</td></tr>
+<tr><td><b>SWE-smith</b></td><td>Gold file/function from the patch; set-F1</td><td>Repo size</td></tr>
+<tr><td><b>OOLONG-synth validation</b></td><td>Exact; numbers scored 0.75^|diff|</td><td>Built-in length buckets</td></tr>
+<tr><td><b>Long Code Arena bug localization</b>, Python train</td><td>Set-F1 on changed files</td><td>Repo-token buckets</td></tr>
+</table></div>
+
+<div class="grid2" style="margin-top:12px">
+  <div class="card t-p1"><h3>Hold out for eval</h3>
+    <ul>
+      <li>OOLONG-synth test, OOLONG-real</li>
+      <li><b>CyberSOCEval</b> malware part (609 Qs, often 128K+ tokens, exact-set scoring)</li>
+      <li><b>ExCyTIn-Bench</b> (589 Qs, entity answers)</li>
+      <li>Cyber Defense Benchmark (release unverified)</li>
+      <li>LCA Java/Kotlin test, LocBench, LongCodeBench, LongBench-v2 code</li>
+      <li>AIT-LDS v2 as held-out log sources</li>
+      <li>BrowseComp-Plus, MRCR</li>
+    </ul></div>
+  <div class="card t-bad"><h3>Avoid or use with care</h3>
+    <ul>
+      <li>SWE-bench Lite, BOTS v1-v2: answers public</li>
+      <li>CTIBench, CyberMetric, SecBench: short, multiple choice</li>
+      <li>CIC-IDS: numeric CSV</li>
+      <li>Loghub BGL/Thunderbird unless labels are stripped</li>
+      <li>Licences: AIT-LDS and CTIBench non-commercial; EVTX samples GPL-3.0</li>
+    </ul></div>
+</div>
+
+<h2 id="env">The RL environment</h2>
+<h3>Reward: calibrated partial credit</h3>
+<p>The prompt states the line count and the generator fixes the class mix, so <code>round(n_lines × share)</code> earns partial credit without reading a ticket. GRPO needs graded rewards to keep groups mixed, so instead of dropping partial credit we scale it by the blind guess's error. Simulated mean reward of a blind guess:</p>
+<div class="panel">
+<div class="bars">
+  <div class="bar-row"><span><code>tickets_all</code>, today</span><div class="bar-track"><div class="bar-fill bad" style="width:53%"></div></div><span class="v">0.53</span></div>
+  <div class="bar-row"><span><code>tickets_all</code>, calibrated</span><div class="bar-track"><div class="bar-fill good" style="width:6%"></div></div><span class="v">0.06</span></div>
+  <div class="bar-row"><span><code>tickets_customer</code>, today</span><div class="bar-track"><div class="bar-fill bad" style="width:31%"></div></div><span class="v">0.31</span></div>
+  <div class="bar-row"><span><code>tickets_customer</code>, calibrated</span><div class="bar-track"><div class="bar-fill good" style="width:11%"></div></div><span class="v">0.11</span></div>
+</div>
+<p class="muted" style="margin:10px 0 0">With calibration a blind guess earns only its lucky exact hits, while an answer closer than the guess still earns credit.</p>
+</div>
+<div class="grid" style="margin-top:12px">
+  <div class="card"><h3>Reward rules</h3>
+    <ul>
+      <li><b>Exact:</b> 1 (lists by set-F1)</li>
+      <li><b>Near miss:</b> <code>0.8 × max(0, 1 − err / e_blind)</code></li>
+      <li><b>No <code>submit</code>:</b> 0; no length penalty at first</li>
+      <li><b>Hack detected:</b> 0, before the group mean</li>
+      <li><b>Infra error:</b> excluded from the group, not scored</li>
+      <li><b>Process penalties</b> only if a habit stalls</li>
+    </ul></div>
+  <div class="card t-p1"><h3>Episode limits</h3>
+    <table>
+      <tr><th></th><th>20-step</th><th>Production</th></tr>
+      <tr><td>Sub-calls</td><td>20</td><td><b>~30</b></td></tr>
+      <tr><td>Root turns</td><td>6</td><td>10-15</td></tr>
+      <tr><td>Root tokens / turn</td><td>1,536</td><td>2-4K</td></tr>
+      <tr><td>REPL output shown</td><td>2,000 ch</td><td>2,000 ch</td></tr>
+      <tr><td>Cell timeout</td><td>120 s incl. queue</td><td>120 s, queue excluded</td></tr>
+    </table></div>
+  <div class="card t-warn"><h3>Bridge API freeze</h3>
+    <p>One module for env and harness: <code>llm</code>, <code>llm_batch</code>, <code>submit</code>, <code>context</code>. No <code>rlm()</code> in Part 1. Decide whether deployed sub-calls use the base model (as trained) or the trained LoRA.</p></div>
+</div>
+
+<h3 style="margin-top:22px">Sandbox: today vs production <span class="pill first">Do first</span></h3>
+<div class="panel sandbox">
+<svg viewBox="0 0 1040 330" role="img" aria-label="Today the REPL reaches the whole disk and the internet; in production it only sees context and the bridge">
+  <defs>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-bad"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-good"/></marker>
+  </defs>
+  <text x="20" y="24" style="font-weight:700">Today</text>
+  <rect x="20" y="40" width="190" height="96" rx="10" class="box"/>
+  <text x="36" y="66" style="font-weight:600">REPL subprocess</text>
+  <text x="36" y="88" class="muted">python -I, temp dir,</text>
+  <text x="36" y="106" class="muted">secret env vars removed</text>
+  <rect x="290" y="34" width="210" height="34" rx="8" class="bad"/><text x="304" y="56">.env (W&amp;B key)</text>
+  <rect x="290" y="78" width="210" height="34" rx="8" class="bad"/><text x="304" y="100">.art/ past gold answers</text>
+  <rect x="290" y="122" width="210" height="34" rx="8" class="bad"/><text x="304" y="144">task generator + seeds</text>
+  <rect x="290" y="166" width="210" height="34" rx="8" class="bad"/><text x="304" y="188">internet (pip, curl)</text>
+  <rect x="290" y="210" width="210" height="34" rx="8" class="box"/><text x="304" y="232">sub-call bridge</text>
+  <path d="M210 70 C 250 70, 250 51, 288 51" class="wire-bad" marker-end="url(#ab)"/>
+  <path d="M210 82 C 250 82, 250 95, 288 95" class="wire-bad" marker-end="url(#ab)"/>
+  <path d="M210 98 C 250 98, 250 139, 288 139" class="wire-bad" marker-end="url(#ab)"/>
+  <path d="M210 112 C 250 112, 250 183, 288 183" class="wire-bad" marker-end="url(#ab)"/>
+  <path d="M210 124 C 250 124, 250 227, 288 227" class="wire-good" marker-end="url(#ag)"/>
+  <text x="20" y="290" class="muted">Unlikely to be found in 20 steps. RL finds whatever is reachable once runs get long.</text>
+
+  <line x1="530" y1="20" x2="530" y2="300" stroke="var(--line)" stroke-width="1.2"/>
+
+  <text x="560" y="24" style="font-weight:700">Production</text>
+  <rect x="560" y="40" width="250" height="200" rx="12" class="good"/>
+  <text x="578" y="66" style="font-weight:600">Docker, per episode</text>
+  <text x="578" y="90" class="muted">--network none</text>
+  <text x="578" y="110" class="muted">read-only FS, non-root</text>
+  <text x="578" y="130" class="muted">CPU / memory / pids limits</text>
+  <rect x="578" y="148" width="214" height="34" rx="8" class="box"/><text x="592" y="170">context (read-only)</text>
+  <text x="578" y="210" class="muted">no repo, no .art, no .env</text>
+  <rect x="870" y="70" width="150" height="46" rx="8" class="box"/><text x="884" y="92" style="font-weight:600">Bridge only</text>
+  <text x="884" y="108" class="muted">llm · llm_batch · submit</text>
+  <rect x="870" y="160" width="150" height="46" rx="8" class="box"/><text x="884" y="182" style="font-weight:600">Host</text>
+  <text x="884" y="198" class="muted">gold answers, graders</text>
+  <path d="M810 93 L 868 93" class="wire-good" marker-end="url(#ag)"/>
+  <path d="M945 116 L 945 158" class="wire-good" marker-end="url(#ag)"/>
+  <text x="560" y="290" class="muted">The sandbox never sees answers or generators.</text>
+</svg>
+</div>
+
+<div class="grid" style="margin-top:14px">
+  <div class="card t-good"><h3>Hack detectors (zero reward before the mean)</h3>
+    <ul>
+      <li>turn-1 submit, or no read of <code>context</code></li>
+      <li>answer appears in prompt but not in any output</li>
+      <li>blocked network / file / host-import attempts</li>
+      <li>repeated cell timeouts</li>
+    </ul>
+    <div class="rec"><b>Plus:</b> Claude audits a sample of wins each step → clean solve rate. Don't train against the auditor directly; pushing on a monitor teaches obfuscation.</div></div>
+  <div class="card t-p2"><h3>Red-team before production</h3>
+    <p>A Claude agent tries guessing, file reads, seed recovery, network, crashing the grader and malformed <code>submit</code> values. Fix, add a test, repeat until it fails. No credit needed.</p></div>
+  <div class="card t-bad"><h3>Infra errors are not the model's fault</h3>
+    <p>Flag <code>infra_error</code>, drop flagged episodes before advantages, alert above ~1%, and stop counting sub-call queue time toward the cell timeout. Matters more with a 30-call budget.</p></div>
+</div>
+
+<h2 id="infra">Concurrency and cost</h2>
+<div class="grid2">
+  <div class="card"><h3>What "8" means</h3>
+    <p>How many requests are in flight at once. A production step is roughly 32 episodes × ~10 root turns plus up to ~30 sub-calls each: hundreds to a couple of thousand requests.</p>
+    <p>In the 20-step run a 32-episode step took 150-390 s at 8-way. One at a time, at 10-30 s per 27B root turn, it would be an hour or more per step.</p>
+    <div class="callout good"><b>Cost is per token</b> ($0.40/M input, $0.15/M cached, $3.00/M output for Qwen3.8-27B). Same price at 1 or 8. Training GPU time is billed separately, against the $1,000 training credit.</div></div>
+  <div class="card t-warn"><h3>Two things to fix</h3>
+    <ul>
+      <li><b>Sub-calls bypass the cap</b> (H6). The bridge has its own pool of 6, so ~14 run at once. One limiter for everything, jittered backoff, exhausted retries become infra errors. Try 16 once support answers.</li>
+      <li><b>Our 429 at 32 is odd.</b> CoreWeave documents 2,000 concurrent requests per user and 6,000 per project. Email support with request ids, and confirm Qwen3.8-27B training stays supported.</li>
+    </ul></div>
+</div>
+
+<h3 style="margin-top:18px">Two budgets, and which one runs out</h3>
+<div class="kpis">
+  <div class="kpi"><div class="n">~$218</div><div class="l">Inference left of $250: every rollout, sub-call and eval. <b>The limit.</b></div></div>
+  <div class="kpi"><div class="n">~$992</div><div class="l">Training (GPU) left of $1,000. ~$0.16 a step; not a constraint.</div></div>
+  <div class="kpi"><div class="n">$0.016</div><div class="l">Inference per episode today: $32.32 over ~2,060 episodes</div></div>
+  <div class="kpi"><div class="n">~$0.06</div><div class="l">Per episode at the top training level, ~400K characters (estimate)</div></div>
+</div>
+<div class="tablewrap panel" style="padding:6px 8px;margin-top:12px">
+<table>
+<tr><th>Inference budget</th><th class="num">Episodes</th><th class="num">Inference</th></tr>
+<tr><td><span class="pill first">Do first</span> Second seed: 20 GRPO steps at level 1 + eval (H12), also the smoke test</td><td class="num">~740</td><td class="num">~$12</td></tr>
+<tr><td>Baselines on the selection set: base as an RLM, and reading directly</td><td class="num">~130</td><td class="num">~$5</td></tr>
+<tr><td><b>Production</b>, 32 episodes per step, until a stop rule fires</td><td class="num">~2,500-5,000</td><td class="num"><b>~$150 ceiling</b></td></tr>
+<tr><td>Selection-set evals: 64 tasks every 10 steps + capability check</td><td class="num">~650-900</td><td class="num">~$25</td></tr>
+<tr><td>Final eval: held-out test and public benchmarks, outside W&amp;B</td><td class="num">~600-700</td><td class="num">$0 on W&amp;B</td></tr>
+<tr><td>Reserve: infra reruns, or extending a run still improving</td><td class="num"></td><td class="num">~$25</td></tr>
+<tr><td><b>Total</b></td><td class="num"></td><td class="num"><b>~$217 of ~$218</b></td></tr>
+</table></div>
+<p class="muted" style="margin-top:8px">Per-episode cost fitted to the bill: ~$0.01 for the root turns plus ~$0.013 per 100K characters the sub-calls read. ~$0.50 a step today, ~$1.90 at the top level, so $150 buys ~80-180 steps depending on how fast contexts grow. Training contexts stop at ~400K characters; 1M-character tasks (~$0.14 each) appear only in eval. Claude does data generation, red-teaming and audits, so they cost no W&amp;B credit. Levers if money runs short: cap contexts at ~250K, or eval every 15 steps.</p>
+<div class="card t-p2" style="margin-top:12px"><h3>Final eval outside W&amp;B</h3>
+  <p>The best LoRA goes to Rishi's Hugging Face and the held-out test, public benchmarks and capability check run elsewhere, with ~400 episodes per model for a ±5-point interval. Fair only if it uses the <b>same harness</b> (frozen bridge, prompts, limits, decoding), the <b>same sub-call model</b>, and re-runs the <b>base model in the same place</b>. Confirm the LoRA can be downloaded from W&amp;B and the licence allows publishing it. A 27B model needs about one 80 GB GPU in bf16, or a host that serves Qwen3.8-27B with LoRA adapters; that cost sits outside both W&amp;B budgets. Running it on W&amp;B instead would take ~$35 from production.</p></div>
+
+<h2 id="eval">Evaluation</h2>
+<div class="tiers">
+  <div class="tier t-p1"><div class="k">Tier 1</div><h3>Selection set</h3><p>Held-out seeds of training generators at fixed difficulty levels + one held-out generator family.</p><div class="when">Picks the checkpoint. Used at every eval.</div></div>
+  <div class="tier t-p2"><div class="k">Tier 2</div><h3>Held-out test</h3><p>Never-trained generators and sources: other log sources, ATT&amp;CK techniques, code languages, OOLONG test sources, separately written question templates.</p><div class="when">The generalization claim. Touched once.</div></div>
+  <div class="tier t-good"><div class="k">Tier 3</div><h3>Public benchmarks</h3><p>CyberSOCEval malware, ExCyTIn, LCA Java/Kotlin, OOLONG-real, LongBench-v2 code, BrowseComp-Plus subset.</p><div class="when">Comparable numbers. Touched once.</div></div>
+</div>
+<div class="grid" style="margin-top:12px">
+  <div class="card"><h3>Baselines</h3>
+    <ol class="steps"><li>Base model as an RLM (step 0)</li><li>Base model <b>reading the context directly</b>, where it fits in 262K. Without this we can't claim RLM helps.</li><li>The 20-step GRPO checkpoint, both seeds</li></ol></div>
+  <div class="card"><h3>Metrics</h3>
+    <ul><li><b>Exact accuracy</b> with 95% CIs, avg@k and pass@k</li><li>reward components, never mean reward alone</li><li>sub-calls, budget-hit rate, turns, tokens, $ per episode</li><li>submit rate, infra error rate</li><li><b>clean solve rate</b> from the audit</li><li><b>closed-book probe:</b> empty context should score at chance</li><li><b>canary tasks:</b> answer not in context</li></ul></div>
+  <div class="card t-warn"><h3>Logging and sample size <span class="pill first">Do first</span></h3>
+    <p>Every eval episode logged in full and audited like training (H9). The 64-task selection set gives about ±12 points per eval, so stop decisions use the trend over several evals. The final eval, run outside W&amp;B, can afford ~400 episodes per model (±5). Compare on the <b>same tasks</b> with paired tests, fixed decoding, 2-3 sampling seeds on the final test, and two training seeds where a claim depends on it (H12).</p></div>
+</div>
+
+<h3 style="margin-top:18px">Is it frying?</h3>
+<div class="tablewrap panel" style="padding:6px 8px">
+<table>
+<tr><th>Signal</th><th>Bad sign</th><th>Response</th></tr>
+<tr><td>Train reward vs selection set</td><td>reward up, selection flat or down</td><td>read transcripts, check detectors, stop</td></tr>
+<tr><td>Within-group reward std, trainable groups</td><td>sudden drop (Echo Trap)</td><td>filter, lower LR, roll back</td></tr>
+<tr><td>Policy entropy</td><td>fast monotone drop</td><td>lower LR, consider a small KL to base</td></tr>
+<tr><td>KL to base (logged)</td><td>sudden jump</td><td>same</td></tr>
+<tr><td>Turns, tokens, truncation, budget-hit rate</td><td>hitting caps, or 1-2 turns</td><td>look for loops or guess-and-submit</td></tr>
+<tr><td>Pass-rate histogram, difficulty level</td><td>mass at 0 or 1; level stuck at top or bottom</td><td>check the controller and data</td></tr>
+<tr><td>Clip fraction, <code>probs_corr</code>, grad norm</td><td>rising clips, falling <code>probs_corr</code></td><td>lower LR</td></tr>
+<tr><td>Infra error rate</td><td>above ~1%</td><td>pause and fix</td></tr>
+<tr><td>Capability retention (IFEval, MMLU-Pro, short coding, chat)</td><td>down more than ~2 points</td><td>frying, even if RLM accuracy rose</td></tr>
+</table></div>
+
+<h2 id="stop">How long to train, and when to stop</h2>
+<p>No fixed step count: 60 steps could stop while the model is still improving, or keep paying after it has stopped. Production runs against its <b>~$150 inference ceiling</b> and stops by rule.</p>
+<div class="grid">
+  <div class="card t-p1"><h3>Every 10 steps</h3><p>Evaluate on the fixed 64-task selection set (~$2.50) and a ~100-prompt capability check (cents). Save the checkpoint; track the best so far.</p>
+    <div class="rec"><b>Keep going</b> while the selection set set a new best in one of the last 3 evals, or a family moved up a level in the last 30 steps.</div></div>
+  <div class="card t-bad"><h3>Stop early, keep the best checkpoint</h3>
+    <ol class="steps">
+      <li><b>Plateau:</b> no new best for 3 evals (30 steps) and no level-up.</li>
+      <li><b>Overfitting:</b> train reward up, selection set down, 2 evals running.</li>
+      <li><b>Frying:</b> capability check down &gt;2 points, or a collapse that returns after one rollback with lower LR.</li>
+      <li><b>Saturation:</b> every family at its top level above ~70% pass. Next step is harder data, not more steps.</li>
+      <li><b>Hacking</b> that needs an env change: pause, fix, resume.</li>
+    </ol></div>
+  <div class="card t-good"><h3>If it may need more</h3><p>At the ceiling, if both of the last 2 evals were new bests, spend the ~$25 reserve (about 15-25 more steps), then check with Rishi.</p>
+    <div class="rec"><b>Stopping isn't final:</b> ART keeps the LoRA checkpoints, so a stopped run can resume from its latest or best checkpoint when more inference credit appears.</div></div>
+</div>
+
+<h3 style="margin-top:18px">Shareable dashboard</h3>
+<p>W&amp;B stays the source of truth. For collaborators: a private-link Claude artifact styled after MiMo's page, rebuilt from the per-step <code>results/&lt;run&gt;.json</code> the training script already writes, with trainable groups and difficulty level per family alongside the panels above. W&amp;B public reports are the zero-effort alternative. Build it with the production run.</p>
+
+<h2 id="missing">Other things the run needs</h2>
+<div class="grid">
+  <div class="card t-bad"><h3>Blocking</h3><ul><li>Bridge API freeze (H10)</li><li>Long enough contexts through the difficulty levels (H8)</li><li>Sandbox and eval logging (do first)</li></ul></div>
+  <div class="card t-warn"><h3>Training settings</h3><ul><li>Restore the CISPO clip; confirm in the second-seed run</li><li>The difficulty controller and stop rules are ours to build</li><li>32 episodes per step (8 × 4)</li><li>Thinking mode off and pinned</li><li>Keep REPL output truncated so root transcripts stay inside ART's packed length</li></ul></div>
+  <div class="card t-p1"><h3>Hygiene</h3><ul><li>Pin ART 0.5.20, chat template, bridge prompt, generator versions, difficulty schedule, dataset manifest; save config per checkpoint</li><li>Keep every 5th checkpoint + best on selection set</li><li>Licence check per source</li><li>Final eval through the Part 2 harness core, outside W&amp;B</li><li>Confirm Qwen3.8-27B training stays available</li></ul></div>
+</div>
+
+<h2 id="plan">Plan and decisions</h2>
+<div class="phases">
+  <div class="phase first"><b>A. Do first</b>Sandbox (H2-H4), eval transcript logging (H9), shared limiter and infra flags (H5, H6)<div class="cost">no credit</div></div>
+  <div class="phase free"><b>B. Env v2</b>Calibrated reward, bridge freeze, hack detectors, CISPO clip, 30-call budget, difficulty controller, stop rules<div class="cost">no credit</div></div>
+  <div class="phase free"><b>C. Data</b>Generators with levels, OOLONG &amp; LCA loaders, held-out splits (H7, H8)<div class="cost">no credit</div></div>
+  <div class="phase free"><b>D. Red-team</b>Claude agent attacks env v2 until every check passes<div class="cost">no credit</div></div>
+  <div class="phase first"><b>E. Second seed</b>20-step GRPO rerun on env v2 (H12); doubles as the smoke test, so no pilot<div class="cost">~$12</div></div>
+  <div class="phase paid"><b>F. Baselines</b>Base as an RLM and reading directly, on the selection set<div class="cost">~$5</div></div>
+  <div class="phase paid"><b>G. Production</b>GRPO until a stop rule fires; selection set every 10 steps<div class="cost">≤ ~$150 + ~$25 evals</div></div>
+  <div class="phase free"><b>H. Final eval</b>LoRA to Hugging Face; benchmarks outside W&amp;B<div class="cost">$0 on W&amp;B</div></div>
+</div>
+<p class="muted" style="margin-top:8px">All amounts are W&amp;B inference. ~$25 stays in reserve. Each phase that spends it waits for Rishi's go-ahead.</p>
+
+<div class="panel" style="margin-top:14px">
+<h3>Decisions for Rishi</h3>
+<ol class="steps">
+  <li><b>Inference split:</b> second seed ~$12, baselines ~$5, production ceiling ~$150, selection-set evals ~$25, reserve ~$25, final eval outside W&amp;B?</li>
+  <li><b>Domain mix:</b> ~35% cyber / 20% code / 30% OOLONG / 15% repo localization, or more code and cyber?</li>
+  <li><b>Partial credit:</b> calibrate it against the blind guess (recommended), or drop it?</li>
+  <li><b>CISPO clip:</b> restore the default now that RLSD is gone (recommended)?</li>
+  <li><b>Bridge names:</b> <code>llm</code> / <code>llm_batch</code> / <code>submit</code> (recommended)?</li>
+  <li><b>Deployed sub-calls:</b> the base model (as trained) or the trained LoRA?</li>
+</ol>
+</div>
+
+<footer>
+<p>MiMo figures come from secondary write-ups of a self-reported run. Blind-guess numbers are a local simulation of our generators. Costs are calibrated on the $32.32 inference bill; costs at longer contexts are extrapolated, not measured. The 20-step comparison is one seed per arm (H12). Sources are listed in <a href="rl-run-research.md">rl-run-research.md</a> §13. Related: <a href="grpo-for-rlm.md">GRPO for RLM</a>, <a href="archive/rlsd-vs-grpo-20-step-results.md">20-step results</a>, <a href="project-map.html">project map</a>.</p>
+</footer>
+</main>
+</body>
+</html>

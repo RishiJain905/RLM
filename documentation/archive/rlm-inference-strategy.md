@@ -1,6 +1,6 @@
 # RLM Inference Loop: Recommended Strategy
 
-> High-level design for our model-agnostic RLM harness. Based on the RLM paper ([rlm-paper.md](rlm-paper.md)) and the Claude Science "Python REPL + host bridge" design. Meant to be talked through before we build.
+> High-level design for our model-agnostic RLM harness. Based on the RLM paper ([rlm-paper.md](../rlm-paper.md)) and the Claude Science "Python REPL + host bridge" design. Meant to be talked through before we build.
 
 ---
 

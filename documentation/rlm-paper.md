@@ -195,4 +195,4 @@ Base model with full prompt; CodeAct (+BM25 retriever, or +sub-call tool, but pr
 - Explicit, structured termination and async/batched sub-calls fix two of the paper's own negative results.
 - Training should target the **root** model, with a frozen sub-call model, starting from SFT-style bootstrapping or straight RL on tasks like MRCRv2 / OOLONG.
 
-See [rlm-inference-strategy.md](rlm-inference-strategy.md) for the harness design.
+See [rlm-inference-strategy.md](archive/rlm-inference-strategy.md) for the harness design.
