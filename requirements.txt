@@ -1,0 +1,9 @@
+openpipe-art==0.5.20
+wandb==0.30.0
+pyarrow==26.0.0
+openai==2.54.0
+httpx==0.28.1
+python-dotenv==1.2.4
+jupyter==1.1.1
+ipykernel==7.4.0
+nbconvert==7.17.1
