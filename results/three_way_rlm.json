@@ -1,0 +1,336 @@
+{
+  "config": {
+    "base_model": "Qwen/Qwen3.8-27B",
+    "train_steps": 3,
+    "tasks_per_step": 8,
+    "rollouts_per_task": 4,
+    "learning_rate": 1e-05,
+    "eval_tasks": 24,
+    "eval_samples": 2,
+    "arms": {
+      "grpo": null,
+      "sdpo": 0.11,
+      "rlsd": 0.1
+    }
+  },
+  "steps": {
+    "grpo": [
+      {
+        "step": 0,
+        "train_reward": 0.512875,
+        "train_correct": 0.40625,
+        "turns": 5.21875,
+        "subcalls": 1.09375,
+        "used_subcalls": 0.46875,
+        "first_turn_submit": 0.0,
+        "submitted": 0.71875,
+        "mixed_groups": 6,
+        "groups": 8,
+        "trajectories": 32,
+        "trained_to": 1,
+        "seconds": 403,
+        "loss": {
+          "loss/train": 0.022107224739891917,
+          "loss/grad_norm": 1.0346518439084862,
+          "loss/probs_corr": 0.9971973864655745,
+          "loss/importance_ratio_mean": 0.9994685743984423,
+          "loss/importance_ratio_p95": 1.0994218901584023,
+          "loss/importance_ratio_p99": 1.2685854748675698,
+          "loss/clipped_token_fraction": 0.980316698551178
+        }
+      },
+      {
+        "step": 1,
+        "train_reward": 0.553440625,
+        "train_correct": 0.40625,
+        "turns": 5.3125,
+        "subcalls": 1.96875,
+        "used_subcalls": 0.4375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.8125,
+        "mixed_groups": 7,
+        "groups": 8,
+        "trajectories": 32,
+        "trained_to": 2,
+        "seconds": 511,
+        "loss": {
+          "loss/train": 0.01991208133598169,
+          "loss/grad_norm": 1.0040257493206117,
+          "loss/probs_corr": 0.9970174074172974,
+          "loss/importance_ratio_mean": 0.9998070915540059,
+          "loss/importance_ratio_p95": 1.0843052546183267,
+          "loss/importance_ratio_p99": 1.2586331129074098,
+          "loss/clipped_token_fraction": 0.9722496589024862
+        }
+      },
+      {
+        "step": 2,
+        "train_reward": 0.5240875,
+        "train_correct": 0.40625,
+        "turns": 5.46875,
+        "subcalls": 1.09375,
+        "used_subcalls": 0.375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.78125,
+        "mixed_groups": 6,
+        "groups": 8,
+        "trajectories": 32,
+        "trained_to": 3,
+        "seconds": 297,
+        "loss": {
+          "loss/train": -0.08172139845026488,
+          "loss/grad_norm": 0.8361358421509485,
+          "loss/probs_corr": 0.9969335875727914,
+          "loss/importance_ratio_mean": 1.0002424635670402,
+          "loss/importance_ratio_p95": 1.0867817564444109,
+          "loss/importance_ratio_p99": 1.2873698310418562,
+          "loss/clipped_token_fraction": 0.9779386493292722
+        }
+      }
+    ],
+    "sdpo": [
+      {
+        "step": 0,
+        "train_reward": 0.437503125,
+        "train_correct": 0.3125,
+        "turns": 5.21875,
+        "subcalls": 0.90625,
+        "used_subcalls": 0.25,
+        "first_turn_submit": 0.0,
+        "submitted": 0.6875,
+        "mixed_groups": 7,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 27,
+          "no_feedback": 1,
+          "misaligned": 4,
+          "skipped_zero_advantage": 0,
+          "mean_delta": -0.03355152273873813,
+          "min_delta": -9.984518051147461,
+          "mean_abs_advantage_shift": 0.009734958838713946
+        },
+        "trained_to": 1,
+        "seconds": 453,
+        "loss": {
+          "loss/train": -0.05826757240878499,
+          "loss/grad_norm": 1.1398130340890484,
+          "loss/probs_corr": 0.9801616279975228,
+          "loss/importance_ratio_mean": 1.901171062303626,
+          "loss/importance_ratio_p95": 1.250462972599527,
+          "loss/importance_ratio_p99": 2.5548679414002793,
+          "loss/clipped_token_fraction": 0.9898290271344392
+        }
+      },
+      {
+        "step": 1,
+        "train_reward": 0.498675,
+        "train_correct": 0.40625,
+        "turns": 5.625,
+        "subcalls": 1.25,
+        "used_subcalls": 0.34375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.6875,
+        "mixed_groups": 7,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 26,
+          "no_feedback": 2,
+          "misaligned": 4,
+          "skipped_zero_advantage": 0,
+          "mean_delta": -0.05039673554779217,
+          "min_delta": -10.753033757209778,
+          "mean_abs_advantage_shift": 0.01119415102905386
+        },
+        "trained_to": 2,
+        "seconds": 325,
+        "loss": {
+          "loss/train": -0.028812362998723983,
+          "loss/grad_norm": 0.8184930670572833,
+          "loss/probs_corr": 0.9653586069742839,
+          "loss/importance_ratio_mean": 1.7306309739748638,
+          "loss/importance_ratio_p95": 1.3552148342132568,
+          "loss/importance_ratio_p99": 3.5790654897689818,
+          "loss/clipped_token_fraction": 0.9867589235305786
+        }
+      },
+      {
+        "step": 2,
+        "train_reward": 0.454309375,
+        "train_correct": 0.375,
+        "turns": 5.5625,
+        "subcalls": 1.15625,
+        "used_subcalls": 0.375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.625,
+        "mixed_groups": 5,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 27,
+          "no_feedback": 2,
+          "misaligned": 3,
+          "skipped_zero_advantage": 0,
+          "mean_delta": -0.034479954736968015,
+          "min_delta": -13.686738809861708,
+          "mean_abs_advantage_shift": 0.008560572663172004
+        },
+        "trained_to": 3,
+        "seconds": 260,
+        "loss": {
+          "loss/train": -0.08800207111327087,
+          "loss/grad_norm": 1.1956451843095994,
+          "loss/probs_corr": 0.9674172681920669,
+          "loss/importance_ratio_mean": 61.09479981310227,
+          "loss/importance_ratio_p95": 1.3051573739332312,
+          "loss/importance_ratio_p99": 2.9628682767643646,
+          "loss/clipped_token_fraction": 0.9856592662194196
+        }
+      }
+    ],
+    "rlsd": [
+      {
+        "step": 0,
+        "train_reward": 0.52044375,
+        "train_correct": 0.375,
+        "turns": 5.28125,
+        "subcalls": 1.34375,
+        "used_subcalls": 0.34375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.78125,
+        "mixed_groups": 7,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 23,
+          "no_feedback": 2,
+          "misaligned": 3,
+          "skipped_zero_advantage": 4,
+          "mean_delta": -0.03248513853121281,
+          "min_delta": -9.314322181046009,
+          "mean_abs_advantage_shift": 0.0037135568355227064
+        },
+        "trained_to": 1,
+        "seconds": 440,
+        "loss": {
+          "loss/train": -0.03970053814351559,
+          "loss/grad_norm": 1.2403548615912632,
+          "loss/probs_corr": 0.9884886407852173,
+          "loss/importance_ratio_mean": 1.0089986181259156,
+          "loss/importance_ratio_p95": 1.182344331741333,
+          "loss/importance_ratio_p99": 1.3828470182418824,
+          "loss/clipped_token_fraction": 0.9911022043228149
+        }
+      },
+      {
+        "step": 1,
+        "train_reward": 0.52390625,
+        "train_correct": 0.40625,
+        "turns": 5.46875,
+        "subcalls": 2.03125,
+        "used_subcalls": 0.40625,
+        "first_turn_submit": 0.0,
+        "submitted": 0.78125,
+        "mixed_groups": 6,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 21,
+          "no_feedback": 1,
+          "misaligned": 2,
+          "skipped_zero_advantage": 8,
+          "mean_delta": -0.030622961947299895,
+          "min_delta": -6.60738742351532,
+          "mean_abs_advantage_shift": 0.004557276277290449
+        },
+        "trained_to": 2,
+        "seconds": 245,
+        "loss": {
+          "loss/train": 0.00373320083017461,
+          "loss/grad_norm": 1.3438094769076268,
+          "loss/probs_corr": 0.9815439432859421,
+          "loss/importance_ratio_mean": 1.0179539710283279,
+          "loss/importance_ratio_p95": 1.2497083008289338,
+          "loss/importance_ratio_p99": 1.436611145734787,
+          "loss/clipped_token_fraction": 0.9891683101654053
+        }
+      },
+      {
+        "step": 2,
+        "train_reward": 0.592528125,
+        "train_correct": 0.46875,
+        "turns": 5.5,
+        "subcalls": 1.3125,
+        "used_subcalls": 0.34375,
+        "first_turn_submit": 0.0,
+        "submitted": 0.8125,
+        "mixed_groups": 6,
+        "groups": 8,
+        "trajectories": 32,
+        "shaping": {
+          "rescored": 20,
+          "no_feedback": 1,
+          "misaligned": 3,
+          "skipped_zero_advantage": 8,
+          "mean_delta": -0.038151219743311454,
+          "min_delta": -13.063867330551147,
+          "mean_abs_advantage_shift": 0.005355178009983241
+        },
+        "trained_to": 3,
+        "seconds": 240,
+        "loss": {
+          "loss/train": -0.045242272317409515,
+          "loss/grad_norm": 0.9472802358547118,
+          "loss/probs_corr": 0.9767427627856915,
+          "loss/importance_ratio_mean": 1.0203978740251982,
+          "loss/importance_ratio_p95": 1.2875061493653517,
+          "loss/importance_ratio_p99": 1.4956692182100737,
+          "loss/clipped_token_fraction": 0.9850951524881216
+        }
+      }
+    ]
+  },
+  "eval": {
+    "base": {
+      "accuracy": 0.3541666666666667,
+      "mean_reward": 0.4948729166666667,
+      "submitted": 0.7708333333333334,
+      "turns": 5.229166666666667,
+      "subcalls": 0.6875,
+      "first_turn_submit": 0.041666666666666664,
+      "n": 48,
+      "failed_episodes": 0
+    },
+    "rlsd": {
+      "accuracy": 0.5416666666666666,
+      "mean_reward": 0.5990729166666667,
+      "submitted": 0.7708333333333334,
+      "turns": 5.25,
+      "subcalls": 0.9583333333333334,
+      "first_turn_submit": 0.0,
+      "n": 48,
+      "failed_episodes": 0
+    },
+    "sdpo": {
+      "accuracy": 0.375,
+      "mean_reward": 0.5383,
+      "submitted": 0.875,
+      "turns": 5.270833333333333,
+      "subcalls": 0.6041666666666666,
+      "first_turn_submit": 0.0,
+      "n": 48,
+      "failed_episodes": 0
+    },
+    "grpo": {
+      "accuracy": 0.4583333333333333,
+      "mean_reward": 0.5850666666666667,
+      "submitted": 0.875,
+      "turns": 5.3125,
+      "subcalls": 1.2708333333333333,
+      "first_turn_submit": 0.0,
+      "n": 48,
+      "failed_episodes": 0
+    }
+  }
+}
