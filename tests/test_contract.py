@@ -1,0 +1,94 @@
+"""H10: one bridge contract, shared by the sandbox worker, the training environment and the harness.
+
+The worker runs inside the sandbox and can't import rlm_rl.bridge, so its copies of the
+protocol constants are checked here. Every module that builds a root prompt must take it from
+rlm_rl.bridge; PROMPT_CONSUMERS lists them, and the test diffs each one's system prompt.
+"""
+
+import importlib
+import importlib.util
+import math
+import unittest
+from pathlib import Path
+
+from rlm_rl import bridge, repl_worker, sandbox
+
+ROOT = Path(__file__).resolve().parents[1]
+
+# Modules that render the system prompt. rlm_rl.env and rlm_rl.evals arrived in step 4; the Part 2
+# harness adds its entry point here when it exists.
+PROMPT_CONSUMERS = ("rlm_rl.env", "rlm_rl.evals", "harness")
+
+
+class WorkerMatchesBridgeTest(unittest.TestCase):
+    def test_protocol_constants(self):
+        for name in ("API_NAMES", "WIRE_OPS", "OUTPUT_MAX_CHARS", "TRACEBACK_LINES", "SUBCALL_MAX_CHARS",
+                     "SUBCALL_TRUNCATION_MARK", "SUBMIT_MAX_BYTES"):
+            self.assertEqual(getattr(repl_worker, name), getattr(bridge, name), name)
+        self.assertEqual(repl_worker.AUDIT_PREFIX, sandbox.AUDIT_PREFIX)
+        self.assertEqual(repl_worker.TAMPER_EXIT_CODE, sandbox.TAMPER_EXIT_CODE)
+
+    def test_repl_exposes_exactly_the_api(self):
+        names = set(repl_worker.make_namespace("text")) - {"__name__"}
+        self.assertEqual(names, set(bridge.API_NAMES))
+        self.assertEqual(repl_worker.make_namespace("text")["context"], "text")
+
+    def test_truncation_agrees(self):
+        for n in (0, 10, 24_000, 24_001, 50_000):
+            self.assertEqual(repl_worker._truncate("q" * n), bridge.truncate_prompt("q" * n))
+
+    def test_every_submitted_value_is_a_valid_answer(self):
+        class Thing:
+            def __str__(self):
+                return "thing"
+        samples = [3, -7, 2.5, math.nan, math.inf, "host-1", True, None, [1, "a", 2.0], (1, 2), {"b", "a"},
+                   frozenset({3}), [[1, 2], None, True], {"k": 1}, Thing(), 10 ** 30]
+        for value in samples:
+            self.assertTrue(bridge.valid_answer(repl_worker.normalize_answer(value)), repr(value))
+        self.assertEqual(repl_worker.normalize_answer({"b", "a"}), ["a", "b"])
+        self.assertEqual(repl_worker.normalize_answer(True), "True")
+        self.assertEqual(repl_worker.normalize_answer([[1, 2], None]), ["[1, 2]", "None"])
+        self.assertEqual(repl_worker.normalize_answer(math.nan), "nan")
+
+    def test_worker_imports_nothing_from_the_project(self):
+        source = (ROOT / "rlm_rl" / "repl_worker.py").read_text(encoding="utf-8")
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("import ", "from ")):
+                module = stripped.split()[1].split(".")[0]
+                self.assertIn(module, __import__("sys").stdlib_module_names, line)
+
+
+class OneSystemPromptTest(unittest.TestCase):
+    def _production_sources(self):
+        for folder in ("rlm_rl", "scripts"):
+            for path in (ROOT / folder).rglob("*.py"):
+                if "archive" not in path.relative_to(ROOT).parts:
+                    yield path
+
+    def test_prompt_text_is_defined_only_in_the_bridge(self):
+        for path in self._production_sources():
+            text = path.read_text(encoding="utf-8")
+            if path.name != "bridge.py":
+                self.assertNotIn("You are a Recursive Language Model", text, path)
+            self.assertNotIn("llm_query", text, path)
+
+    def test_consumers_use_the_bridge_prompt(self):
+        checked = []
+        for module_name in PROMPT_CONSUMERS:
+            if importlib.util.find_spec(module_name.split(".")[0]) is None:
+                continue
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError as exc:
+                if exc.name != module_name:  # the consumer exists but a dependency is missing: fail, don't skip
+                    raise
+                continue
+            with self.subTest(module=module_name):
+                self.assertEqual(getattr(module, "SYSTEM_PROMPT", None), bridge.SYSTEM_PROMPT)
+            checked.append(module_name)
+        print(f"\n  system prompt diffed for: {', '.join(checked) or 'no consumers yet (env.py lands in step 5)'}")
+
+
+if __name__ == "__main__":
+    unittest.main()

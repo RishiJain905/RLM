@@ -1,7 +1,11 @@
 .env
 .venv
+.venv-linux
 __pycache__/
 wandb/
 notebooks/wandb/
 .art/
 notebooks/.art/
+checkpoints/
+private/
+results/*/transcripts/

@@ -1,0 +1,141 @@
+"""Evals with every episode logged in full (H9, research §8.4).
+
+run_eval() runs a fixed task list against one checkpoint and appends one transcript line per
+episode to results/<run>/transcripts/val/<name>/step<NNNN>.jsonl as each one finishes.
+Rerunning the same eval at the same checkpoint resumes it: finished episodes are skipped, infra
+episodes run again, and the reader keeps the newest line per episode, so the eval ends with
+exactly one transcript per episode. Infra episodes are left out of accuracy and counted.
+
+When an ART model is given, the whole eval (not just this call's episodes) is also logged with
+`model.log(groups, split="val", step=step)`, so a resumed eval logs complete groups. That writes
+.art/.../trajectories/val/<step>.parquet locally and the summary metrics to W&B. Logging
+metrics is free; it spends no inference credit.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import collections
+import math
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+from . import bridge
+from .bridge import InfraError
+from .client import ModelClient
+from .env import Scorer, Task, run_episode
+from .sandbox import Sandbox
+from .transcripts import TranscriptLog, episode_record, transcript_path
+
+SYSTEM_PROMPT = bridge.SYSTEM_PROMPT  # tests/test_contract.py diffs this against the bridge (H10)
+
+MAX_EPISODES_AT_ONCE = 32  # sandboxes running at once; the limiter paces the requests themselves
+
+
+@dataclass
+class EvalResult:
+    name: str
+    step: int
+    path: Path
+    summary: dict
+    ran: int  # episodes this call ran; the rest were already logged
+    records: list[dict]
+
+
+def episode_key(name: str, step: int, task_id: str, sample: int) -> str:
+    return f"{name}/step{step}/{task_id}/{sample}"
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def summarize(records: list[dict]) -> dict:
+    """Accuracy and episode shape over finished episodes; infra episodes are counted separately."""
+    clean = [r for r in records if not r.get("infra_error")]
+    infra = [r for r in records if r.get("infra_error")]
+    n = len(clean)
+    accuracy = _mean([float(bool(r["correct"])) for r in clean])
+    families = collections.defaultdict(list)
+    for r in clean:
+        families[r["family"]].append(float(bool(r["correct"])))
+
+    def metric(name):
+        return _mean([r["metrics"][name] for r in clean])
+
+    return {
+        "episodes": len(records),
+        "n": n,
+        "accuracy": accuracy,
+        "accuracy_se": math.sqrt(accuracy * (1 - accuracy) / n) if n else None,
+        "mean_reward": _mean([r["reward"] for r in clean]),
+        "submitted": metric("submitted"),
+        "first_turn_submit": metric("first_turn_submit"),
+        "turns": metric("turns"),
+        "subcalls": metric("subcalls"),
+        "budget_hit": metric("budget_hit"),
+        "truncated_turns": metric("truncated_turns"),
+        "escape_events": metric("escape_events"),
+        "infra_episodes": len(infra),
+        "infra_kinds": dict(collections.Counter(r.get("infra_kind") for r in infra)),
+        "est_cost_usd": round(sum(r["usage"]["est_cost_usd"] for r in records), 4),
+        "by_family": {f: {"n": len(v), "accuracy": _mean(v)} for f, v in sorted(families.items())},
+    }
+
+
+async def run_eval(tasks: list[Task], *, name: str, step: int, run_dir: str | Path, run: str, client: ModelClient,
+                   root_model: str, scorer: Scorer, samples: int = 1, art_model: Any = None,
+                   max_episodes: int = MAX_EPISODES_AT_ONCE, sandbox_factory: Callable[..., Any] = Sandbox,
+                   **sandbox_kwargs) -> EvalResult:
+    """Run (or resume) one eval of checkpoint `step` and log every episode."""
+    ids = [t.task_id for t in tasks]
+    if len(set(ids)) != len(ids):
+        raise ValueError("task ids must be unique within an eval")
+    path = transcript_path(run_dir, "val", step, name)
+    log = TranscriptLog(path)
+    done = log.done_keys()
+    planned = {episode_key(name, step, t.task_id, s): (t, s) for t in tasks for s in range(samples)}
+    todo = [(key, task, sample) for key, (task, sample) in planned.items() if key not in done]
+    gate = asyncio.Semaphore(max_episodes)
+
+    async def one(key: str, task: Task, sample: int) -> None:
+        async with gate:
+            ep = await run_episode(task, client=client, root_model=root_model, scorer=scorer, run_id=run,
+                                   sandbox_factory=sandbox_factory, **sandbox_kwargs)
+        log.append(episode_record(ep, split="val", run=run, step=step, key=key, eval_name=name, sample=sample))
+
+    await asyncio.gather(*(one(*job) for job in todo))
+    records = [r for r in log.records() if r["key"] in planned]
+    summary = summarize(records)
+    if art_model is not None:
+        await log_to_art(art_model, records, step=step, name=name, summary=summary)
+    return EvalResult(name, step, path, summary, len(todo), records)
+
+
+def record_trajectory(record: dict) -> Any:
+    """An ART trajectory for logging, rebuilt from a transcript record (plain messages, no token ids)."""
+    import art
+
+    return art.Trajectory(
+        messages_and_choices=record["messages"],
+        reward=float(record["reward"]),
+        metrics=record["metrics"],
+        metadata={"task_id": record["task_id"], "family": record["family"], "level": record["level"],
+                  "episode_id": record["episode_id"], "eval": record["eval"] or "", "gold": str(record["gold"]),
+                  "answer": "" if record["answer"] is None else str(record["answer"])},
+    )
+
+
+async def log_to_art(art_model: Any, records: list[dict], *, step: int, name: str, summary: dict) -> None:
+    """Log a finished eval through ART: one group per task, infra episodes as the group's exceptions."""
+    import art
+
+    by_task: dict[str, list[dict]] = collections.defaultdict(list)
+    for record in records:
+        by_task[record["task_id"]].append(record)
+    groups = [art.TrajectoryGroup([record_trajectory(r) for r in rs if not r.get("infra_error")],
+                                  exceptions=[InfraError(r["infra_error"]) for r in rs if r.get("infra_error")])
+              for rs in by_task.values()]
+    scalars = {f"{name}/{k}": float(v) for k, v in summary.items() if isinstance(v, (int, float)) and v is not None}
+    await art_model.log(groups, split="val", step=step, metrics=scalars)
