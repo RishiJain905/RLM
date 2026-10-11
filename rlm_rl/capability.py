@@ -50,6 +50,16 @@ class Item:
                [{"role": "user", "content": self.prompt}]
 
 
+def resolve(path: str | Path) -> Path:
+    """A prompt-set path: `data:<rel>` is relative to the data root (rlm_rl/data.py), anything else to the repo."""
+    text = str(path)
+    if text.startswith("data:"):
+        from . import data
+
+        return data.root() / text.removeprefix("data:")
+    return Path(__file__).resolve().parents[1] / text
+
+
 def load(path: str | Path) -> list[Item]:
     items = []
     for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):

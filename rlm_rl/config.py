@@ -40,7 +40,12 @@ LR_FLOOR = 1e-5
 # The train call (spec §5.1, decision 1c). The learning rate and the packed sequence length are passed separately.
 TRAIN_ARGS = {"loss_fn": "cispo", "epsilon": 1.0, "epsilon_high": 4.0, "scale_rewards": False, "kl_penalty_coef": 0.0}
 
-TICKET_MIX = {"tickets_all": 0.5, "tickets_customer": 0.5}  # until step 7 adds the production families (7a)
+TICKET_MIX = {"tickets_all": 0.5, "tickets_customer": 0.5}  # the second seed's mix
+
+# Production's eval sets and data (plan step 7). The capability path is relative to the data root (rlm_rl/data.py).
+PRODUCTION_SELECTION = "selection-v1"
+CAPABILITY_SET = "data:derived/capability/capability-v1.jsonl"
+DATASET_MANIFEST = REPO / "manifests" / "dataset-manifest.json"
 
 # Inference ceilings, $ (plan step 10a). Each is a hard stop: the run never starts a step or an eval it can't afford.
 SECOND_SEED_CEILINGS = {"train": 14.0, "eval": 3.0}  # ~$12 planned: ~$10 of steps and ~$1.6 of eval *(mine)*
@@ -106,13 +111,28 @@ def second_seed(run: str = "second-seed-v1") -> RunConfig:
                      max_steps=20, final_eval="heldout-seed1", ceilings=dict(SECOND_SEED_CEILINGS))
 
 
-def production(run: str, learning_rate: float) -> RunConfig:
-    """Plan step 12. `learning_rate` is the second seed's call (spec §5.2): 2e-5 if its checks passed, else 1e-5."""
+def production(run: str, learning_rate: float, leave_out_missing: bool = False, tasks_from: str = "7a") -> RunConfig:
+    """Plan step 12. `learning_rate` is the second seed's call (spec §5.2): 2e-5 if its checks passed, else 1e-5.
+
+    The mix is decision 7a's. Its cyber share has no family yet, so this raises unless `leave_out_missing`,
+    which trains on the built domains alone, spread over 100% (scripts/train.py --leave-out-missing).
+    `tasks_from="tickets"` keeps step 6's ticket stand-in (the ticket mix, selection-tickets-v1 and no
+    capability file), for the loop's tests and dry runs that don't need the datasets.
+    """
     if learning_rate not in (LR_PRODUCTION_HIGH, LR_FLOOR):
         raise ValueError(f"production starts at {LR_PRODUCTION_HIGH} or {LR_FLOOR} (spec §5.2), not {learning_rate}")
+    if tasks_from == "tickets":
+        mix, selection, capability_set = dict(TICKET_MIX), "selection-tickets-v1", None
+    elif tasks_from == "7a":
+        mix = tasks.production_mix(leave_out_missing=leave_out_missing)
+        tasks.check_mix(mix)
+        selection, capability_set = PRODUCTION_SELECTION, CAPABILITY_SET
+    else:
+        raise ValueError(f"tasks_from must be '7a' or 'tickets', not {tasks_from!r}")
     return RunConfig(run=run, kind="production", learning_rate=learning_rate,
-                     lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", eval_every=10, eval_at_start=True,
-                     selection="selection-tickets-v1", ceilings=dict(PRODUCTION_CEILINGS))
+                     lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", mix=mix, eval_every=10,
+                     eval_at_start=True, selection=selection, capability_set=capability_set,
+                     ceilings=dict(PRODUCTION_CEILINGS))
 
 
 # ----------------------------------------------------------------------------- pinned values (spec §8)
@@ -158,8 +178,14 @@ def art_version() -> str | None:
 
 
 def manifest(cfg: RunConfig) -> dict:
-    """The dataset manifest: generator versions, the mix and the eval sets. Step 7 replaces it with the real one."""
-    data = {"generators": tasks.versions(cfg.mix), "mix": cfg.mix,
+    """The dataset manifest (spec §8, plan step 7): generator versions, the mix, the eval sets, the domains not
+    yet built, and the hash of manifests/dataset-manifest.json, which pins every source file by sha256."""
+    try:
+        dataset = hashlib.sha256(DATASET_MANIFEST.read_bytes()).hexdigest()
+    except OSError:
+        dataset = None
+    data = {"generators": tasks.versions(cfg.mix), "mix": cfg.mix, "dataset_manifest_sha256": dataset,
+            "missing_domains": tasks.missing_domains() if cfg.kind == "production" else [],
             "evals": {"selection": cfg.selection, "final": cfg.final_eval, "capability": cfg.capability_set}}
     return {**data, "sha256": hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()}
 

@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from rlm_rl import bridge, config, monitor, sandbox, training
+from rlm_rl import bridge, config, data, monitor, sandbox, training
 from rlm_rl.training import ResumeBlocked, load_state, request_stop
 from rlm_rl.transcripts import TranscriptLog, transcript_path
 from tests.dryrun import DryRun, Oracle
@@ -148,7 +148,7 @@ class ProductionStopRuleTest(LoopCase):
         return Oracle(1, base=0.6, slope=-0.05, level_penalty=0.0)
 
     async def test_plateau_stops_the_run_and_keeps_the_best(self):
-        st = await self.run_("plat", cfg=config.production("plat", 2e-5)).start()
+        st = await self.run_("plat", cfg=config.production("plat", 2e-5, tasks_from="tickets")).start()
         self.assertEqual((st["status"], st["stop"]["rule"]), ("stopped", "plateau"), st["stop"])
         self.assertEqual(st["latest"], 30)
         self.assertEqual(st["best"]["checkpoint"], 0)
@@ -159,9 +159,29 @@ class ProductionStopRuleTest(LoopCase):
         self.assertIn(30, st["kept"])
 
 
+@unittest.skipUnless(data.available() and data.derived("lca", "index-train.jsonl.gz").exists(),
+                     "needs the step 7 data (rlm_rl/data.py)")
+class SevenAMixTest(LoopCase):
+    """Plan step 7: production on decision 7a's families (cyber left out), its selection set and its manifest."""
+
+    async def test_production_runs_on_the_7a_families(self):
+        cfg = config.production("mix7a", 2e-5, leave_out_missing=True)
+        st = await self.run_("mix7a", cfg=cfg, stop_after=2).start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
+        drawn = {family for row in st["steps"] for family in row["families"] if row["families"][family]["episodes"]}
+        self.assertTrue(drawn and drawn <= set(cfg.mix), drawn)
+        selection = [e for e in st["evals"] if e["name"] == "selection-v1"]
+        self.assertEqual([e["checkpoint"] for e in selection], [0])
+        self.assertEqual(selection[0]["summary"]["n"], 64)
+        pinned = json.loads((self.results / "mix7a" / "config.json").read_text())
+        self.assertEqual(pinned["manifest"]["missing_domains"], ["cyber"])
+        self.assertIsNotNone(pinned["manifest"]["dataset_manifest_sha256"])
+        self.assertEqual(set(pinned["generators"]), set(cfg.mix))
+
+
 class StopSwitchTest(LoopCase):
     async def test_stop_switch_then_resume_continues_cleanly(self):
-        run = self.run_("sw", cfg=config.production("sw", 2e-5))
+        run = self.run_("sw", cfg=config.production("sw", 2e-5, tasks_from="tickets"))
         self.hook_draw(run, 7, lambda: request_stop(self.results, "sw", "checking something"))
         st = await run.start()
         self.assertEqual((st["status"], st["stop"]["rule"], st["latest"]), ("stopped", "operator", 7))
@@ -277,7 +297,7 @@ class RollbackTest(LoopCase):
 class LearningRateFallbackTest(LoopCase):
     async def test_a_collapse_at_2e5_rolls_back_to_1e5_and_a_second_one_stops_the_run(self):
         self.dry.server.completion_logprob = lambda model: -0.1 if Oracle.step_of(model) >= 13 else -0.6
-        st = await self.run_("lrf", cfg=config.production("lrf", 2e-5)).start()
+        st = await self.run_("lrf", cfg=config.production("lrf", 2e-5, tasks_from="tickets")).start()
         self.assertEqual((st["status"], st["stop"]["rule"]), ("stopped", "frying"), st["stop"])
         self.assertIn("came back", st["stop"]["reason"])
         fallback = st["lr"]["fallback"]
@@ -314,7 +334,7 @@ class PauseTest(LoopCase):
             win.update(verdict="hack", rule="guessed", note="turn 2 submits the size line's count")
             path.write_text(json.dumps(verdicts), encoding="utf-8")
 
-        run = self.hook_draw(self.run_("hk", cfg=config.production("hk", 2e-5)), 12, mark_hack)
+        run = self.hook_draw(self.run_("hk", cfg=config.production("hk", 2e-5, tasks_from="tickets")), 12, mark_hack)
         st = await run.start()
         self.assertEqual((st["status"], st["stop"]["rule"], st["latest"]), ("paused", "hacking", 12))
         st = await self.run_("hk", stop_after=13).resume()
@@ -337,7 +357,7 @@ class SecretsTest(LoopCase):
     async def test_results_hold_no_seed_and_no_key(self):
         os.environ["WANDB_API_KEY"] = "canary-key-123"
         try:
-            await self.run_("sec", cfg=config.production("sec", 2e-5), stop_after=10).start()
+            await self.run_("sec", cfg=config.production("sec", 2e-5, tasks_from="tickets"), stop_after=10).start()
         finally:
             del os.environ["WANDB_API_KEY"]
         seeds = json.loads((self.results / "private" / "seeds" / "selection-tickets-v1.json").read_text())

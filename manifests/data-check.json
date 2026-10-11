@@ -1,0 +1,970 @@
+{
+ "h8": {
+  "top_level_median_chars": {
+   "aggregation": 385577.5,
+   "callgraph": 376208.0,
+   "needle": 370598.0,
+   "repo_loc": 403509.0
+  },
+  "pass": true
+ },
+ "h1": {
+  "pass": true
+ },
+ "families": {
+  "aggregation/L1": {
+   "family": "aggregation",
+   "level": 1,
+   "n": 20,
+   "median_chars": 35292.5,
+   "min_chars": 32128,
+   "max_chars": 39682,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "labels_over": 3,
+    "window_label_count": 6,
+    "user_label_count": 1,
+    "label_count": 4,
+    "user_window_count": 1,
+    "most_active_user": 3,
+    "users_with_label": 2
+   },
+   "seconds_per_task": 0.015
+  },
+  "aggregation/L2": {
+   "family": "aggregation",
+   "level": 2,
+   "n": 20,
+   "median_chars": 76431.0,
+   "min_chars": 70554,
+   "max_chars": 89673,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.5,
+   "kinds": {
+    "most_active_user": 6,
+    "label_count": 7,
+    "user_label_count": 2,
+    "window_label_count": 1,
+    "user_window_count": 4
+   },
+   "seconds_per_task": 0.011
+  },
+  "aggregation/L3": {
+   "family": "aggregation",
+   "level": 3,
+   "n": 20,
+   "median_chars": 148573.0,
+   "min_chars": 134239,
+   "max_chars": 168607,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.25,
+   "kinds": {
+    "label_count": 5,
+    "window_label_count": 5,
+    "labels_over": 2,
+    "users_with_label": 2,
+    "user_label_count": 1,
+    "user_window_count": 3,
+    "most_active_user": 2
+   },
+   "seconds_per_task": 0.033
+  },
+  "aggregation/L4": {
+   "family": "aggregation",
+   "level": 4,
+   "n": 20,
+   "median_chars": 252120.0,
+   "min_chars": 230953,
+   "max_chars": 289064,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.3,
+   "kinds": {
+    "label_count": 2,
+    "user_window_count": 5,
+    "labels_over": 4,
+    "user_label_count": 3,
+    "window_label_count": 3,
+    "users_with_label": 2,
+    "most_active_user": 1
+   },
+   "seconds_per_task": 0.062
+  },
+  "aggregation/L5": {
+   "family": "aggregation",
+   "level": 5,
+   "n": 20,
+   "median_chars": 385577.5,
+   "min_chars": 363205,
+   "max_chars": 413982,
+   "blind_reward": 0.05,
+   "blind_exact_rate": 0.05,
+   "h1_pass": true,
+   "code_only": 0.15,
+   "kinds": {
+    "labels_over": 4,
+    "label_count": 6,
+    "user_window_count": 2,
+    "window_label_count": 5,
+    "user_label_count": 2,
+    "most_active_user": 1
+   },
+   "seconds_per_task": 0.074
+  },
+  "callgraph/L1": {
+   "family": "callgraph",
+   "level": 1,
+   "n": 20,
+   "median_chars": 37298.5,
+   "min_chars": 32105,
+   "max_chars": 42231,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 1.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.01
+  },
+  "callgraph/L2": {
+   "family": "callgraph",
+   "level": 2,
+   "n": 20,
+   "median_chars": 78587.5,
+   "min_chars": 70246,
+   "max_chars": 85717,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.039
+  },
+  "callgraph/L3": {
+   "family": "callgraph",
+   "level": 3,
+   "n": 20,
+   "median_chars": 150999.0,
+   "min_chars": 128001,
+   "max_chars": 168300,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.133
+  },
+  "callgraph/L4": {
+   "family": "callgraph",
+   "level": 4,
+   "n": 20,
+   "median_chars": 246539.5,
+   "min_chars": 206438,
+   "max_chars": 292489,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.35,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.441
+  },
+  "callgraph/L5": {
+   "family": "callgraph",
+   "level": 5,
+   "n": 20,
+   "median_chars": 376208.0,
+   "min_chars": 332208,
+   "max_chars": 415795,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.15,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.995
+  },
+  "needle/L1": {
+   "family": "needle",
+   "level": 1,
+   "n": 20,
+   "median_chars": 36313.5,
+   "min_chars": 32939,
+   "max_chars": 42232,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.002
+  },
+  "needle/L2": {
+   "family": "needle",
+   "level": 2,
+   "n": 20,
+   "median_chars": 79666.5,
+   "min_chars": 66633,
+   "max_chars": 88178,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.007
+  },
+  "needle/L3": {
+   "family": "needle",
+   "level": 3,
+   "n": 20,
+   "median_chars": 146957.0,
+   "min_chars": 128702,
+   "max_chars": 169245,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.026
+  },
+  "needle/L4": {
+   "family": "needle",
+   "level": 4,
+   "n": 20,
+   "median_chars": 237054.0,
+   "min_chars": 216819,
+   "max_chars": 278818,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.075
+  },
+  "needle/L5": {
+   "family": "needle",
+   "level": 5,
+   "n": 20,
+   "median_chars": 370598.0,
+   "min_chars": 340983,
+   "max_chars": 395922,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.189
+  },
+  "repo_loc/L1": {
+   "family": "repo_loc",
+   "level": 1,
+   "n": 20,
+   "median_chars": 38826.5,
+   "min_chars": 33899,
+   "max_chars": 40878,
+   "blind_reward": 0.4,
+   "blind_exact_rate": 0.4,
+   "h1_pass": true,
+   "code_only": 0.4,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.033
+  },
+  "repo_loc/L2": {
+   "family": "repo_loc",
+   "level": 2,
+   "n": 20,
+   "median_chars": 84038.5,
+   "min_chars": 73208,
+   "max_chars": 91231,
+   "blind_reward": 0.2,
+   "blind_exact_rate": 0.2,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.022
+  },
+  "repo_loc/L3": {
+   "family": "repo_loc",
+   "level": 3,
+   "n": 20,
+   "median_chars": 160000.0,
+   "min_chars": 132767,
+   "max_chars": 170408,
+   "blind_reward": 0.15,
+   "blind_exact_rate": 0.15,
+   "h1_pass": true,
+   "code_only": 0.15,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.022
+  },
+  "repo_loc/L4": {
+   "family": "repo_loc",
+   "level": 4,
+   "n": 20,
+   "median_chars": 272411.5,
+   "min_chars": 252046,
+   "max_chars": 291628,
+   "blind_reward": 0.05,
+   "blind_exact_rate": 0.05,
+   "h1_pass": true,
+   "code_only": 0.05,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.026
+  },
+  "repo_loc/L5": {
+   "family": "repo_loc",
+   "level": 5,
+   "n": 20,
+   "median_chars": 403509.0,
+   "min_chars": 365705,
+   "max_chars": 423382,
+   "blind_reward": 0.05,
+   "blind_exact_rate": 0.05,
+   "h1_pass": true,
+   "code_only": 0.05,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.026
+  },
+  "aggregation_heldout/L1": {
+   "family": "aggregation_heldout",
+   "level": 1,
+   "n": 20,
+   "median_chars": 35805.0,
+   "min_chars": 32231,
+   "max_chars": 39610,
+   "blind_reward": 0.05,
+   "blind_exact_rate": 0.05,
+   "h1_pass": true,
+   "code_only": 0.35,
+   "kinds": {
+    "users_with_label": 4,
+    "most_active_user": 3,
+    "label_count": 4,
+    "user_label_count": 1,
+    "user_window_count": 4,
+    "window_label_count": 3,
+    "labels_over": 1
+   },
+   "seconds_per_task": 0.038
+  },
+  "aggregation_heldout/L2": {
+   "family": "aggregation_heldout",
+   "level": 2,
+   "n": 20,
+   "median_chars": 80438.0,
+   "min_chars": 73041,
+   "max_chars": 89864,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.3,
+   "kinds": {
+    "most_active_user": 3,
+    "labels_over": 4,
+    "label_count": 5,
+    "user_window_count": 3,
+    "window_label_count": 3,
+    "users_with_label": 1,
+    "user_label_count": 1
+   },
+   "seconds_per_task": 0.011
+  },
+  "aggregation_heldout/L3": {
+   "family": "aggregation_heldout",
+   "level": 3,
+   "n": 20,
+   "median_chars": 147902.0,
+   "min_chars": 130691,
+   "max_chars": 167066,
+   "blind_reward": 0.05,
+   "blind_exact_rate": 0.05,
+   "h1_pass": true,
+   "code_only": 0.25,
+   "kinds": {
+    "window_label_count": 3,
+    "label_count": 4,
+    "labels_over": 2,
+    "user_window_count": 4,
+    "user_label_count": 3,
+    "users_with_label": 3,
+    "most_active_user": 1
+   },
+   "seconds_per_task": 0.018
+  },
+  "aggregation_heldout/L4": {
+   "family": "aggregation_heldout",
+   "level": 4,
+   "n": 20,
+   "median_chars": 258960.0,
+   "min_chars": 230486,
+   "max_chars": 289483,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.3,
+   "kinds": {
+    "most_active_user": 1,
+    "user_window_count": 5,
+    "window_label_count": 4,
+    "user_label_count": 1,
+    "label_count": 2,
+    "users_with_label": 4,
+    "labels_over": 3
+   },
+   "seconds_per_task": 0.03
+  },
+  "aggregation_heldout/L5": {
+   "family": "aggregation_heldout",
+   "level": 5,
+   "n": 20,
+   "median_chars": 380378.5,
+   "min_chars": 360327,
+   "max_chars": 417351,
+   "blind_reward": 0.1,
+   "blind_exact_rate": 0.1,
+   "h1_pass": true,
+   "code_only": 0.35,
+   "kinds": {
+    "user_window_count": 5,
+    "user_label_count": 4,
+    "labels_over": 4,
+    "label_count": 2,
+    "most_active_user": 2,
+    "window_label_count": 3
+   },
+   "seconds_per_task": 0.044
+  },
+  "callgraph_heldout/L1": {
+   "family": "callgraph_heldout",
+   "level": 1,
+   "n": 20,
+   "median_chars": 37146.5,
+   "min_chars": 31417,
+   "max_chars": 42868,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 1.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.009
+  },
+  "callgraph_heldout/L2": {
+   "family": "callgraph_heldout",
+   "level": 2,
+   "n": 20,
+   "median_chars": 83625.0,
+   "min_chars": 71316,
+   "max_chars": 92672,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.037
+  },
+  "callgraph_heldout/L3": {
+   "family": "callgraph_heldout",
+   "level": 3,
+   "n": 20,
+   "median_chars": 157264.0,
+   "min_chars": 137536,
+   "max_chars": 174311,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.131
+  },
+  "callgraph_heldout/L4": {
+   "family": "callgraph_heldout",
+   "level": 4,
+   "n": 20,
+   "median_chars": 271177.5,
+   "min_chars": 236475,
+   "max_chars": 304089,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 0.467
+  },
+  "callgraph_heldout/L5": {
+   "family": "callgraph_heldout",
+   "level": 5,
+   "n": 20,
+   "median_chars": 403269.0,
+   "min_chars": 374031,
+   "max_chars": 446623,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "callgraph": 20
+   },
+   "seconds_per_task": 1.02
+  },
+  "needle_heldout/L1": {
+   "family": "needle_heldout",
+   "level": 1,
+   "n": 20,
+   "median_chars": 34416.0,
+   "min_chars": 32050,
+   "max_chars": 39590,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.002
+  },
+  "needle_heldout/L2": {
+   "family": "needle_heldout",
+   "level": 2,
+   "n": 20,
+   "median_chars": 78964.0,
+   "min_chars": 68260,
+   "max_chars": 87073,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.007
+  },
+  "needle_heldout/L3": {
+   "family": "needle_heldout",
+   "level": 3,
+   "n": 20,
+   "median_chars": 141996.0,
+   "min_chars": 125817,
+   "max_chars": 160691,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.025
+  },
+  "needle_heldout/L4": {
+   "family": "needle_heldout",
+   "level": 4,
+   "n": 20,
+   "median_chars": 250265.5,
+   "min_chars": 224568,
+   "max_chars": 275402,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.077
+  },
+  "needle_heldout/L5": {
+   "family": "needle_heldout",
+   "level": 5,
+   "n": 20,
+   "median_chars": 375602.0,
+   "min_chars": 339929,
+   "max_chars": 396935,
+   "blind_reward": 0.0,
+   "blind_exact_rate": 0.0,
+   "h1_pass": true,
+   "code_only": 0.0,
+   "kinds": {
+    "needle": 20
+   },
+   "seconds_per_task": 0.195
+  },
+  "repo_loc_select/L1": {
+   "family": "repo_loc_select",
+   "level": 1,
+   "n": 20,
+   "median_chars": 37064.0,
+   "min_chars": 33139,
+   "max_chars": 40339,
+   "blind_reward": 0.2,
+   "blind_exact_rate": 0.2,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.023
+  },
+  "repo_loc_select/L2": {
+   "family": "repo_loc_select",
+   "level": 2,
+   "n": 20,
+   "median_chars": 84087.5,
+   "min_chars": 73497,
+   "max_chars": 90595,
+   "blind_reward": 0.25,
+   "blind_exact_rate": 0.25,
+   "h1_pass": true,
+   "code_only": 0.25,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.025
+  },
+  "repo_loc_select/L3": {
+   "family": "repo_loc_select",
+   "level": 3,
+   "n": 20,
+   "median_chars": 156651.5,
+   "min_chars": 135832,
+   "max_chars": 170515,
+   "blind_reward": 0.25,
+   "blind_exact_rate": 0.25,
+   "h1_pass": true,
+   "code_only": 0.25,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.026
+  },
+  "repo_loc_select/L4": {
+   "family": "repo_loc_select",
+   "level": 4,
+   "n": 20,
+   "median_chars": 280523.5,
+   "min_chars": 234845,
+   "max_chars": 292100,
+   "blind_reward": 0.2,
+   "blind_exact_rate": 0.2,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.028
+  },
+  "repo_loc_select/L5": {
+   "family": "repo_loc_select",
+   "level": 5,
+   "n": 20,
+   "median_chars": 405508.0,
+   "min_chars": 365548,
+   "max_chars": 421355,
+   "blind_reward": 0.2,
+   "blind_exact_rate": 0.2,
+   "h1_pass": true,
+   "code_only": 0.2,
+   "kinds": {
+    "repo_loc": 20
+   },
+   "seconds_per_task": 0.03
+  }
+ },
+ "h7": {
+  "aggregation_templates": {
+   "n": 6,
+   "heldout_ngrams": 105,
+   "shared": 0,
+   "examples": []
+  },
+  "code_templates": {
+   "n": 6,
+   "heldout_ngrams": 28,
+   "shared": 0,
+   "examples": []
+  },
+  "repoloc_templates": {
+   "n": 6,
+   "heldout_ngrams": 21,
+   "shared": 0,
+   "examples": []
+  },
+  "needle_descriptions": {
+   "n": 6,
+   "heldout_ngrams": 104,
+   "shared": 0,
+   "examples": []
+  },
+  "needle_behaviours_shared": [],
+  "line_formats_shared": [],
+  "call_styles_heldout_only": [
+   "lambda",
+   "partial"
+  ],
+  "call_styles_in_training": [
+   "alias",
+   "direct",
+   "getattr",
+   "table"
+  ],
+  "huffpost_vs_training": {
+   "heldout_texts": 58954,
+   "exact_duplicates": 0,
+   "shared_8grams": 0,
+   "heldout_8grams": 181127
+  },
+  "oolong_test": {
+   "tasks": 50,
+   "source_sets": [
+    "agnews",
+    "app_reviews",
+    "formality",
+    "imdb",
+    "metaphors",
+    "multinli",
+    "negation",
+    "yahoo"
+   ],
+   "instances_checked": 78006,
+   "instances_in_training_pools": 20
+  },
+  "lca": {
+   "train_items": 531,
+   "train_repos": 37,
+   "selection_items": 28,
+   "selection_repos": [
+    "keras-team__keras",
+    "modin-project__modin",
+    "sanic-org__sanic"
+   ],
+   "selection_repos_in_training": [],
+   "test_items": 40,
+   "test_ids_in_training": 0,
+   "test_base_commits_in_training": 1,
+   "test_items_from_training_repos": 32,
+   "test_items_from_unseen_repos": 8,
+   "licences": {
+    "MIT License": 167,
+    "Apache License 2.0": 364
+   }
+  }
+ },
+ "licence": {
+  "mix_passes": true,
+  "training_sources": [
+   "clinc150",
+   "clinc150-domains",
+   "lca-bug-localization",
+   "massive"
+  ],
+  "training_sources_permissive": true,
+  "eval_only_sources": [
+   "cruxeval",
+   "huffpost",
+   "ifeval",
+   "mmlu-pro",
+   "oolong-synth"
+  ],
+  "sources": {
+   "clinc150": {
+    "licence": "CC-BY-3.0",
+    "role": "train"
+   },
+   "clinc150-domains": {
+    "licence": "CC-BY-3.0",
+    "role": "train"
+   },
+   "massive": {
+    "licence": "CC-BY-4.0 (upstream MASSIVE; the mirror's card says Apache-2.0)",
+    "role": "train"
+   },
+   "lca-bug-localization": {
+    "licence": "Apache-2.0 (dataset); every repo in it is MIT or Apache-2.0",
+    "role": "train"
+   },
+   "huffpost": {
+    "licence": "CC-BY-4.0",
+    "role": "eval"
+   },
+   "oolong-synth": {
+    "licence": "none stated; built from sets that include non-commercial ones",
+    "role": "eval"
+   },
+   "ifeval": {
+    "licence": "Apache-2.0",
+    "role": "eval"
+   },
+   "mmlu-pro": {
+    "licence": "MIT",
+    "role": "eval"
+   },
+   "cruxeval": {
+    "licence": "MIT",
+    "role": "eval"
+   }
+  },
+  "families_sources": {
+   "aggregation": [
+    "clinc150",
+    "clinc150-domains",
+    "massive"
+   ],
+   "callgraph": [],
+   "needle": [],
+   "repo_loc": [
+    "lca-bug-localization"
+   ]
+  }
+ },
+ "mix": {
+  "decision_7a": {
+   "cyber": 0.35,
+   "aggregation": 0.3,
+   "code": 0.2,
+   "repo": 0.15
+  },
+  "missing_domains": [
+   "cyber"
+  ],
+  "mix_without_missing": {
+   "aggregation": 0.4615384615384615,
+   "callgraph": 0.15384615384615385,
+   "needle": 0.15384615384615385,
+   "repo_loc": 0.23076923076923075
+  },
+  "code_only_share": {
+   "L1": 0.34,
+   "L2": 0.21,
+   "L3": 0.2,
+   "L4": 0.22,
+   "L5": 0.225
+  }
+ },
+ "eval_sets": {
+  "selection-v1": {
+   "tasks": 64,
+   "unique_ids": true,
+   "samples": 1,
+   "in_training_mix": [
+    "aggregation",
+    "callgraph",
+    "needle"
+   ],
+   "by_family": {
+    "aggregation": {
+     "n": 20,
+     "median_chars": 153464.0,
+     "max_chars": 414539
+    },
+    "callgraph": {
+     "n": 10,
+     "median_chars": 162993.0,
+     "max_chars": 314708
+    },
+    "needle": {
+     "n": 10,
+     "median_chars": 139570.0,
+     "max_chars": 369553
+    },
+    "repo_loc_select": {
+     "n": 12,
+     "median_chars": 113220.5,
+     "max_chars": 291055
+    },
+    "tickets_all": {
+     "n": 6,
+     "median_chars": 159910.0,
+     "max_chars": 397598
+    },
+    "tickets_customer": {
+     "n": 6,
+     "median_chars": 140711.0,
+     "max_chars": 430724
+    }
+   },
+   "seconds": 4.1
+  },
+  "heldout-test-v1": {
+   "tasks": 170,
+   "unique_ids": true,
+   "samples": 1,
+   "in_training_mix": [],
+   "by_family": {
+    "aggregation_heldout": {
+     "n": 40,
+     "median_chars": 151806.5,
+     "max_chars": 416971
+    },
+    "callgraph_heldout": {
+     "n": 20,
+     "median_chars": 171605.5,
+     "max_chars": 433750
+    },
+    "needle_heldout": {
+     "n": 20,
+     "median_chars": 150940.5,
+     "max_chars": 367750
+    },
+    "oolong_synth_test": {
+     "n": 50,
+     "median_chars": 183242.0,
+     "max_chars": 949430
+    },
+    "repo_loc_test": {
+     "n": 40,
+     "median_chars": 392200.0,
+     "max_chars": 421721
+    }
+   },
+   "seconds": 13.0
+  },
+  "capability": {
+   "items": 100,
+   "by_source": {
+    "ifeval": 30,
+    "mmlu_pro": 40,
+    "cruxeval": 20,
+    "chat": 10
+   }
+  }
+ }
+}

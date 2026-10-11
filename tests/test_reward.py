@@ -7,7 +7,7 @@ import statistics
 import unittest
 from types import SimpleNamespace
 
-from rlm_rl import reward, tasks
+from rlm_rl import data, reward, tasks
 from rlm_rl.reward import blind_score, near_miss_credit, normalize_entity, parse_number, score, score_answer, set_f1
 
 INT = {"type": "int", "blind": 60}  # gold 70 below: the blind guess is 10 off
@@ -129,14 +129,18 @@ class BlindGuesserTest(unittest.TestCase):
     scripts/reward_check.py prints the full table, including guessers that add an offset or noise.
     """
 
-    N = 300
+    N = 300  # the ticket families; plan step 7's families are slower to make, and scripts/data_check.py runs 20 each
+    N_DATA = 12
 
     def test_every_family_and_level(self):
         for family in sorted(tasks.GENERATORS):
+            if tasks.training_sources(family) and not data.available() or                     family.startswith("repo_loc") and not data.derived("lca", "index-train.jsonl.gz").exists():
+                continue  # needs the step 7 data root (rlm_rl/data.py)
+            n = self.N if family.startswith("tickets") else self.N_DATA
             for level in range(1, tasks.max_levels([family])[family] + 1):
-                task_list = [tasks.make_task(family, level) for _ in range(self.N)]
+                task_list = [tasks.make_task(family, level) for _ in range(n)]
                 rewards = [blind_score(t).reward for t in task_list]
-                exact_rate = statistics.fmean(t.grading["blind"] == t.answer for t in task_list)
+                exact_rate = statistics.fmean(float(blind_score(t).correct) for t in task_list)
                 with self.subTest(family=family, level=level):
                     self.assertLessEqual(statistics.fmean(rewards), exact_rate + 1e-12)
                     self.assertTrue(all(r in (0.0, 1.0) for r in rewards))

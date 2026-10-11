@@ -48,6 +48,28 @@ class EvalResult:
     records: list[dict]
 
 
+# The production selection set (plan step 7, research §8.1): 64 fixed tasks that pick the checkpoint. Held-out
+# seeds of every training family at fixed levels, the selection repos LCA training never sees, and one held-out
+# generator family, the ticket tasks, which production never trains on. The cyber share isn't built yet; when it
+# is, selection-v2 gives it its ~35% (~22 tasks).
+SELECTION_V1 = {
+    **{("aggregation", level): 4 for level in range(1, 6)},
+    **{("callgraph", level): 2 for level in range(1, 6)},
+    **{("needle", level): 2 for level in range(1, 6)},
+    **{("repo_loc_select", level): 3 for level in range(1, 5)},
+    **{(family, level): 2 for family in ("tickets_all", "tickets_customer") for level in (1, 3, 5)},
+}
+
+# The held-out test (research §8.1): touched once, in plan step 13. Held-out sources, behaviours, call styles and
+# question templates, LCA's Python test split (each item once) and a fixed sample of OOLONG-synth's test split.
+HELDOUT_TEST_V1 = {
+    **{("aggregation_heldout", level): 8 for level in range(1, 6)},
+    **{("callgraph_heldout", level): 4 for level in range(1, 6)},
+    **{("needle_heldout", level): 4 for level in range(1, 6)},
+}
+HELDOUT_OOLONG_PER_BUCKET = 10
+
+
 def eval_set(name: str) -> tuple[list[Task], int]:
     """An eval set the training loop runs, by name: (tasks, samples per task)."""
     if name == "heldout-seed1":  # the first seed's 50 held-out tasks, 2 samples each (plan step 10)
@@ -56,6 +78,14 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         return legacy_tasks(50, 99_999), 2
     if name == "selection-tickets-v1":
         return task_sets.fixed_set(name, SELECTION_TICKETS_V1), 1
+    if name == "selection-v1":
+        return task_sets.fixed_set(name, SELECTION_V1), 1
+    if name == "heldout-test-v1":
+        from .tasks import oolong, repoloc
+
+        generated = task_sets.fixed_set(name, HELDOUT_TEST_V1)
+        lca = repoloc.test_tasks(task_sets.private_seed_list(f"{name}-lca", len(repoloc.items("test"))), name)
+        return generated + lca + oolong.load(HELDOUT_OOLONG_PER_BUCKET), 1
     raise KeyError(f"no eval set named {name!r}")
 
 

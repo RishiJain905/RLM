@@ -1,0 +1,2 @@
+# Shell scripts keep LF endings so bash runs them from Git Bash and WSL alike.
+*.sh text eol=lf

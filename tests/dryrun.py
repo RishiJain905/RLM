@@ -7,7 +7,7 @@ pass rate climbs, families move up levels, entropy drifts down and every stop ru
 to read, which is what plan step 9's dashboard needs to be built against.
 
     async with DryRun(results_dir) as dry:
-        state = await dry.training_run("dry-prod", cfg=config.production("dry-prod", 2e-5)).start()
+        state = await dry.training_run("dry-prod", cfg=config.production("dry-prod", 2e-5, tasks_from="tickets")).start()
 
 `scripts/train.py --dry-run` uses the same harness.
 """
@@ -64,10 +64,18 @@ class Oracle:
         if answer is None:
             value = "len(context.splitlines()) // 4"
         elif self.rng.random() < self.p_correct(self.step_of(model), level):
-            value = str(answer)
+            value = repr(answer)
         else:
-            value = str(max(0, answer + self.rng.choice([-3, -2, -1, 1, 2, 3])))
-        return f"Submit.\n```python\nanswer = len(context) * 0 + {value}\nprint(answer)\nsubmit(answer)\n```"
+            value = repr(self.wrong(answer))
+        return f"Submit.\n```python\nn = len(context)\nanswer = {value}\nprint(answer)\nsubmit(answer)\n```"
+
+    def wrong(self, answer):
+        """A near miss of any answer type: a count off by a little, a list missing an item, a wrong name."""
+        if isinstance(answer, int):
+            return max(0, answer + self.rng.choice([-3, -2, -1, 1, 2, 3]))
+        if isinstance(answer, list):
+            return answer[1:] if len(answer) > 1 else answer + ["not-an-answer"]
+        return f"{answer}_other"
 
     def answer_for(self, model: str, prompt: str) -> str:
         found = _ARITH_RE.search(prompt)

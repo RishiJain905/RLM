@@ -1,0 +1,1169 @@
+{
+ "version": "dataset-manifest-v1",
+ "built": "2026-10-11",
+ "data_root": "D:\\RLM-data (Windows) or /mnt/d/RLM-data (WSL); override with $RLM_DATA_DIR",
+ "decisions": {
+  "7a": {
+   "cyber": 0.35,
+   "aggregation": 0.3,
+   "code": 0.2,
+   "repo": 0.15
+  },
+  "7b": "permissive licences only in training; the rest eval-only"
+ },
+ "domains": {
+  "cyber": [],
+  "aggregation": [
+   "aggregation"
+  ],
+  "code": [
+   "callgraph",
+   "needle"
+  ],
+  "repo": [
+   "repo_loc"
+  ]
+ },
+ "missing_domains": [
+  "cyber"
+ ],
+ "mix_without_missing": {
+  "aggregation": 0.4615384615384615,
+  "callgraph": 0.15384615384615385,
+  "needle": 0.15384615384615385,
+  "repo_loc": 0.23076923076923075
+ },
+ "families": {
+  "aggregation": {
+   "module": "rlm_rl.tasks.aggregation",
+   "generator_version": "aggregation-v1",
+   "role": "train",
+   "sources": [
+    "clinc150",
+    "clinc150-domains",
+    "massive"
+   ],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "aggregation_heldout": {
+   "module": "rlm_rl.tasks.aggregation",
+   "generator_version": "aggregation-v1",
+   "role": "eval",
+   "sources": [
+    "clinc150",
+    "clinc150-domains",
+    "massive"
+   ],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "callgraph": {
+   "module": "rlm_rl.tasks.synthcode",
+   "generator_version": "synthcode-v1",
+   "role": "train",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "callgraph_heldout": {
+   "module": "rlm_rl.tasks.synthcode",
+   "generator_version": "synthcode-v1",
+   "role": "eval",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "needle": {
+   "module": "rlm_rl.tasks.synthcode",
+   "generator_version": "synthcode-v1",
+   "role": "train",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "needle_heldout": {
+   "module": "rlm_rl.tasks.synthcode",
+   "generator_version": "synthcode-v1",
+   "role": "eval",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "repo_loc": {
+   "module": "rlm_rl.tasks.repoloc",
+   "generator_version": "repoloc-v1",
+   "role": "train",
+   "sources": [
+    "lca-bug-localization"
+   ],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "repo_loc_select": {
+   "module": "rlm_rl.tasks.repoloc",
+   "generator_version": "repoloc-v1",
+   "role": "eval",
+   "sources": [
+    "lca-bug-localization"
+   ],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "repo_loc_test": {
+   "module": "rlm_rl.tasks.repoloc",
+   "generator_version": "repoloc-v1",
+   "role": "eval",
+   "sources": [
+    "lca-bug-localization"
+   ],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     32000,
+     40000
+    ],
+    "2": [
+     70000,
+     90000
+    ],
+    "3": [
+     130000,
+     170000
+    ],
+    "4": [
+     230000,
+     290000
+    ],
+    "5": [
+     360000,
+     420000
+    ]
+   },
+   "level_unit": "characters per context"
+  },
+  "tickets_all": {
+   "module": "rlm_rl.tasks.tickets",
+   "generator_version": "tickets-v2",
+   "role": "eval",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     250,
+     380
+    ],
+    "2": [
+     500,
+     760
+    ],
+    "3": [
+     950,
+     1400
+    ],
+    "4": [
+     1600,
+     2300
+    ],
+    "5": [
+     2600,
+     3400
+    ]
+   },
+   "level_unit": "tickets per context"
+  },
+  "tickets_customer": {
+   "module": "rlm_rl.tasks.tickets",
+   "generator_version": "tickets-v2",
+   "role": "eval",
+   "sources": [],
+   "max_level": 5,
+   "levels": {
+    "1": [
+     250,
+     380
+    ],
+    "2": [
+     500,
+     760
+    ],
+    "3": [
+     950,
+     1400
+    ],
+    "4": [
+     1600,
+     2300
+    ],
+    "5": [
+     2600,
+     3400
+    ]
+   },
+   "level_unit": "tickets per context"
+  }
+ },
+ "eval_sets": {
+  "selection-v1": {
+   "aggregation/L1": 4,
+   "aggregation/L2": 4,
+   "aggregation/L3": 4,
+   "aggregation/L4": 4,
+   "aggregation/L5": 4,
+   "callgraph/L1": 2,
+   "callgraph/L2": 2,
+   "callgraph/L3": 2,
+   "callgraph/L4": 2,
+   "callgraph/L5": 2,
+   "needle/L1": 2,
+   "needle/L2": 2,
+   "needle/L3": 2,
+   "needle/L4": 2,
+   "needle/L5": 2,
+   "repo_loc_select/L1": 3,
+   "repo_loc_select/L2": 3,
+   "repo_loc_select/L3": 3,
+   "repo_loc_select/L4": 3,
+   "tickets_all/L1": 2,
+   "tickets_all/L3": 2,
+   "tickets_all/L5": 2,
+   "tickets_customer/L1": 2,
+   "tickets_customer/L3": 2,
+   "tickets_customer/L5": 2
+  },
+  "heldout-test-v1": {
+   "aggregation_heldout/L1": 8,
+   "aggregation_heldout/L2": 8,
+   "aggregation_heldout/L3": 8,
+   "aggregation_heldout/L4": 8,
+   "aggregation_heldout/L5": 8,
+   "callgraph_heldout/L1": 4,
+   "callgraph_heldout/L2": 4,
+   "callgraph_heldout/L3": 4,
+   "callgraph_heldout/L4": 4,
+   "callgraph_heldout/L5": 4,
+   "needle_heldout/L1": 4,
+   "needle_heldout/L2": 4,
+   "needle_heldout/L3": 4,
+   "needle_heldout/L4": 4,
+   "needle_heldout/L5": 4,
+   "repo_loc_test": "every usable LCA Python test item, once",
+   "oolong_synth_test": "10 per length bucket"
+  },
+  "capability": "data:derived/capability/capability-v1.jsonl"
+ },
+ "sources": {
+  "clinc150": {
+   "what": "CLINC150 intent utterances (the `plus` config), 150 intents in 10 domains",
+   "origin": "hf:clinc/clinc_oos",
+   "revision": "155b9c710419136e17307b80d0a13e68cd46b4ec",
+   "licence": "CC-BY-3.0",
+   "permissive": true,
+   "role": "train",
+   "files": [
+    {
+     "path": "hf/clinc__clinc_oos/plus/train-00000-of-00001.parquet",
+     "bytes": 312096,
+     "sha256": "30188119cf9f86fc9db27e1c22442d091cb5cb0913c9496f945fe11e7a02a28f"
+    },
+    {
+     "path": "hf/clinc__clinc_oos/plus/validation-00000-of-00001.parquet",
+     "bytes": 77789,
+     "sha256": "fbd545b46c611c4a7ba4b48cae6c7f09bb5b59f33ff56206ad1cd366c85cdfaa"
+    },
+    {
+     "path": "hf/clinc__clinc_oos/plus/test-00000-of-00001.parquet",
+     "bytes": 135844,
+     "sha256": "3e60e45b25bf86543aa5df8ba4fcc674114164e6184f0197690648c2908d0102"
+    },
+    {
+     "path": "hf/clinc__clinc_oos/README.md",
+     "bytes": 23960,
+     "sha256": "e28704a3c04f6b05c286ca2a8891bbf32c69c000dedfc5825d6e1713369b7a89"
+    }
+   ]
+  },
+  "clinc150-domains": {
+   "what": "CLINC150's intent-to-domain map (domains.json from the dataset's own GitHub repo)",
+   "origin": "github:clinc/oos-eval/data/domains.json",
+   "revision": null,
+   "licence": "CC-BY-3.0",
+   "permissive": true,
+   "role": "train",
+   "files": [
+    {
+     "path": "github/clinc__oos-eval/domains.json",
+     "bytes": 3818,
+     "sha256": "b947b579d3b8e74b06f93b01083d8efaff2888b43a3e362533bd88a6e1211b3a"
+    }
+   ]
+  },
+  "massive": {
+   "what": "Amazon MASSIVE, English utterances with their scenario labels (MTEB's mirror)",
+   "origin": "hf:mteb/amazon_massive_scenario",
+   "revision": "58871793b91addb7c5f7afff26ccf08737fb6697",
+   "licence": "CC-BY-4.0 (upstream MASSIVE; the mirror's card says Apache-2.0)",
+   "permissive": true,
+   "role": "train",
+   "files": [
+    {
+     "path": "hf/mteb__amazon_massive_scenario/train/en.json.gz",
+     "bytes": 180428,
+     "sha256": "b07a3fb37e30be3865e257ab27e95c9b90061d0a8e529730185518fa85ba438f"
+    },
+    {
+     "path": "hf/mteb__amazon_massive_scenario/validation/en.json.gz",
+     "bytes": 36820,
+     "sha256": "48b6986cd43c126eb52a4e965cb530cb7c79c598ffd376d47f35f8a7fa1baf3b"
+    },
+    {
+     "path": "hf/mteb__amazon_massive_scenario/test/en.json.gz",
+     "bytes": 52019,
+     "sha256": "00cb0649c4159b42fd7ff0c3dd82211e355371fa60dbb3373850c822f42d44e6"
+    },
+    {
+     "path": "hf/mteb__amazon_massive_scenario/README.md",
+     "bytes": 19609,
+     "sha256": "3d54ad43077cab268def76b71735875085b0cdedea313468a435505a3f1df76b"
+    }
+   ]
+  },
+  "lca-bug-localization": {
+   "what": "Long Code Arena bug localization, Python: issues, the files their fix changed, and repo archives",
+   "origin": "hf:JetBrains-Research/lca-bug-localization",
+   "revision": "f2bb26a1c3320ccc1d7b02d2630077ff327a80f6",
+   "licence": "Apache-2.0 (dataset); every repo in it is MIT or Apache-2.0",
+   "permissive": true,
+   "role": "train",
+   "files": [
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/py/train-00000-of-00001.parquet",
+     "bytes": 9828649,
+     "sha256": "decf15da8dc75826c7cff0aa02b692d4b263d3083af2ed92d8fa5aff6ee834ce"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/py/test-00000-of-00001.parquet",
+     "bytes": 175518,
+     "sha256": "96c06c997caa3dc63831302db2c19a1d8273384049dafdffe49f1bbcc133410f"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/README.md",
+     "bytes": 16922,
+     "sha256": "7056b98506708f6c8be874868f58ed804ce1fa37f657aaeb5b895008e5e918c7"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/archivebox__archivebox.zip",
+     "bytes": 7240897,
+     "sha256": "9406ab65042f55908c6062625b2f2fdc41b37e86efe9a23df1318110dda0847b"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/aws__chalice.zip",
+     "bytes": 10000143,
+     "sha256": "8002abb39d8f7066c1b164a93b612a8fe8467fccad2bf58a18e90cae050faaeb"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/beetbox__beets.zip",
+     "bytes": 74516478,
+     "sha256": "e26afb536e629924f523fe7967d85613c89813b39150142a6118a24dd24e5faf"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/ccxt__ccxt.zip",
+     "bytes": 2429493723,
+     "sha256": "e0655c6f3137fed399be2a909b95cb5b85222d05c7a8d861c6ba46a93e9ff0eb"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/chia-network__chia-blockchain.zip",
+     "bytes": 131542061,
+     "sha256": "8b12e907f98e7c505e5acea2eecff2e12cf29d49fe7153b086fada13ed380f1b"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/dagger__dagger.zip",
+     "bytes": 52158640,
+     "sha256": "fc9464432b65079fc09fe3588751fc5568d858a509424758cbce7f96916dc874"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/docker__compose.zip",
+     "bytes": 26825782,
+     "sha256": "a37f975f49b35893c5e5d44dede8b10d415d058869d34ff54af1affb655c1ff5"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/dokku__dokku.zip",
+     "bytes": 16432717,
+     "sha256": "3e60fe99ca81620cc7e5c4442be730c6417deb66410bc5cf3a73b8dab6d85401"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/edgedb__edgedb.zip",
+     "bytes": 55066749,
+     "sha256": "c9b9567579bf28357b51f22413bbecb68f297bac80a329a3bd448a9306f9b38a"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/google__jax.zip",
+     "bytes": 77955293,
+     "sha256": "c3b94264018d7af89e6a2de079c640d5be21208427be8e4475b1ee11265b0c6f"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/hpcaitech__colossalai.zip",
+     "bytes": 30909442,
+     "sha256": "a4391263a1eee1a5a849dc2d767ca32990bbd7a489688967f145e88947200e8d"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/huggingface__datasets.zip",
+     "bytes": 96285676,
+     "sha256": "ebbc9531091159e1d5315061c0b8d73e2e5779b756a06cfb8bbf52d305761c23"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/huggingface__pytorch-image-models.zip",
+     "bytes": 27031642,
+     "sha256": "b986a582984b463ae298d7ef1f6dcd2d4448407ef35247754ada8cad371226d0"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/iterative__dvc.zip",
+     "bytes": 45568102,
+     "sha256": "17d9dc18b32aea8d36e82c77578be9ebe4c21af17e8b746d8dce62f9460ddaff"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/jerryjliu__llama_index.zip",
+     "bytes": 105181422,
+     "sha256": "fff7a3e0ce9b339f0cfe01cb44a2e851febcaf628dd20ed2e2c3e497f5f15803"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/joke2k__faker.zip",
+     "bytes": 11737767,
+     "sha256": "d54c5503ed65629664d9fc8f7f9b79782e170865038d57cf713176f9ac082347"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/keras-team__keras.zip",
+     "bytes": 166835920,
+     "sha256": "92461f97147b308c248ce472e551a71dfdc41957e4c1b8a37c9fe5a66a4d55aa"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/manimcommunity__manim.zip",
+     "bytes": 41749943,
+     "sha256": "e99fd21e47e8c0c5892620d9ea0a92405d1506bbe66c301f159a3bba0f72df2f"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/microsoft__deepspeed.zip",
+     "bytes": 103747388,
+     "sha256": "12487ea981026ae17d69e683daad7edb71a7a63bec2d999e2bd3bdaa27d36f64"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/microsoft__qlib.zip",
+     "bytes": 20252461,
+     "sha256": "3493214bb58321681cda388a91ce8c84ff41a506cbfb4e704754b7c7155de206"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/microsoft__recommenders.zip",
+     "bytes": 218534659,
+     "sha256": "a24e3aad9ac61e9bab24ac0322ad903eac0ee804996002752b64f240a3349987"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/mikubill__sd-webui-controlnet.zip",
+     "bytes": 22332654,
+     "sha256": "1e8f06523ea1367e56daee593cdad7ad06b687c27917cdf758b040e4c0ea9d3a"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/mitmproxy__mitmproxy.zip",
+     "bytes": 89474197,
+     "sha256": "e50233d2b23509f856dc2fc7e45f54600f99579ca735412a88a0798e5dcf02f9"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/mlflow__mlflow.zip",
+     "bytes": 175253187,
+     "sha256": "d096d4b2c3d823f2752564ed4694fa4ee24facbac3ee14bd08ff038adb5ca549"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/modin-project__modin.zip",
+     "bytes": 124494963,
+     "sha256": "3eefa48bbd1200e30efd7f4d88bce739f9ceef6dc130581536ed418bcf46ce1f"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/netbox-community__netbox.zip",
+     "bytes": 83835287,
+     "sha256": "fac21fb7a3fb4500a13d8d7c38bd65485d7d931d2ebc13fc3f6189dc199602b4"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/nltk__nltk.zip",
+     "bytes": 120695951,
+     "sha256": "ef69d4e1749b4c7bfa5c0c70949949e98d19726aa965a03d6d494a341eb3a12d"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/openbb-finance__openbbterminal.zip",
+     "bytes": 1722453202,
+     "sha256": "34d00ba9673e805a4e942b21d2c3658e5eec327acbb0dfa047767cf6b6365952"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/openmined__pysyft.zip",
+     "bytes": 630416628,
+     "sha256": "8ab3219c6b7bce2cb13c345b7e00f20a1c36b2dccab798d88c8c30c91d2090e2"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/paddlepaddle__paddlespeech.zip",
+     "bytes": 82524281,
+     "sha256": "7244971f3778b03208bff27f9d9da08d546f4cec86ee483db1d0bbd25bac9114"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/plotly__plotly.py.zip",
+     "bytes": 183353367,
+     "sha256": "1854904615607b7b6b7ad9c801ac677734ebc7e1f73813be4768a44e2c0701d6"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/pre-commit__pre-commit.zip",
+     "bytes": 5119117,
+     "sha256": "4ff87ddad1a1a1d9dd96f7e8ee5d59d77c1daf65cd66e97a7707ab724398aae5"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/pulumi__pulumi.zip",
+     "bytes": 162932912,
+     "sha256": "cca7ca13f4eb497bfafb196533aa8852bd387c1d4e5fb3d7141dbd5d5bd4e55a"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/pydantic__pydantic.zip",
+     "bytes": 123780607,
+     "sha256": "72ab9abf1f468f1e90e98ce3abea8875aa06c355f9f0f6151c22317582c4d86a"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/pypa__pip.zip",
+     "bytes": 110619106,
+     "sha256": "eb30ac43be7ba2f97f067b5b2f19a955a700e974f34fad66c135c9adb48a1b53"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/pypa__pipenv.zip",
+     "bytes": 301945843,
+     "sha256": "cb5a71064bcefe1482f12258a26f7adca03bea32367facf64772dfc6b188f378"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/rapptz__discord.py.zip",
+     "bytes": 21879432,
+     "sha256": "fe8d5a97448d3b0f0ad5f01c51689e98257e7a33af83e36b80ced03485514fde"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/rasahq__rasa.zip",
+     "bytes": 1888794962,
+     "sha256": "4ce8591b43c831715202358d4e48a28fd4cc62e62f4a098feba566da2378c243"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/sanic-org__sanic.zip",
+     "bytes": 22640031,
+     "sha256": "17e8cd0cf813f99533438192e111451aa9be63d73db86cbc6f9c0e2662e17294"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/serverless__serverless.zip",
+     "bytes": 103621743,
+     "sha256": "65a53ca4222ef8434fcbe23ce33362c2ddb498594383eaeaa1ccd8320ba60e59"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/spotdl__spotify-downloader.zip",
+     "bytes": 142150516,
+     "sha256": "e0735145b1ba3ef13bf7aee763f6b76a0a604cad421b287643c73f0c63e4ebc0"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/stevenblack__hosts.zip",
+     "bytes": 808716213,
+     "sha256": "2cdfeb08c2971bfdbad401110d3c0fbed368ed4f2cb027c378bce5e39ad4971f"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/streamlit__streamlit.zip",
+     "bytes": 333725287,
+     "sha256": "0b2729d6366c395939680c42cefd0dc6c80578b33d5a99e01e418447d6c4017a"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/textualize__rich.zip",
+     "bytes": 66174290,
+     "sha256": "f4c12d1ee8edcfc22eadc2911b35abd22d08096917d7f6334716101c1edb8260"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/textualize__textual.zip",
+     "bytes": 272764760,
+     "sha256": "34069d36c7dfa083f44b4e2aad4d2a4747eb4ab19ce5619955daf34b2aed1145"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/thealgorithms__python.zip",
+     "bytes": 15914471,
+     "sha256": "96f8269bf868c1fe942cab72b6487251467157bc0c87e8b33c975d464333b94e"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/tweepy__tweepy.zip",
+     "bytes": 14915889,
+     "sha256": "3231631fc6197f9d1592047ecc1c15a323adc012b3cedf82e48fcf5abbcdf54c"
+    },
+    {
+     "path": "hf/JetBrains-Research__lca-bug-localization/repos/py/wekan__wekan.zip",
+     "bytes": 59563365,
+     "sha256": "ea8eae6f1f8d7fba7abba9407d79292b469c0f8e52d9614c31f21863e2c98b9f"
+    }
+   ]
+  },
+  "huffpost": {
+   "what": "HuffPost News Category headlines (held-out aggregation source)",
+   "origin": "hf:heegyu/news-category-dataset",
+   "revision": "304a05a55bc6abc0446d8fae0d0771716b6a271a",
+   "licence": "CC-BY-4.0",
+   "permissive": true,
+   "role": "eval",
+   "files": [
+    {
+     "path": "hf/heegyu__news-category-dataset/data.json",
+     "bytes": 87295572,
+     "sha256": "2cfc51fa4a82a96ecbe251fa383737aa1dea2e0a517f61dece633fcc25a4a065"
+    }
+   ]
+  },
+  "oolong-synth": {
+   "what": "OOLONG-synth test split: 5,200 aggregation questions over 8 source sets, 1K-4M tokens",
+   "origin": "hf:oolongbench/oolong-synth",
+   "revision": "f0d59eaf0febf130664cfceb710436c8e3216b2b",
+   "licence": "none stated; built from sets that include non-commercial ones",
+   "permissive": false,
+   "role": "eval",
+   "files": [
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00000-of-00041.parquet",
+     "bytes": 115431,
+     "sha256": "8f01b155bcba4b83cac10367ba853aab531d3d8ac4ac2b12f70aa026cbd20769"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00001-of-00041.parquet",
+     "bytes": 268929,
+     "sha256": "fe741b6fe149eab954ef95ef92b51015bd77cb047bbd77270538944e373fd0e3"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00002-of-00041.parquet",
+     "bytes": 131282,
+     "sha256": "746f087ffa91524f136377982bcf52b307f70fb20f3a3fe65db92bd0719828be"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00003-of-00041.parquet",
+     "bytes": 472753,
+     "sha256": "0c97fc0cf2b5a485b6db95b55aa586e067c9be07a36dbdf71a548c74f38a53b3"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00004-of-00041.parquet",
+     "bytes": 2340270,
+     "sha256": "20bbd743d5b8a9b5b83d5c5bd2fd4d63b917a365b950e75a7ac94c7b494445f6"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00005-of-00041.parquet",
+     "bytes": 116589712,
+     "sha256": "ba085c6385e86213ce6865a11306077a7ed3f41d01c4f64c0da161ac0629bdb5"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00006-of-00041.parquet",
+     "bytes": 383304530,
+     "sha256": "9cfdea2a7b9e0f1a7e13345cbf9afed6fc7db5b0f87d70b69d1a6f7eb19f0d2d"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00007-of-00041.parquet",
+     "bytes": 160430,
+     "sha256": "3b3b8165839e275a10ced9ee3e0c4bdbce37826df89a2519c2ce445f6d3bc069"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00008-of-00041.parquet",
+     "bytes": 651963,
+     "sha256": "eb730c82d4df219a50c3e60a204fae6678702a6a74cc809cc89c889424c78f0d"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00009-of-00041.parquet",
+     "bytes": 10328747,
+     "sha256": "063afbe3fd321c4eec4da0d740203cc98e4a007d51a81e8b71d3ae78b9a7fb30"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00010-of-00041.parquet",
+     "bytes": 980271,
+     "sha256": "d1f1fb3c589795555e9470fd4487397c1fba612b92676ca9911110f69b8c7d22"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00011-of-00041.parquet",
+     "bytes": 1021558,
+     "sha256": "478fb239a8233a0e85a9c8bad5ae3c99046f9557f1a2d4a006df8ca59e6decba"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00012-of-00041.parquet",
+     "bytes": 32847376,
+     "sha256": "135dcc1e69d28b21c6e47dac8afe8e902a7b3759d2e48428ef50edb43e04edc0"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00013-of-00041.parquet",
+     "bytes": 371246023,
+     "sha256": "e330a7d356e6bdab7131ab563e16f4cdee8573c4a366806c1f368f2b3cbb525b"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00014-of-00041.parquet",
+     "bytes": 1355801767,
+     "sha256": "f0f3ab454a1fd8e19cd82d96d96d574859ed392ccf2e93008f00461f0fb0295e"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00015-of-00041.parquet",
+     "bytes": 165353,
+     "sha256": "e0dc604ca7d21c6876642636d89bedb34e76a008cd7dc0cd7417f337a4d2ec69"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00016-of-00041.parquet",
+     "bytes": 679269,
+     "sha256": "05bd9ef4c89fd8cd4cf68e30bdfe231c82f2d51b60d5d5fd6ef519363b1f2cc9"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00017-of-00041.parquet",
+     "bytes": 10141721,
+     "sha256": "33b1b563d84244f25ec511699da257218e32a4ffb9fb7152b7e83d3162c7cef9"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00018-of-00041.parquet",
+     "bytes": 211628596,
+     "sha256": "fe987aa753c225f0b555166352915b009fb419312e524a30a2e55cd26fa3c913"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00019-of-00041.parquet",
+     "bytes": 37910683,
+     "sha256": "af0f12258372c26b08cb9acb739bc6e1b63b319a76a47693144624c74371276f"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00020-of-00041.parquet",
+     "bytes": 463746,
+     "sha256": "2ba85a5b45605576a1c3130a65acacfb3ea917f8d931841b7816a624b4e0ec78"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00021-of-00041.parquet",
+     "bytes": 2282508,
+     "sha256": "d7d93e8a281ff3996a819d8292aff9cd18d64e479684771439b0841ffcdd9003"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00022-of-00041.parquet",
+     "bytes": 85867771,
+     "sha256": "ae9300ad4656ef73902a3f2133c9044e2d8123552cc18e83722f21cb07d885f6"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00023-of-00041.parquet",
+     "bytes": 154996,
+     "sha256": "404e32f92c19a0867a402b23712237ca174a76e4d9c2160f7a971e7f4a5657b8"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00024-of-00041.parquet",
+     "bytes": 609791,
+     "sha256": "582c630afc2b64f3f48d84925eaf6948c6fe9f035b089e4bdfe10b57f7dd13f8"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00025-of-00041.parquet",
+     "bytes": 2440364,
+     "sha256": "11a1a709ca89fc0510e006b03b6d85d40655d4637aae08eb88b66b29ec7cde08"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00026-of-00041.parquet",
+     "bytes": 200901138,
+     "sha256": "50556e69a799e5d20606ce0d382f679173bb3baf72d892febd4322174a54616a"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00027-of-00041.parquet",
+     "bytes": 442498564,
+     "sha256": "dc100e2fb47c17b614dcdb7bd393518f32f463715e78a8f175e745f73ac2f514"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00028-of-00041.parquet",
+     "bytes": 430061,
+     "sha256": "411a77639e719988ccaa25811494fe5ca8e2d102964da0938e8cc106c67a6a4d"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00029-of-00041.parquet",
+     "bytes": 2524294,
+     "sha256": "2215126d6730a81cea9ec36b9a67e884574a8f8918dad641b68c445e538aecb3"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00030-of-00041.parquet",
+     "bytes": 93452615,
+     "sha256": "1e75baa55f5952d5388f96876aa609d91c76408a6c17ecc1b7e84a4dedb12537"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00031-of-00041.parquet",
+     "bytes": 835155491,
+     "sha256": "1ff92b7c027c20c8d4adaa79bae311748dfa6e5eccc426a92cfb550b217d99df"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00032-of-00041.parquet",
+     "bytes": 567393455,
+     "sha256": "dd5ca8647cfd7830c492e401b1e5905c0be3cd9455be8c52652df752172dd260"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00033-of-00041.parquet",
+     "bytes": 17886968,
+     "sha256": "ec4c86e266520c74321654cd1eea9fee2debb1a3ae7b076491ccc2457d949b5a"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00034-of-00041.parquet",
+     "bytes": 53180386,
+     "sha256": "6e92c878ee945693e9a34fd0140ac6220911a8309c29c6e0af304c4ca4a424a6"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00035-of-00041.parquet",
+     "bytes": 448257342,
+     "sha256": "4392067af683c5460606064aee1dc82e53ee286c54766fd25c505c4bd8da6aed"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00036-of-00041.parquet",
+     "bytes": 814562864,
+     "sha256": "e77d62eec570049c1a4c97fb5f8bac7dabd8fdf0d03a0670bbb4d2ee30fc3c84"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00037-of-00041.parquet",
+     "bytes": 910409879,
+     "sha256": "5d4983578d1583ccc70287067650a23e142e61432080026e9bcab55ce8b53182"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00038-of-00041.parquet",
+     "bytes": 927207065,
+     "sha256": "436226729d9cadfe3c3044c6d7e2e40bc6c3fb611490506d804f58c5440fbc00"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00039-of-00041.parquet",
+     "bytes": 620966852,
+     "sha256": "8fadb6221034fbfe748be93d6ca90876d042c4b05b663c7a13a75ebf487e1170"
+    },
+    {
+     "path": "hf/oolongbench__oolong-synth/data/test-00040-of-00041.parquet",
+     "bytes": 1438493028,
+     "sha256": "6d9cbc3a5fa35502517b289571d47859fd7ae0fb6e20d38bdec68eedd1b94bd6"
+    }
+   ]
+  },
+  "ifeval": {
+   "what": "IFEval prompts (capability check)",
+   "origin": "hf:google/IFEval",
+   "revision": "966cd89545d6b6acfd7638bc708b98261ca58e84",
+   "licence": "Apache-2.0",
+   "permissive": true,
+   "role": "eval",
+   "files": [
+    {
+     "path": "hf/google__IFEval/ifeval_input_data.jsonl",
+     "bytes": 207111,
+     "sha256": "6a85310ca8ce15eff755aa08a3a4ff931c7e273e7515ebb3c492ea85fd8288f2"
+    }
+   ]
+  },
+  "mmlu-pro": {
+   "what": "MMLU-Pro test questions (capability check)",
+   "origin": "hf:TIGER-Lab/MMLU-Pro",
+   "revision": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+   "licence": "MIT",
+   "permissive": true,
+   "role": "eval",
+   "files": [
+    {
+     "path": "hf/TIGER-Lab__MMLU-Pro/data/test-00000-of-00001.parquet",
+     "bytes": 4144185,
+     "sha256": "0e24a191921c2f453518a537a8b2117bd137e7714d4ef1565e9ba06c1ecb9ad8"
+    }
+   ]
+  },
+  "cruxeval": {
+   "what": "CRUXEval output prediction (capability check's short coding set)",
+   "origin": "hf:cruxeval-org/cruxeval",
+   "revision": "b96af0450242eb4da433032b90998f25588a5d0f",
+   "licence": "MIT",
+   "permissive": true,
+   "role": "eval",
+   "files": [
+    {
+     "path": "hf/cruxeval-org__cruxeval/test.jsonl",
+     "bytes": 186873,
+     "sha256": "8368b81047dc5014e4caf5a2f97604eff7644e0ecd7415e3ceeb184bbc2e0c96"
+    }
+   ]
+  },
+  "otrf-security-datasets": {
+   "what": "OTRF Security-Datasets: recorded Windows and Linux telemetry from simulated adversary techniques",
+   "origin": "github:OTRF/Security-Datasets",
+   "revision": "d9d40ef123d2c87d5d3df28c96bcab4f0faccc87",
+   "licence": "MIT",
+   "permissive": true,
+   "role": "train",
+   "domain": "cyber",
+   "files": [],
+   "git": {
+    "url": "https://github.com/OTRF/Security-Datasets.git",
+    "status": "not downloaded",
+    "dir": "github/OTRF__Security-Datasets"
+   }
+  },
+  "splunk-attack-data": {
+   "what": "Splunk attack_data: logs recorded while running ATT&CK techniques, grouped by technique",
+   "origin": "github:splunk/attack_data",
+   "revision": "4389fa7a4e74a7c083c0fbe448fa2c7c32378981",
+   "licence": "Apache-2.0",
+   "permissive": true,
+   "role": "train",
+   "domain": "cyber",
+   "files": [],
+   "git": {
+    "url": "https://github.com/splunk/attack_data.git",
+    "status": "not downloaded",
+    "dir": "github/splunk__attack_data"
+   }
+  },
+  "evtx-attack-samples": {
+   "what": "EVTX-ATTACK-SAMPLES: Windows event log samples of ATT&CK techniques",
+   "origin": "github:sbousseaden/EVTX-ATTACK-SAMPLES",
+   "revision": "4ceed2f4706daf601c212a8f91c113dd85349a2c",
+   "licence": "GPL-3.0",
+   "permissive": false,
+   "role": "eval",
+   "domain": "cyber",
+   "files": [],
+   "git": {
+    "url": "https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES.git",
+    "status": "not downloaded",
+    "dir": "github/sbousseaden__EVTX-ATTACK-SAMPLES"
+   }
+  },
+  "ait-lds-v2": {
+   "what": "AIT Log Data Set v2.0: 8 simulated enterprise networks with labelled multi-step attacks",
+   "origin": "zenodo:5789064",
+   "revision": "v2_0",
+   "licence": "CC-BY-NC-SA-4.0",
+   "permissive": false,
+   "role": "eval",
+   "domain": "cyber",
+   "files": [],
+   "zenodo": {
+    "record": "5789064",
+    "dir": "zenodo/ait-lds-v2",
+    "files": {
+     "russellmitchell.zip": {
+      "status": "ok",
+      "bytes": 7132670599,
+      "md5": "78e9b7d169b438f03816019b52ab3ff7"
+     },
+     "santos.zip": {
+      "status": "not downloaded",
+      "md5": "fbd2663a41c83f345aa08a7fb11a6c6c"
+     },
+     "fox.zip": {
+      "status": "not downloaded",
+      "md5": "b6cd133398fbed6f3e7434dafbc45756"
+     },
+     "harrison.zip": {
+      "status": "not downloaded",
+      "md5": "4fbe3dd17a194776b2851116f8b51380"
+     },
+     "wardbeck.zip": {
+      "status": "not downloaded",
+      "md5": "ff524634e64c7779def2eb804e8c52ac"
+     },
+     "shaw.zip": {
+      "status": "not downloaded",
+      "md5": "872bbec7ffe12f14e06364e328a96088"
+     },
+     "wheeler.zip": {
+      "status": "not downloaded",
+      "md5": "e3f5605d867fcc644f93ae6c736cdb30"
+     },
+     "wilson.zip": {
+      "status": "not downloaded",
+      "md5": "952dd37cb262ef0054ad6d5371bdbe70"
+     }
+    }
+   }
+  }
+ },
+ "derived": [
+  {
+   "path": "derived/lca/index-train.jsonl.gz",
+   "bytes": 5501123,
+   "sha256": "a629b5f18f76594c92a90c1547b378107535ceff8d7956402778afb77b5c1c8f"
+  },
+  {
+   "path": "derived/lca/index-test.jsonl.gz",
+   "bytes": 433231,
+   "sha256": "20219eaec36bddfa65e3aab690e94c297f7a184a17cb82e9991953645a05b342"
+  },
+  {
+   "path": "derived/capability/capability-v1.jsonl",
+   "bytes": 55298,
+   "sha256": "9ab05b42ccb2f99fef9fa400fbf9aee45414f380a0f2ef87625c1792862a677f"
+  }
+ ],
+ "lca_git": "derived/lca-git/<repo>.git, unpacked from the LCA repo archives listed under sources",
+ "not_used": {
+  "oolong-synth validation": "fails 7b: no licence, and built from non-commercial sets; replaced by our own aggregation generator on CLINC150 and MASSIVE",
+  "loghub": "fails 7b: research use only",
+  "swe-smith": "not needed: LCA covers the 15% repo share",
+  "mteb/amazon_massive_intent": "downloaded, unused: the scenario labels are the ones the generator needs"
+ },
+ "deferred": {
+  "cyber": "35% share (7a) has no task family yet. Its sources are registered above (domain 'cyber') and fetched by scripts/fetch_cyber_data.sh; nothing reads them until the cyber generator is built (decision 7c)."
+ }
+}

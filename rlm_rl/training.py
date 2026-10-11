@@ -266,7 +266,7 @@ class TrainingRun:
 
     def _load_capability(self) -> None:
         if self.capability_items is None and self.cfg.capability_set:
-            self.capability_items = capability.load(REPO / self.cfg.capability_set)
+            self.capability_items = capability.load(capability.resolve(self.cfg.capability_set))
 
     async def _open(self) -> None:
         await self.backend.open(branch_name(self.run, 0))

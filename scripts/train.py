@@ -95,7 +95,8 @@ def build_config(args) -> config.RunConfig:
     else:
         if args.lr is None:
             raise SystemExit("production needs --lr: 2e-5 if the second seed's checks passed, else 1e-5 (spec §5.2)")
-        cfg = config.production(args.run, args.lr)
+        cfg = config.production(args.run, args.lr, leave_out_missing=args.leave_out_missing,
+                                tasks_from="tickets" if args.ticket_tasks else "7a")
     if args.max_steps is not None:
         cfg.max_steps = args.max_steps
     if args.ceiling_train is not None:
@@ -150,7 +151,12 @@ def main() -> int:
         if name == "start":
             p.add_argument("--kind", choices=config.RUN_KINDS, required=True)
             p.add_argument("--max-steps", type=int, help="override the run kind's step limit")
-            p.add_argument("--capability-set", help="capability prompts (JSONL), relative to the repo")
+            p.add_argument("--capability-set", help="capability prompts (JSONL), relative to the repo, or "
+                                                    "data:<path> relative to the data root")
+            p.add_argument("--leave-out-missing", action="store_true",
+                           help="production: train on the built 7a domains only (cyber isn't built yet)")
+            p.add_argument("--ticket-tasks", action="store_true",
+                           help="production: step 6's ticket stand-in instead of the 7a families (dry runs)")
         else:
             p.add_argument("--from", dest="from_checkpoint", help="latest (default), best, or a kept checkpoint")
             p.add_argument("--retrain-pending", action="store_true", help="train a step's saved batch again")
