@@ -31,7 +31,7 @@
 | Code generators | 20% | **40%** | `callgraph` 20%, `needle` 20% |
 | Repo localization | 15% | 15% | `repo_loc` |
 
-**Leftover file:** the AIT-LDS file `russellmitchell.zip` (7.1 GB) is still on the D drive in `zenodo\ait-lds-v2\`. Nothing uses it now that cyber is dropped, so it's safe to delete. I haven't deleted anything.
+**Leftover file removed:** the unused AIT-LDS file from the cyber work (7.1 GB) was moved to the Recycle Bin at Rishi's request on 2026-10-11, and its folder removed.
 
 ---
 
@@ -68,7 +68,6 @@
 | `derived/lca/` | The index of usable LCA items | 6 MB |
 | `derived/aggregation/` | The fixed sample of arXiv titles, 6,000 per archive | 2 MB |
 | `derived/capability/` | `capability-v1.jsonl`, the 100 capability prompts | 55 KB |
-| `zenodo/ait-lds-v2/` | AIT-LDS v2's `russellmitchell.zip`, from the cyber work. It's unused now, waiting for your call. | 7.1 GB |
 | `logs/` | Build and check logs | small |
 
 The earlier thread downloaded everything under `hf/` and `github/` except LEDGAR and arXiv, which I added for the bigger aggregation share.
