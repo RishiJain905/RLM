@@ -9,3 +9,4 @@ notebooks/.art/
 checkpoints/
 private/
 results/*/transcripts/
+results/*/audit/

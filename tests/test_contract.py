@@ -5,13 +5,17 @@ protocol constants are checked here. Every module that builds a root prompt must
 rlm_rl.bridge; PROMPT_CONSUMERS lists them, and the test diffs each one's system prompt.
 """
 
+import difflib
 import importlib
 import importlib.util
 import math
 import unittest
 from pathlib import Path
 
+import openai
+
 from rlm_rl import bridge, repl_worker, sandbox
+from tests.fake_model import AsyncCase
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,7 +91,52 @@ class OneSystemPromptTest(unittest.TestCase):
             with self.subTest(module=module_name):
                 self.assertEqual(getattr(module, "SYSTEM_PROMPT", None), bridge.SYSTEM_PROMPT)
             checked.append(module_name)
-        print(f"\n  system prompt diffed for: {', '.join(checked) or 'no consumers yet (env.py lands in step 5)'}")
+        print(f"\n  system prompt diffed for: {', '.join(checked) or 'no consumers yet'}")
+
+
+def prompt_diff(sent: str, pinned: str, name: str) -> str:
+    """A readable line diff between what a consumer sent and the bridge's pinned text."""
+    return "\n".join(difflib.unified_diff(pinned.splitlines(), sent.splitlines(), f"bridge {name}", f"sent {name}",
+                                          lineterm=""))
+
+
+class WirePromptTest(AsyncCase):
+    """H10 on the wire: what the environment actually sends the model is the bridge's text, word for word.
+
+    The attribute check above catches a consumer that defines its own SYSTEM_PROMPT; this one
+    catches a consumer that edits the messages on the way out. When the Part 2 harness exists, it
+    gets the same test by driving one episode through it against the same fake server.
+    """
+
+    async def test_env_sends_the_bridge_prompt(self):
+        from rlm_rl.env import Task, run_episode  # needs openai, like the consumers above
+        from rlm_rl.client import ModelClient
+        from tests.fakes import FakeSandbox
+        from tests.fake_model import FakeModelServer
+
+        server = FakeModelServer()
+        await server.start()
+        client = openai.AsyncOpenAI(base_url=server.base_url, api_key="test-key")
+        try:
+            task = Task("t", "f", "How many lines?", "alpha\nbeta\ngamma\ndelta", answer=4,
+                        grading={"type": "int", "blind": 1})
+            ep = await run_episode(task, client=ModelClient(client, subcall_model="fake-model:step0"),
+                                   root_model="fake-model:step3", sandbox_factory=FakeSandbox)
+        finally:
+            await client.close()
+            await server.close()
+        roots = [b for b in server.bodies if b.get("logprobs")]
+        self.assertEqual(len(roots), 2)
+        sent, pinned = roots[0]["messages"], bridge.initial_messages(task.question, task.context)
+        for role, i in (("system", 0), ("first user", 1)):
+            self.assertEqual(sent[i]["content"], pinned[i]["content"],
+                             "\n" + prompt_diff(sent[i]["content"], pinned[i]["content"], role))
+        cell = ep.turns[0].cell
+        observation = bridge.observation(cell["stdout"], cell["stdout_chars"], cell["error"], bridge.MAX_TURNS - 1,
+                                         bridge.MAX_SUBCALLS - 1)
+        self.assertEqual(roots[1]["messages"][3]["content"], observation,
+                         "\n" + prompt_diff(roots[1]["messages"][3]["content"], observation, "observation"))
+        self.assertEqual(roots[1]["messages"][:2], roots[0]["messages"])  # the prefix never changes mid-episode
 
 
 if __name__ == "__main__":

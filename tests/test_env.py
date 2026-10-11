@@ -82,7 +82,7 @@ class EpisodeTest(EnvCase):
         self.assertEqual(env.SYSTEM_PROMPT, bridge.SYSTEM_PROMPT)
 
     async def test_reply_without_code_uses_up_a_turn(self):
-        replies = iter(["I will think about it.", "```python\nsubmit(5)\n```"])
+        replies = iter(["I will think about it.", "```python\nsubmit(len(context.splitlines()))\n```"])
         self.server.policy = lambda messages: next(replies)
         ep = await self.episode()
         self.assertIn(bridge.NO_CODE_BLOCK_ERROR, ep.messages[3]["content"])
@@ -95,6 +95,44 @@ class EpisodeTest(EnvCase):
         self.assertIsNone(ep.turns[-1].observation)
         self.assertIn(bridge.OBS_LAST_TURN, ep.turns[-2].observation)
         self.assertEqual(ep.messages[-1]["role"], "assistant")
+
+    async def test_the_30_call_budget(self):
+        """Spec §1.2: 30 sub-calls an episode, llm_batch uses one per prompt, and an over-budget call uses nothing."""
+        self.assertEqual((bridge.MAX_SUBCALLS, bridge.MAX_TURNS), (30, 12))
+        replies = iter(["```python\nouts = llm_batch(['q'] * 28)\nprint(len(outs))\n```",
+                        "```python\nprint(llm_batch(['a', 'b', 'c']))\n```",  # 3 more would make 31: refused whole
+                        "```python\nprint(llm('a'), llm('b'))\n```",  # exactly 30
+                        "```python\nprint(llm('one too many'))\n```",
+                        "```python\nsubmit(len(context.splitlines()))\n```"])
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode()
+        self.assertEqual((ep.subcalls_used, len(ep.subcalls), ep.budget_hit, ep.correct), (30, 30, True, True))
+        self.assertIn("(10 turns left, 2 sub-calls left)", ep.messages[5]["content"])
+        self.assertIn("RuntimeError: sub-call budget exhausted (30 total)", ep.messages[5]["content"])
+        self.assertIn("(9 turns left, 0 sub-calls left)", ep.messages[7]["content"])
+        self.assertIn("sub-call budget exhausted (30 total)", ep.messages[9]["content"])
+        self.assertEqual(ep.metrics()["budget_hit"], 1.0)
+
+    async def test_ticket_task_with_the_default_reward(self):
+        """Env v2 end to end on a level-1 ticket task: calibrated reward, detectors, exact accuracy."""
+        from rlm_rl.tasks import tickets
+
+        task = tickets.make_task(2024, "tickets_all", 1, "t-1")
+        off_by = iter([0, 2])
+
+        def policy(messages):
+            if sum(m["role"] == "assistant" for m in messages) == 0:
+                return "```python\nprint(len(context.splitlines()))\n```"
+            return f"```python\nsubmit({task.answer + next(off_by)})\n```"
+
+        self.server.policy = policy
+        exact = await run_episode(task, client=self.client, root_model=ROOT, sandbox_factory=FakeSandbox)
+        near = await run_episode(task, client=self.client, root_model=ROOT, sandbox_factory=FakeSandbox)
+        self.assertEqual((exact.reward, exact.correct, exact.hacks), (1.0, True, []))
+        e_blind = abs(task.grading["blind"] - task.answer)
+        expected = round(0.8 * max(0.0, 1 - 2 / e_blind), 4) if e_blind else 0.0
+        self.assertEqual((near.reward, near.correct), (expected, False))
+        self.assertEqual(near.reward_components["e_blind"], e_blind)
 
 
 class InfraTest(EnvCase):

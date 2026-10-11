@@ -1,9 +1,10 @@
 """The RLM episode loop: root turns through the shared client, code cells in the sandbox (spec §2, §4, §5.4).
 
-Step 4 builds the loop, the infra_error flag on each episode (H5), and what a step does with
-flagged episodes before training (spec §5.4 steps 3-6). Step 5 adds the calibrated reward (§3),
-the hack detectors (§7), the difficulty controller (§6) and the ticket tasks on top. Until then
-the caller passes the scorer.
+Step 4 built the loop, the infra_error flag on each episode (H5), and what a step does with
+flagged episodes before training (spec §5.4 steps 3-6). Step 5 makes the calibrated reward
+(reward.py, spec §3) the default scorer and runs the hack detectors (detectors.py, spec §7) on
+every scored episode: a detector that fires zeroes the reward before the group mean (§5.4 step 2).
+The difficulty controller (controller.py) and the task generators (tasks/) sit beside the loop.
 
 An episode never raises. Anything that goes wrong outside the model's control (a request that
 still fails after retries, a sandbox that can't start or is stopped from outside, a bug on the
@@ -23,9 +24,10 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import bridge
+from . import bridge, detectors, reward
 from .bridge import InfraError
 from .client import ModelClient, RequestFailed, Usage
+from .reward import Score
 from .sandbox import CellResult, Sandbox
 
 SYSTEM_PROMPT = bridge.SYSTEM_PROMPT  # tests/test_contract.py diffs this against the bridge (H10)
@@ -62,14 +64,8 @@ class Task:
     grading: dict = field(default_factory=dict)  # what the scorer needs beyond `answer`, e.g. the blind guess
 
 
-@dataclass
-class Score:
-    reward: float
-    correct: bool
-    components: dict = field(default_factory=dict)
-
-
 Scorer = Callable[[Task, "Episode"], Score]
+Detect = Callable[[Task, "Episode"], list]
 
 
 @dataclass
@@ -105,8 +101,9 @@ class Episode:
     infra_kind: str | None = None
     host_traceback: str | None = None
     reward: float | None = None
-    correct: bool | None = None
+    correct: bool | None = None  # exact, and no detector fired: the headline metric
     reward_components: dict = field(default_factory=dict)
+    hacks: list[dict] = field(default_factory=list)  # detectors that fired: {"rule": ..., "detail": ...}
     events: list[dict] = field(default_factory=list)  # blocked or logged attempts inside the sandbox
     rejected: list[str] = field(default_factory=list)  # bridge requests refused
     timeouts: int = 0
@@ -127,8 +124,14 @@ class Episode:
     def metrics(self) -> dict[str, float]:
         """Per-episode numbers, logged with the trajectory and averaged per step."""
         turns = self.turns
+        fired = {hit["rule"] for hit in self.hacks}
         return {
             "correct": float(bool(self.correct)),
+            "exact": float(self.reward_components.get("exact", 0.0)),
+            "partial": float(self.reward_components.get("partial", 0.0)),
+            "near_blind": float(self.reward_components.get("near_blind", 0.0)),
+            "hack": float(bool(fired)),
+            **{f"hack_{rule}": float(rule in fired) for rule in detectors.RULES},
             "submitted": float(self.submitted),
             "turns": float(len(turns)),
             "subcalls": float(self.subcalls_used),
@@ -155,9 +158,15 @@ def _cell_dict(result: CellResult) -> dict:
             "wall_s": round(result.wall_s, 3)}
 
 
-async def run_episode(task: Task, *, client: ModelClient, root_model: str, scorer: Scorer, run_id: str = "adhoc",
+async def run_episode(task: Task, *, client: ModelClient, root_model: str, scorer: Scorer = reward.score,
+                      detect: Detect | None = detectors.check, run_id: str = "adhoc",
                       sandbox_factory: Callable[..., Any] = Sandbox, **sandbox_kwargs) -> Episode:
-    """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation."""
+    """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
+
+    A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
+    any fires, its reward becomes 0 and it no longer counts as correct (step 4). `detect=None`
+    turns the detectors off, for tests only.
+    """
     ep = Episode(task.task_id, task.family, task.level, task.question, task.answer, root_model, client.subcall_model,
                  context_chars=len(task.context), context_lines=len(task.context.splitlines()),
                  context_sha256=hashlib.sha256(task.context.encode("utf-8", "replace")).hexdigest())
@@ -213,7 +222,12 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     if ep.infra_error is None:
         try:
             score = scorer(task, ep)
-            ep.reward, ep.correct, ep.reward_components = float(score.reward), bool(score.correct), score.components
+            value, correct, components = float(score.reward), bool(score.correct), dict(score.components)
+            hacks = list(detect(task, ep)) if detect is not None else []
+            if hacks:  # zeroed before the group mean, so the hack becomes a negative example (H11)
+                components.update(hack=1.0, reward_before_hack=value)
+                value, correct = 0.0, False
+            ep.reward, ep.correct, ep.reward_components, ep.hacks = value, correct, components, hacks
         except Exception as exc:
             ep.infra_kind, ep.infra_error = "host_bug", f"scorer error: {exc!r}"
             ep.host_traceback = traceback.format_exc()
@@ -252,6 +266,8 @@ class StepFilter:
     dropped_all_one: int
     dropped_equal_other: int  # every reward equal, but neither all 0 nor all 1
     skip_train: str | None  # why this step's train call is skipped, if it is
+    hacks: dict = field(default_factory=dict)  # detector hits by rule over the step's scored episodes
+    hacked_episodes: int = 0
 
     @property
     def infra_rate(self) -> float:
@@ -262,13 +278,14 @@ class StepFilter:
                 "infra_kinds": self.infra_kinds, "trainable_groups": len(self.groups),
                 "trained_episodes": sum(map(len, self.groups)), "dropped_small": self.dropped_small,
                 "dropped_all_zero": self.dropped_all_zero, "dropped_all_one": self.dropped_all_one,
-                "dropped_equal_other": self.dropped_equal_other, "skip_train": self.skip_train}
+                "dropped_equal_other": self.dropped_equal_other, "skip_train": self.skip_train,
+                "hacks": self.hacks, "hacked_episodes": self.hacked_episodes}
 
 
 def filter_step(groups: list[list[Episode]]) -> StepFilter:
     """Remove infra episodes, then drop groups that are too small or teach nothing (spec §5.4 steps 3, 5, 6).
 
-    Rewards must already be final, hack zeroing included (step 2 of §5.4, from step 5's detectors).
+    Rewards are already final: run_episode zeroed every episode a detector flagged (step 2 of §5.4).
     """
     episodes = sum(map(len, groups))
     kinds = collections.Counter(ep.infra_kind for group in groups for ep in group if ep.infra_error)
@@ -287,7 +304,9 @@ def filter_step(groups: list[list[Episode]]) -> StepFilter:
     skip = None
     if len(kept) < MIN_GROUPS:
         skip = f"only {len(kept)} trainable group{'s' if len(kept) != 1 else ''} (need {MIN_GROUPS})"
-    return StepFilter(kept, episodes, sum(kinds.values()), dict(kinds), small, zero, one, equal, skip)
+    scored = [ep for group in groups for ep in group if ep.infra_error is None]
+    return StepFilter(kept, episodes, sum(kinds.values()), dict(kinds), small, zero, one, equal, skip,
+                      detectors.counts(scored), sum(bool(ep.hacks) for ep in scored))
 
 
 class InfraPause:
@@ -336,5 +355,6 @@ def to_trajectory(ep: Episode, *, with_choices: bool = True) -> Any:
         reward=float(ep.reward),
         metrics=ep.metrics(),
         metadata={"task_id": ep.task_id, "family": ep.family, "level": ep.level, "episode_id": ep.episode_id,
-                  "gold": str(ep.gold), "answer": "" if ep.answer is None else str(ep.answer)},
+                  "gold": str(ep.gold), "answer": "" if ep.answer is None else str(ep.answer),
+                  "hacks": ",".join(hit["rule"] for hit in ep.hacks)},
     )

@@ -1,8 +1,8 @@
 """Episode transcripts: one JSON line per finished episode, for training and eval alike (H9).
 
 Every episode is written in full: the conversation exactly as the model saw it, each cell's
-result, every sub-call, the reward and its components, the infra flag, the sandbox's audit
-events, token use, and the checkpoint that produced it. The hack audit (scripts/audit.py) reads
+result, every sub-call, the reward and its components, the hack detectors that fired, the infra
+flag, the sandbox's audit events, token use, and the checkpoint that produced it. The hack audit (scripts/audit.py) reads
 training and eval logs the same way.
 
     results/<run>/transcripts/train/step0007.jsonl
@@ -24,7 +24,7 @@ from typing import Any, Iterable
 
 from . import bridge
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2 adds "hacks", the detectors that fired (step 5)
 
 
 def transcript_path(run_dir: str | Path, split: str, step: int, eval_name: str | None = None) -> Path:
@@ -71,6 +71,7 @@ def episode_record(ep: Any, *, split: str, run: str, step: int, key: str, eval_n
         "reward": ep.reward,
         "correct": ep.correct,
         "reward_components": ep.reward_components,
+        "hacks": ep.hacks,
         "infra_error": ep.infra_error,
         "infra_kind": ep.infra_kind,
         "host_traceback": ep.host_traceback,

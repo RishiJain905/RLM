@@ -58,8 +58,17 @@ class FakeBridge:
         return out
 
 
+FAKE_TIMEOUT = "# fake: timeout"  # a cell containing this times out, as a real one would after 120 s
+FAKE_EVENT = "# fake: audit "  # followed by a kind: the cell logs that sandbox audit event, then runs
+
+
 class FakeSandbox:
-    """`kill_after_cells=n` makes the container "stop from outside" once n cells have run."""
+    """`kill_after_cells=n` makes the container "stop from outside" once n cells have run.
+
+    Two markers stand in for what only a real container does: a cell containing FAKE_TIMEOUT
+    times out (the REPL restarts and the model is told), and FAKE_EVENT + kind logs an audit
+    event, as the real REPL's audit hook does for a blocked attempt.
+    """
 
     def __init__(self, context: str, complete, *, run_id: str = "adhoc", kill_after_cells: int | None = None,
                  max_subcalls: int = bridge.MAX_SUBCALLS):
@@ -80,6 +89,15 @@ class FakeSandbox:
         if self.kill_after_cells is not None and self.cells >= self.kill_after_cells:
             raise InfraError("the container stopped from outside the REPL (SIGKILL)")
         self.cells += 1
+        for line in code.splitlines():
+            if line.strip().startswith(FAKE_EVENT):
+                self.events.append({"kind": line.strip()[len(FAKE_EVENT):].strip(), "event": "fake", "detail": "",
+                                    "blocked": True})
+        if FAKE_TIMEOUT in code:
+            self.timeouts += 1
+            self.restarts += 1
+            self._namespace = {}
+            return CellResult("", 0, bridge.CELL_TIMEOUT_ERROR, restarted=True, crash="timeout")
         loop = asyncio.get_running_loop()
         out = io.StringIO()
         state = {"submitted": False, "answer": None}

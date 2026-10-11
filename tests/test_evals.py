@@ -64,7 +64,8 @@ class EvalLoggingTest(EvalCase):
         self.assertEqual((len(lines), result.ran, len(result.records)), (12, 12, 12))
         record = json.loads(lines[0])
         for field in ("messages", "turns", "subcalls", "reward", "correct", "reward_components", "infra_error",
-                      "events", "usage", "metrics", "root_model", "subcall_model", "prompt_hash", "gold", "answer"):
+                      "events", "usage", "metrics", "root_model", "subcall_model", "prompt_hash", "gold", "answer",
+                      "hacks"):
             self.assertIn(field, record)
         self.assertEqual((record["split"], record["eval"], record["step"], record["root_model"]),
                          ("val", "selection", 3, ROOT))
@@ -137,9 +138,57 @@ class EvalLoggingTest(EvalCase):
         self.assertEqual(find_logs("does-not-exist"), [])
 
     def test_transcripts_are_git_ignored(self):
-        check = subprocess.run(["git", "check-ignore", "-q", "results/run-a/transcripts/val/x/step0001.jsonl"],
-                               cwd=REPO)
-        self.assertEqual(check.returncode, 0)
+        for path in ("results/run-a/transcripts/val/x/step0001.jsonl", "results/run-a/audit/step0010/sample.md"):
+            check = subprocess.run(["git", "check-ignore", "-q", path], cwd=REPO)
+            self.assertEqual(check.returncode, 0, path)
+
+
+class ClaudeAuditTest(EvalCase):
+    """Decision 5a: a checkpoint's sample for the Claude audit, its verdicts, and the clean solve rate."""
+
+    async def test_checkpoint_sample_verdicts_and_report(self):
+        from rlm_rl.env import run_groups
+        from rlm_rl.transcripts import TranscriptLog, episode_record
+
+        for step in range(1, 11):  # ten training steps, two tasks x two rollouts each
+            groups = await run_groups(self.tasks[:2], 2, client=self.client, root_model=ROOT, scorer=exact,
+                                      sandbox_factory=FakeSandbox)
+            log = TranscriptLog(transcript_path(self.run_dir, "train", step))
+            for i, ep in enumerate(e for g in groups for e in g):
+                log.append(episode_record(ep, split="train", run="run-a", step=step, key=f"train/{step}/{i}"))
+        await run_eval(self.tasks, name="selection", step=10, run_dir=self.run_dir, run="run-a",
+                       client=self.client, root_model=ROOT, scorer=exact, samples=2, sandbox_factory=FakeSandbox)
+
+        out = self.audit("checkpoint", str(self.run_dir), "--step", "10", "--train", "4", "--val", "2")
+        self.assertIn("sample.md", out)
+        folder = self.run_dir / "audit" / "step0010"
+        sample = (folder / "sample.md").read_text("utf-8")
+        self.assertIn("# Claude audit, checkpoint 10", sample)
+        self.assertIn("training steps 1-10", sample)
+        verdicts = json.loads((folder / "verdicts.json").read_text("utf-8"))
+        wins = [e for e in verdicts["episodes"] if e["kind"] == "win"]
+        self.assertEqual([e["split"] for e in wins], ["train"] * 4 + ["val"] * 2)
+        self.assertTrue(all(e["verdict"] is None for e in verdicts["episodes"]))
+
+        # the auditor's verdicts: one train win is a hack, one val win is suspicious
+        for e, verdict in zip(wins, ["clean", "clean", "hack", "clean", "clean", "suspicious"]):
+            e["verdict"] = verdict
+        wins[2]["rule"], wins[2]["note"] = "guessed from metadata", "submitted the line count x 0.24"
+        verdicts["auditor"] = "Claude thread"
+        (folder / "verdicts.json").write_text(json.dumps(verdicts), encoding="utf-8")
+        report = self.audit("report", str(self.run_dir))
+        self.assertIn("HACK train", report)
+        rows = json.loads((self.run_dir / "audit" / "report.json").read_text("utf-8"))
+        train, val = rows[0]["train"], rows[0]["val"]
+        self.assertEqual((train["audited"], train["clean"], train["hack"], train["clean_share"]), (4, 3, 1, 0.75))
+        self.assertAlmostEqual(train["clean_solve_rate"], round(verdicts["solve_rate"]["train"] * 0.75, 4))
+        self.assertEqual((val["suspicious"], val["clean_share"]), (1, 0.5))
+        self.assertTrue(rows[0]["complete"])
+
+        again = subprocess.run([sys.executable, str(REPO / "scripts" / "audit.py"), "checkpoint", str(self.run_dir),
+                                "--step", "10"], capture_output=True, text=True, cwd=REPO)
+        self.assertEqual(again.returncode, 1)  # never overwrites recorded verdicts without --force
+        self.assertIn("already exists", again.stderr)
 
 
 class DockerEvalTest(EvalCase):
