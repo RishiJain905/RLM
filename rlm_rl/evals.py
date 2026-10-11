@@ -50,8 +50,7 @@ class EvalResult:
 
 # The production selection set (plan step 7, research §8.1): 64 fixed tasks that pick the checkpoint. Held-out
 # seeds of every training family at fixed levels, the selection repos LCA training never sees, and one held-out
-# generator family, the ticket tasks, which production never trains on. The cyber share isn't built yet; when it
-# is, selection-v2 gives it its ~35% (~22 tasks).
+# generator family, the ticket tasks, which production never trains on.
 SELECTION_V1 = {
     **{("aggregation", level): 4 for level in range(1, 6)},
     **{("callgraph", level): 2 for level in range(1, 6)},

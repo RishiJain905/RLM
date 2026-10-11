@@ -291,7 +291,8 @@ class AggregationTest(FamilyContract, unittest.TestCase):
                     self.assertTrue(lo * 0.95 <= len(task.context) <= hi * 1.05, len(task.context))
 
     def test_the_answer_is_what_the_context_says(self):
-        pools = {**data.clinc_domain_pools(), **data.massive_scenario_pools(), **data.huffpost_pools()}
+        pools = {**data.clinc_domain_pools(), **data.massive_scenario_pools(), **data.ledgar_pools(),
+                 **data.arxiv_title_pools(), **data.huffpost_pools()}
         rng, kinds = random.Random(2), set()
         for family in aggregation.FAMILIES:
             for _ in range(30):
@@ -310,6 +311,15 @@ class AggregationTest(FamilyContract, unittest.TestCase):
 
     def test_deterministic_per_seed(self):
         self.check_deterministic("aggregation", 1)
+
+    def test_every_training_source_is_drawn(self):
+        """Decision 7c raised aggregation to 45%, so it draws on four registers, not one (LEDGAR and arXiv added)."""
+        rng = random.Random(5)
+        drawn = {tasks.make_task("aggregation", rng.choice([1, 2, 3]), seed=seed_of(rng)).grading["source"]
+                 for _ in range(60)}
+        self.assertEqual(drawn, {s.name for s in aggregation.TRAIN_SET})
+        names = [label for s in aggregation.TRAIN_SET + (aggregation.HELDOUT,) for label in s.labels]
+        self.assertEqual(len(names), len(set(names)))  # no label name is shared between sources
 
     def test_training_never_reads_heldout_sources(self):
         rng = random.Random(4)
@@ -355,28 +365,26 @@ class RepoLocTest(FamilyContract, unittest.TestCase):
 
 
 class MixAndLicenceTest(unittest.TestCase):
-    def test_7a_mix_needs_cyber_unless_told(self):
-        self.assertEqual(tasks.missing_domains(), ["cyber"])
-        with self.assertRaisesRegex(ValueError, "cyber"):
-            tasks.production_mix()
-        mix = tasks.production_mix(leave_out_missing=True)
+    def test_mix_is_7c(self):
+        """Decision 7c: cyber dropped, its 35% split between code (+20) and aggregation (+15)."""
+        self.assertEqual(tasks.DOMAIN_MIX, {"aggregation": 0.45, "code": 0.40, "repo": 0.15})
+        mix = tasks.production_mix()
         self.assertAlmostEqual(sum(mix.values()), 1.0)
-        self.assertAlmostEqual(mix["aggregation"], 0.30 / 0.65)
-        self.assertAlmostEqual(mix["callgraph"] + mix["needle"], 0.20 / 0.65)
-        self.assertAlmostEqual(mix["repo_loc"], 0.15 / 0.65)
+        self.assertAlmostEqual(mix["aggregation"], 0.45)
+        self.assertAlmostEqual(mix["callgraph"], 0.20)
+        self.assertAlmostEqual(mix["needle"], 0.20)
+        self.assertAlmostEqual(mix["repo_loc"], 0.15)
 
     def test_production_config(self):
-        with self.assertRaisesRegex(ValueError, "cyber"):
-            config.production("p", 2e-5)
-        cfg = config.production("p", 2e-5, leave_out_missing=True)
+        cfg = config.production("p", 2e-5)
         self.assertEqual(cfg.selection, "selection-v1")
         self.assertEqual(cfg.capability_set, config.CAPABILITY_SET)
-        self.assertEqual(set(cfg.mix), {"aggregation", "callgraph", "needle", "repo_loc"})
+        self.assertEqual(cfg.mix, tasks.production_mix())
         self.assertEqual(config.production("p", 2e-5, tasks_from="tickets").selection, "selection-tickets-v1")
-        self.assertEqual(config.manifest(cfg)["missing_domains"], ["cyber"])
+        self.assertEqual(config.manifest(cfg)["mix"], cfg.mix)
 
     def test_licence_bar(self):
-        tasks.check_mix(tasks.production_mix(leave_out_missing=True))
+        tasks.check_mix(tasks.production_mix())
         for family in ("aggregation_heldout", "needle_heldout", "repo_loc_test", "repo_loc_select"):
             with self.assertRaisesRegex(ValueError, "eval-only"):
                 tasks.check_mix({family: 1.0})
@@ -386,13 +394,13 @@ class MixAndLicenceTest(unittest.TestCase):
         with mock.patch.object(tasks, "training_sources", return_value=("oolong-synth",)):
             with self.assertRaisesRegex(ValueError, "7b"):
                 tasks.check_mix({"aggregation": 1.0})
-        for family in tasks.production_mix(leave_out_missing=True):
+        for family in tasks.production_mix():
             for source in tasks.training_sources(family):
                 self.assertTrue(data.SOURCES[source]["permissive"], source)
 
     def test_selection_plan_is_64_tasks_and_heldout_families_stay_out_of_training(self):
         self.assertEqual(sum(evals.SELECTION_V1.values()), 64)
-        trained = set(tasks.production_mix(leave_out_missing=True))
+        trained = set(tasks.production_mix())
         self.assertFalse({f for f, _ in evals.HELDOUT_TEST_V1} & trained)
         self.assertTrue({"tickets_all", "tickets_customer"} & {f for f, _ in evals.SELECTION_V1})
         self.assertFalse({"tickets_all", "tickets_customer"} & trained)

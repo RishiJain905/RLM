@@ -161,11 +161,11 @@ class ProductionStopRuleTest(LoopCase):
 
 @unittest.skipUnless(data.available() and data.derived("lca", "index-train.jsonl.gz").exists(),
                      "needs the step 7 data (rlm_rl/data.py)")
-class SevenAMixTest(LoopCase):
-    """Plan step 7: production on decision 7a's families (cyber left out), its selection set and its manifest."""
+class ProductionMixTest(LoopCase):
+    """Plan step 7: production on its task families (decisions 7a and 7c), its selection set and its manifest."""
 
-    async def test_production_runs_on_the_7a_families(self):
-        cfg = config.production("mix7a", 2e-5, leave_out_missing=True)
+    async def test_production_runs_on_its_families(self):
+        cfg = config.production("mix7a", 2e-5)
         st = await self.run_("mix7a", cfg=cfg, stop_after=2).start()
         self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
         drawn = {family for row in st["steps"] for family in row["families"] if row["families"][family]["episodes"]}
@@ -174,7 +174,7 @@ class SevenAMixTest(LoopCase):
         self.assertEqual([e["checkpoint"] for e in selection], [0])
         self.assertEqual(selection[0]["summary"]["n"], 64)
         pinned = json.loads((self.results / "mix7a" / "config.json").read_text())
-        self.assertEqual(pinned["manifest"]["missing_domains"], ["cyber"])
+        self.assertEqual(pinned["manifest"]["mix"], cfg.mix)
         self.assertIsNotNone(pinned["manifest"]["dataset_manifest_sha256"])
         self.assertEqual(set(pinned["generators"]), set(cfg.mix))
 

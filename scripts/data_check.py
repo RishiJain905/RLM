@@ -9,7 +9,7 @@ Checks:
 - H7: held-out families share no question n-grams with training, held-out sources share no text with training
   sources, held-out behaviours are disjoint, and the selection and test LCA items never appear in training.
 - 7b: the production mix passes the licence bar, and no eval-only family or source is in it.
-- 7a: the mix, the unbuilt cyber share, and the share of training tasks that code alone can solve (~20% target).
+- 7a and 7c: the mix, and the share of training tasks that code alone can solve (~20% target).
 - The selection set (64 tasks) and the held-out test build, with unique ids and their sizes.
 
 Nothing here calls a model or spends credit. Building the selection set and the held-out test creates their
@@ -86,8 +86,8 @@ def sizes_and_blind(families, n: int, rng: random.Random) -> dict:
 
 
 def h7_checks() -> dict:
-    agg_train = [t for ts in aggregation.TRAIN_TEMPLATES.values() for t in ts] + list(aggregation.TRAIN_HEADERS)
-    agg_held = [t for ts in aggregation.HELDOUT_TEMPLATES.values() for t in ts] + list(aggregation.HELDOUT_HEADERS)
+    agg_train = [t for ts in aggregation.TRAIN_TEMPLATES.values() for t in ts] +         [h for src in aggregation.TRAIN_SET for h in src.headers]
+    agg_held = [t for ts in aggregation.HELDOUT_TEMPLATES.values() for t in ts] + list(aggregation.HELDOUT.headers)
     code_train = [t for ts in synthcode.TRAIN_QUESTIONS.values() for t in ts]
     code_held = [t for ts in synthcode.HELDOUT_QUESTIONS.values() for t in ts]
     desc_train = [d for b in behaviours.TRAIN for d in b.descriptions]
@@ -104,10 +104,11 @@ def h7_checks() -> dict:
     }
     # Held-out source text against the training sources: exact duplicates and 8-gram overlap
     train_texts = set()
-    for pools in (data.clinc_domain_pools(), data.massive_scenario_pools()):
+    for pools in (data.clinc_domain_pools(), data.massive_scenario_pools(), data.ledgar_pools(),
+                  data.arxiv_title_pools()):
         for texts in pools.values():
             train_texts.update(t.lower() for t in texts)
-    held_texts = {t.lower() for name in aggregation.HELDOUT_LABELS for t in data.huffpost_pools()[name]}
+    held_texts = {t.lower() for name in aggregation.HELDOUT.labels for t in data.huffpost_pools()[name]}
     train8 = set().union(*(ngrams(t, 8) for t in train_texts))
     held8 = set().union(*(ngrams(t, 8) for t in held_texts))
     out["huffpost_vs_training"] = {"heldout_texts": len(held_texts), "exact_duplicates": len(held_texts & train_texts),
@@ -138,7 +139,7 @@ def h7_checks() -> dict:
 
 
 def licence_checks() -> dict:
-    mix = tasks.production_mix(leave_out_missing=True)
+    mix = tasks.production_mix()
     tasks.check_mix(mix)  # raises if an eval-only family or a non-permissive source is in it
     by_family = {f: list(tasks.training_sources(f)) for f in mix}
     used = sorted({s for srcs in by_family.values() for s in srcs})
@@ -152,7 +153,7 @@ def licence_checks() -> dict:
 
 def code_only_share(rng: random.Random, n: int) -> dict:
     """The share of training tasks code alone can solve, drawn by the production mix at each level."""
-    mix = tasks.production_mix(leave_out_missing=True)
+    mix = tasks.production_mix()
     out = {}
     for level in range(1, 6):
         draws = tasks.allocate(n, mix)
@@ -174,7 +175,7 @@ def eval_sets() -> dict:
         for t in built:
             by_family[t.family].append(len(t.context))
         out[name] = {"tasks": len(built), "unique_ids": len(set(ids)) == len(ids), "samples": samples,
-                     "in_training_mix": sorted({t.family for t in built} & set(tasks.production_mix(True))),
+                     "in_training_mix": sorted({t.family for t in built} & set(tasks.production_mix())),
                      "by_family": {f: {"n": len(v), "median_chars": statistics.median(v), "max_chars": max(v)}
                                    for f, v in sorted(by_family.items())},
                      "seconds": round(time.time() - t0, 1)}
@@ -204,9 +205,8 @@ def main() -> int:
     report["h7"] = h7_checks()
     print("7b: licences", flush=True)
     report["licence"] = licence_checks()
-    print("7a: mix and code-only share", flush=True)
-    report["mix"] = {"decision_7a": tasks.DOMAIN_MIX, "missing_domains": tasks.missing_domains(),
-                     "mix_without_missing": tasks.production_mix(leave_out_missing=True),
+    print("7a and 7c: mix and code-only share", flush=True)
+    report["mix"] = {"domain_mix": tasks.DOMAIN_MIX, "mix": tasks.production_mix(),
                      "code_only_share": code_only_share(rng, 200)}
     print("Eval sets", flush=True)
     report["eval_sets"] = eval_sets()

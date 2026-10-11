@@ -91,36 +91,22 @@ SOURCES = {
         "revision": "b96af0450242eb4da433032b90998f25588a5d0f", "licence": "MIT", "permissive": True,
         "role": EVAL, "files": ["hf/cruxeval-org__cruxeval/test.jsonl"],
     },
-    # The cyber domain's sources (research §3.3). Registered 2026-10-11 and fetched by scripts/fetch_cyber_data.sh.
-    # No task family reads them yet: the cyber generator is still to be built (decision 7c).
-    "otrf-security-datasets": {
-        "what": "OTRF Security-Datasets: recorded Windows and Linux telemetry from simulated adversary techniques",
-        "origin": "github:OTRF/Security-Datasets", "revision": "d9d40ef123d2c87d5d3df28c96bcab4f0faccc87",
-        "licence": "MIT", "permissive": True, "role": TRAIN, "domain": "cyber",
-        "git": {"url": "https://github.com/OTRF/Security-Datasets.git", "dir": "github/OTRF__Security-Datasets"},
+    # Added 2026-10-11 when decision 7c raised aggregation to 45%: other registers beside voice commands.
+    "ledgar": {
+        "what": "LEDGAR contract provisions from SEC filings, labelled by clause type (LexGLUE's `ledgar` config)",
+        "origin": "hf:coastalcph/lex_glue", "revision": "c23fdff1a6bf74e0e1a71cb86f1e781d37da888c",
+        "licence": "CC-BY-4.0", "permissive": True, "role": TRAIN,
+        "files": ["hf/coastalcph__lex_glue/ledgar/train-00000-of-00001.parquet",
+                  "hf/coastalcph__lex_glue/ledgar/validation-00000-of-00001.parquet",
+                  "hf/coastalcph__lex_glue/ledgar/test-00000-of-00001.parquet",
+                  "hf/coastalcph__lex_glue/README.md"],
     },
-    "splunk-attack-data": {
-        "what": "Splunk attack_data: logs recorded while running ATT&CK techniques, grouped by technique",
-        "origin": "github:splunk/attack_data", "revision": "4389fa7a4e74a7c083c0fbe448fa2c7c32378981",
-        "licence": "Apache-2.0", "permissive": True, "role": TRAIN, "domain": "cyber",
-        "git": {"url": "https://github.com/splunk/attack_data.git", "dir": "github/splunk__attack_data", "lfs": True},
-    },
-    "evtx-attack-samples": {
-        "what": "EVTX-ATTACK-SAMPLES: Windows event log samples of ATT&CK techniques",
-        "origin": "github:sbousseaden/EVTX-ATTACK-SAMPLES", "revision": "4ceed2f4706daf601c212a8f91c113dd85349a2c",
-        "licence": "GPL-3.0", "permissive": False, "role": EVAL, "domain": "cyber",
-        "git": {"url": "https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES.git",
-                "dir": "github/sbousseaden__EVTX-ATTACK-SAMPLES"},
-    },
-    "ait-lds-v2": {
-        "what": "AIT Log Data Set v2.0: 8 simulated enterprise networks with labelled multi-step attacks",
-        "origin": "zenodo:5789064", "revision": "v2_0", "licence": "CC-BY-NC-SA-4.0", "permissive": False,
-        "role": EVAL, "domain": "cyber",  # the held-out log sources (research §8.1)
-        "zenodo": {"record": "5789064", "dir": "zenodo/ait-lds-v2", "md5": {
-            "russellmitchell.zip": "78e9b7d169b438f03816019b52ab3ff7", "santos.zip": "fbd2663a41c83f345aa08a7fb11a6c6c",
-            "fox.zip": "b6cd133398fbed6f3e7434dafbc45756", "harrison.zip": "4fbe3dd17a194776b2851116f8b51380",
-            "wardbeck.zip": "ff524634e64c7779def2eb804e8c52ac", "shaw.zip": "872bbec7ffe12f14e06364e328a96088",
-            "wheeler.zip": "e3f5605d867fcc644f93ae6c736cdb30", "wilson.zip": "952dd37cb262ef0054ad6d5371bdbe70"}},
+    "arxiv-titles": {
+        "what": "arXiv paper titles to the end of 2021, labelled by their primary archive",
+        "origin": "hf:gfissore/arxiv-abstracts-2021", "revision": "e4c5fbd4dec8e46a5dc869216fe1c94cc585757a",
+        "licence": "CC0-1.0", "permissive": True, "role": TRAIN,
+        "files": ["hf/gfissore__arxiv-abstracts-2021/arxiv-abstracts.jsonl.gz",
+                  "hf/gfissore__arxiv-abstracts-2021/README.md"],
     },
 }
 
@@ -131,14 +117,9 @@ NOT_USED = {
     "loghub": "fails 7b: research use only",
     "swe-smith": "not needed: LCA covers the 15% repo share",
     "mteb/amazon_massive_intent": "downloaded, unused: the scenario labels are the ones the generator needs",
+    "cyber sources (OTRF Security-Datasets, splunk attack_data, EVTX-ATTACK-SAMPLES, AIT-LDS v2)":
+        "the cyber domain was dropped (decision 7c, Rishi 2026-10-11); its 35% went to code and aggregation",
 }
-
-# The 7a share still to be filled; see documentation/step-7-results.md.
-DEFERRED = {
-    "cyber": "35% share (7a) has no task family yet. Its sources are registered above (domain 'cyber') and fetched "
-             "by scripts/fetch_cyber_data.sh; nothing reads them until the cyber generator is built (decision 7c).",
-}
-
 
 # ----------------------------------------------------------------------------- locations
 
@@ -249,3 +230,64 @@ def huffpost_pools(min_len: int = 25) -> dict[str, tuple[str, ...]]:
             if len(headline) >= min_len:
                 pools.setdefault(row["category"], set()).add(headline)
     return _unambiguous(pools)
+
+
+LEDGAR_MAX_CHARS = 1_500  # longer provisions are left out, so a context keeps a few hundred lines
+
+
+@functools.lru_cache(maxsize=None)
+def ledgar_pools(splits: tuple[str, ...] = ("train", "validation")) -> dict[str, tuple[str, ...]]:
+    """LEDGAR contract provisions grouped by clause type (100 types). Mis-decoded quotes become apostrophes."""
+    import pyarrow.parquet as pq
+
+    first = path("hf/coastalcph__lex_glue/ledgar/train-00000-of-00001.parquet")
+    names = json.loads(pq.read_schema(first).metadata[b"huggingface"])["info"]["features"]["label"]["names"]
+    pools: dict[str, set] = {}
+    for split in splits:
+        for row in _parquet_rows(f"hf/coastalcph__lex_glue/ledgar/{split}-00000-of-00001.parquet", ["text", "label"]):
+            text = " ".join(row["text"].replace("�", "'").split())
+            if 40 <= len(text) <= LEDGAR_MAX_CHARS:
+                pools.setdefault(names[row["label"]], set()).add(text)
+    return _unambiguous(pools)
+
+
+# arXiv primary archives, grouped into the labels the aggregation family asks about. Others are left out.
+ARXIV_GROUPS = {"math": "mathematics", "astro-ph": "astrophysics", "cond-mat": "condensed matter physics",
+                "cs": "computer science", "hep-ph": "high-energy physics", "hep-th": "high-energy physics",
+                "hep-ex": "high-energy physics", "hep-lat": "high-energy physics", "quant-ph": "quantum physics",
+                "gr-qc": "general relativity", "nucl-th": "nuclear physics", "nucl-ex": "nuclear physics",
+                "q-bio": "quantitative biology", "stat": "statistics", "q-fin": "quantitative finance",
+                "nlin": "nonlinear sciences"}
+ARXIV_PER_LABEL = 6_000
+ARXIV_POOL = "aggregation/arxiv-titles-v1.json.gz"
+
+
+def build_arxiv_pool() -> Path:
+    """A fixed sample of up to ARXIV_PER_LABEL titles per label, written to derived/ (scripts/build_data.py)."""
+    import random
+
+    groups: dict[str, set] = {}
+    with gzip.open(path("hf/gfissore__arxiv-abstracts-2021/arxiv-abstracts.jsonl.gz"), "rt", encoding="utf-8") as f:
+        for line in f:
+            row = json.loads(line)
+            cats = row["categories"][0] if isinstance(row["categories"], list) else row["categories"]
+            first = cats.strip("[]'\" ").split()[0].strip("'\",") if cats else ""
+            label = ARXIV_GROUPS.get(first.split(".")[0])
+            title = " ".join((row.get("title") or "").split())
+            if label and 20 <= len(title) <= 200:
+                groups.setdefault(label, set()).add(title)
+    pools = _unambiguous(groups)
+    rng = random.Random(0)
+    sample = {label: sorted(rng.sample(texts, min(ARXIV_PER_LABEL, len(texts)))) for label, texts in pools.items()}
+    out = derived(ARXIV_POOL)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(out, "wt", encoding="utf-8") as f:
+        json.dump(sample, f)
+    return out
+
+
+@functools.lru_cache(maxsize=None)
+def arxiv_title_pools() -> dict[str, tuple[str, ...]]:
+    """arXiv titles grouped by archive, from the sample `build_arxiv_pool()` wrote."""
+    with gzip.open(derived(ARXIV_POOL), "rt", encoding="utf-8") as f:
+        return {label: tuple(texts) for label, texts in sorted(json.load(f).items())}

@@ -9,10 +9,15 @@
    "code": 0.2,
    "repo": 0.15
   },
-  "7b": "permissive licences only in training; the rest eval-only"
+  "7b": "permissive licences only in training; the rest eval-only",
+  "7c": "cyber dropped; its 35% split between code (+20) and aggregation (+15)"
+ },
+ "domain_mix": {
+  "aggregation": 0.45,
+  "code": 0.4,
+  "repo": 0.15
  },
  "domains": {
-  "cyber": [],
   "aggregation": [
    "aggregation"
   ],
@@ -24,24 +29,23 @@
    "repo_loc"
   ]
  },
- "missing_domains": [
-  "cyber"
- ],
- "mix_without_missing": {
-  "aggregation": 0.4615384615384615,
-  "callgraph": 0.15384615384615385,
-  "needle": 0.15384615384615385,
-  "repo_loc": 0.23076923076923075
+ "mix": {
+  "aggregation": 0.45,
+  "callgraph": 0.2,
+  "needle": 0.2,
+  "repo_loc": 0.15
  },
  "families": {
   "aggregation": {
    "module": "rlm_rl.tasks.aggregation",
-   "generator_version": "aggregation-v1",
+   "generator_version": "aggregation-v2",
    "role": "train",
    "sources": [
     "clinc150",
     "clinc150-domains",
-    "massive"
+    "massive",
+    "ledgar",
+    "arxiv-titles"
    ],
    "max_level": 5,
    "levels": {
@@ -70,12 +74,14 @@
   },
   "aggregation_heldout": {
    "module": "rlm_rl.tasks.aggregation",
-   "generator_version": "aggregation-v1",
+   "generator_version": "aggregation-v2",
    "role": "eval",
    "sources": [
     "clinc150",
     "clinc150-domains",
-    "massive"
+    "massive",
+    "ledgar",
+    "arxiv-titles"
    ],
    "max_level": 5,
    "levels": {
@@ -1044,99 +1050,55 @@
     }
    ]
   },
-  "otrf-security-datasets": {
-   "what": "OTRF Security-Datasets: recorded Windows and Linux telemetry from simulated adversary techniques",
-   "origin": "github:OTRF/Security-Datasets",
-   "revision": "d9d40ef123d2c87d5d3df28c96bcab4f0faccc87",
-   "licence": "MIT",
+  "ledgar": {
+   "what": "LEDGAR contract provisions from SEC filings, labelled by clause type (LexGLUE's `ledgar` config)",
+   "origin": "hf:coastalcph/lex_glue",
+   "revision": "c23fdff1a6bf74e0e1a71cb86f1e781d37da888c",
+   "licence": "CC-BY-4.0",
    "permissive": true,
    "role": "train",
-   "domain": "cyber",
-   "files": [],
-   "git": {
-    "url": "https://github.com/OTRF/Security-Datasets.git",
-    "status": "not downloaded",
-    "dir": "github/OTRF__Security-Datasets"
-   }
-  },
-  "splunk-attack-data": {
-   "what": "Splunk attack_data: logs recorded while running ATT&CK techniques, grouped by technique",
-   "origin": "github:splunk/attack_data",
-   "revision": "4389fa7a4e74a7c083c0fbe448fa2c7c32378981",
-   "licence": "Apache-2.0",
-   "permissive": true,
-   "role": "train",
-   "domain": "cyber",
-   "files": [],
-   "git": {
-    "url": "https://github.com/splunk/attack_data.git",
-    "status": "not downloaded",
-    "dir": "github/splunk__attack_data"
-   }
-  },
-  "evtx-attack-samples": {
-   "what": "EVTX-ATTACK-SAMPLES: Windows event log samples of ATT&CK techniques",
-   "origin": "github:sbousseaden/EVTX-ATTACK-SAMPLES",
-   "revision": "4ceed2f4706daf601c212a8f91c113dd85349a2c",
-   "licence": "GPL-3.0",
-   "permissive": false,
-   "role": "eval",
-   "domain": "cyber",
-   "files": [],
-   "git": {
-    "url": "https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES.git",
-    "status": "not downloaded",
-    "dir": "github/sbousseaden__EVTX-ATTACK-SAMPLES"
-   }
-  },
-  "ait-lds-v2": {
-   "what": "AIT Log Data Set v2.0: 8 simulated enterprise networks with labelled multi-step attacks",
-   "origin": "zenodo:5789064",
-   "revision": "v2_0",
-   "licence": "CC-BY-NC-SA-4.0",
-   "permissive": false,
-   "role": "eval",
-   "domain": "cyber",
-   "files": [],
-   "zenodo": {
-    "record": "5789064",
-    "dir": "zenodo/ait-lds-v2",
-    "files": {
-     "russellmitchell.zip": {
-      "status": "ok",
-      "bytes": 7132670599,
-      "md5": "78e9b7d169b438f03816019b52ab3ff7"
-     },
-     "santos.zip": {
-      "status": "not downloaded",
-      "md5": "fbd2663a41c83f345aa08a7fb11a6c6c"
-     },
-     "fox.zip": {
-      "status": "not downloaded",
-      "md5": "b6cd133398fbed6f3e7434dafbc45756"
-     },
-     "harrison.zip": {
-      "status": "not downloaded",
-      "md5": "4fbe3dd17a194776b2851116f8b51380"
-     },
-     "wardbeck.zip": {
-      "status": "not downloaded",
-      "md5": "ff524634e64c7779def2eb804e8c52ac"
-     },
-     "shaw.zip": {
-      "status": "not downloaded",
-      "md5": "872bbec7ffe12f14e06364e328a96088"
-     },
-     "wheeler.zip": {
-      "status": "not downloaded",
-      "md5": "e3f5605d867fcc644f93ae6c736cdb30"
-     },
-     "wilson.zip": {
-      "status": "not downloaded",
-      "md5": "952dd37cb262ef0054ad6d5371bdbe70"
-     }
+   "files": [
+    {
+     "path": "hf/coastalcph__lex_glue/ledgar/train-00000-of-00001.parquet",
+     "bytes": 20897973,
+     "sha256": "e2901d9e019f5652dadda839d488155c681e50b90bd33f00574949418827867d"
+    },
+    {
+     "path": "hf/coastalcph__lex_glue/ledgar/validation-00000-of-00001.parquet",
+     "bytes": 3439104,
+     "sha256": "55ef0deada1ed75bbf13c68fdd1c1a1ebfa5b09176d5e68b92499234f51d6c9f"
+    },
+    {
+     "path": "hf/coastalcph__lex_glue/ledgar/test-00000-of-00001.parquet",
+     "bytes": 3313508,
+     "sha256": "af9ed0ec09545d39449ffddca3996a1a7774e2bd0a9d6fc09d4e9dd067892a7a"
+    },
+    {
+     "path": "hf/coastalcph__lex_glue/README.md",
+     "bytes": 34120,
+     "sha256": "132da3adf6de8e30e4f3d6f4f305e7ae37c11060bcaa1462fe2c589aa910d1fa"
     }
-   }
+   ]
+  },
+  "arxiv-titles": {
+   "what": "arXiv paper titles to the end of 2021, labelled by their primary archive",
+   "origin": "hf:gfissore/arxiv-abstracts-2021",
+   "revision": "e4c5fbd4dec8e46a5dc869216fe1c94cc585757a",
+   "licence": "CC0-1.0",
+   "permissive": true,
+   "role": "train",
+   "files": [
+    {
+     "path": "hf/gfissore__arxiv-abstracts-2021/arxiv-abstracts.jsonl.gz",
+     "bytes": 939914256,
+     "sha256": "72d5dc60838fbad492805c2aa35c9d208bff8ae1270660cc213bc01de1aa682b"
+    },
+    {
+     "path": "hf/gfissore__arxiv-abstracts-2021/README.md",
+     "bytes": 6755,
+     "sha256": "4be763c41df8de4300bba7fe2807176afeaeff4f624df8887d290318643d67d6"
+    }
+   ]
   }
  },
  "derived": [
@@ -1151,6 +1113,11 @@
    "sha256": "20219eaec36bddfa65e3aab690e94c297f7a184a17cb82e9991953645a05b342"
   },
   {
+   "path": "derived/aggregation/arxiv-titles-v1.json.gz",
+   "bytes": 1794402,
+   "sha256": "5ad812ef6835fd1e3f306d34ab1d67bb47e51905951bc3c1ec342cda416f8695"
+  },
+  {
    "path": "derived/capability/capability-v1.jsonl",
    "bytes": 55298,
    "sha256": "9ab05b42ccb2f99fef9fa400fbf9aee45414f380a0f2ef87625c1792862a677f"
@@ -1161,9 +1128,7 @@
   "oolong-synth validation": "fails 7b: no licence, and built from non-commercial sets; replaced by our own aggregation generator on CLINC150 and MASSIVE",
   "loghub": "fails 7b: research use only",
   "swe-smith": "not needed: LCA covers the 15% repo share",
-  "mteb/amazon_massive_intent": "downloaded, unused: the scenario labels are the ones the generator needs"
- },
- "deferred": {
-  "cyber": "35% share (7a) has no task family yet. Its sources are registered above (domain 'cyber') and fetched by scripts/fetch_cyber_data.sh; nothing reads them until the cyber generator is built (decision 7c)."
+  "mteb/amazon_massive_intent": "downloaded, unused: the scenario labels are the ones the generator needs",
+  "cyber sources (OTRF Security-Datasets, splunk attack_data, EVTX-ATTACK-SAMPLES, AIT-LDS v2)": "the cyber domain was dropped (decision 7c, Rishi 2026-10-11); its 35% went to code and aggregation"
  }
 }

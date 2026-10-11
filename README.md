@@ -39,21 +39,20 @@ Production code (built against `documentation/production-spec.md`):
 - `rlm_rl/stoprules.py` - the five stop rules, the collapse check behind the learning-rate fallback, and the second seed's learning-rate decision
 - `rlm_rl/capability.py` - the capability check that watches for frying
 - `rlm_rl/capability_set.py` - builds its 100 prompts (IFEval, MMLU-Pro, CRUXEval, chat) onto the data root
-- `rlm_rl/data.py` - where the datasets live (`D:\RLM-data`, outside git), each source's licence and role, the licence bar, and the utterance pools
+- `rlm_rl/data.py` - where the datasets live (`D:\RLM-data`, outside git), each source's licence and role, the licence bar, and the labelled text pools
 - `rlm_rl/backend.py` - the loop's view of W&B serverless RL through ART: train, checkpoints, forks, logging
 - `rlm_rl/tasks/` - host-only task generation (random 64-bit seeds; eval seed lists go in the git-ignored `private/`), the family registry and decision 7a's domain mix, and the families, each with five difficulty levels:
   - `tickets.py` - the ticket tasks (the second seed's families, held out of production)
-  - `aggregation.py` - OOLONG-style aggregation over labelled utterances (CLINC150, MASSIVE), plus a held-out variant on HuffPost headlines
+  - `aggregation.py` - OOLONG-style aggregation over labelled texts (CLINC150, MASSIVE, LEDGAR contract provisions, arXiv titles), plus a held-out variant on HuffPost headlines
   - `synthcode.py` and `behaviours.py` - generated Python packages: call-graph questions and needle-function questions, plus held-out variants
   - `repoloc.py` - bug localization on Long Code Arena's Python issues and repositories
   - `oolong.py` - a fixed sample of OOLONG-synth's test split, for the held-out test
 - `scripts/sandbox_ctl.py` - build the sandbox image, run the regression tests, clean up after a crash
 - `scripts/audit.py` - read transcripts for the hack audit: per-log summary, sampled wins as Markdown, one episode in full, and the Claude audit at each checkpoint (`checkpoint`, `report`; see `documentation/audit-procedure.md`)
 - `scripts/reward_check.py` - what blind guessers earn under the reward, per family and level
-- `scripts/build_data.py` - builds the derived data on the data root: the LCA repositories' git data and item index, and the capability prompts
+- `scripts/build_data.py` - builds the derived data on the data root: the LCA repositories' git data and item index, the arXiv title sample, and the capability prompts
 - `scripts/build_manifest.py` - writes `manifests/dataset-manifest.json`, every data file pinned by sha256
 - `scripts/data_check.py` - plan step 7's checks (H7, H8, H1, licences, the mix, the eval sets), written to `manifests/data-check.json`
-- `scripts/fetch_cyber_data.sh` - fetches the cyber sources (OTRF, splunk attack_data, EVTX samples, AIT-LDS) onto the data root at their pinned versions
 - `scripts/backtest_detectors.py` - replays the 20-step run's episodes through the detectors to count false alarms
 - `scripts/train.py` - start, stop, resume and check a training run, live or as a dry run against fakes (`--dry-run`, no W&B, no credit)
 - `tests/` - regression tests; run them inside WSL2 with `.venv-linux/bin/python scripts/sandbox_ctl.py check`. `tests/fake_model.py` is a local stand-in for the W&B model server, so tests never spend credit; `tests/dryrun.py` runs the whole training loop against it and a fake backend

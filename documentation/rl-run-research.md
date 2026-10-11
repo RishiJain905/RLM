@@ -6,6 +6,8 @@
 >
 > **Budget update (Rishi, 2026-10-10):** there is no pilot run. W&B bills two separate pots: **training** (GPU time for the gradient steps: $1,000, $8.02 used) and **inference** (every rollout token, every sub-call, every eval and benchmark: $250, $32.32 used, so **~$218 left**). Inference is the real limit, so section 7 budgets everything in inference dollars. The final benchmark eval can run outside W&B, on the trained LoRA after it is pushed to Rishi's Hugging Face, which frees its share for training, and production has no fixed step count: it runs until a stop rule fires or its spending ceiling is reached (section 8.6).
 >
+> **Data update (Rishi, 2026-10-11, decision 7c):** cyber is dropped from the run. Production trains 45% on OOLONG-style aggregation, 40% on the code generators and 15% on repo localization (§3.3, §3.4). See [step-7-results.md](step-7-results.md).
+>
 > **Setting:** Qwen3.8-27B LoRA on W&B serverless RL (ART 0.5.20), **GRPO with the CISPO loss and no reward std scaling**, straight RL with no SFT, sub-calls served by the same frozen base model.
 
 ---
@@ -18,7 +20,7 @@
 | **Production settings** | Episodes that ran out of the 20-call budget scored 0.25 vs 0.53 on hard tasks, and GRPO's sub-call use was still rising. GRPO only learns from groups with mixed results. | **Sub-call budget 20 → ~30. Tasks get harder as accuracy climbs** (an adaptive difficulty controller keeps pass rate in the 20-80% band). 32 episodes per step (8 tasks x 4 rollouts, the setup that worked), to get more steps per inference dollar. |
 | **Do first** | The audit found three gaps that make any result untrustworthy: no real sandbox, eval transcripts not logged, one seed per arm. | **Sandbox, eval logging and a second seed come before anything that spends production budget** (holes H2-H4, H9, H12). |
 | **Holes** | 13 holes in the current setup, from a reward a blind guess can farm to groups that teach nothing. | Each has a fix and a check that proves it (next section). |
-| **Datasets** | Current tasks are ~8-10K tokens, inside the model's 262K window, so they don't test long context. | Train on generators (cyber log-injection, code call-graph and needle-function) + OOLONG-synth validation + Long Code Arena train. Public benchmarks are eval-only. |
+| **Datasets** | Current tasks are ~8-10K tokens, inside the model's 262K window, so they don't test long context. | Train on generators (OOLONG-style aggregation, code call-graph and needle-function) + Long Code Arena train. Public benchmarks are eval-only. Cyber was dropped by decision 7c (2026-10-11). |
 | **Concurrency** | 8 is how many requests run at once. Cost is per token, so it's the same at 1 or 8; one at a time would be ~10-15x slower. The 429 at 32 is far below W&B's documented 2,000. | Keep 8 behind one shared limiter (sub-calls currently bypass it). Ask CoreWeave about the 429. |
 | **Cost** | Two pots. Training (GPU) has $992 left and our runs use ~$0.16 per step, so it is not a constraint. Inference has ~$218 left and pays for every rollout, sub-call and eval: yesterday's ~2,060 episodes cost $32.32, about **$0.016 per episode** at today's task size. | Everything fits in the ~$218 of inference: second seed ~$12, baselines ~$5, **production ceiling ~$150**, selection-set evals ~$25, reserve ~$25 (section 7). No pilot. The final benchmark eval runs outside W&B from the Hugging Face upload. |
 | **How long to train** | A fixed 60 steps could stop too early or waste money. At 32 episodes per step, ~$150 buys roughly 80-180 steps, depending on how fast contexts grow. | No fixed count. Evaluate every 10 steps, keep the best checkpoint, stop early on a plateau, overfitting, frying or saturation; spend the reserve if it is still improving at the ceiling; resume later from a checkpoint if more credit appears (section 8.6). |
@@ -73,7 +75,7 @@ In September 2026 Xiaomi streamed the RL post-training of MiMo-V2.6-Pro (~1T tot
 | Tokens per step | 2.7-3.7B | ~1-3M |
 | Episode | ~100K tokens of context, 57-65 turns | 8-15 root turns, up to ~30 sub-calls |
 | Steps / cost | 30 steps; $2.6M Pro, $0.9M Flash (44% rollouts, 13% grading) | No fixed count (~80-180 steps); ~$150 inference ceiling |
-| Data mix | 68% code, 13% visual, 12% tool use, 4% cyber, 3% context following | cyber logs, code, OOLONG-style aggregation |
+| Data mix | 68% code, 13% visual, 12% tool use, 4% cyber, 3% context following | 45% OOLONG-style aggregation, 40% code generators, 15% repo localization |
 | Difficulty control | Dynamic sampler drew prompts until 1,568 had mixed outcomes; pruned prompts at 100% pass | Difficulty controller; all-equal groups dropped, not refilled (H13, 5.5) |
 | Result | DeepSWE avg@3: Pro 58.4 → 72.6, Flash 48.7 → 65.7 (self-reported) | — |
 
@@ -103,7 +105,7 @@ Early coding runs passed tests **without solving the task** by getting the fix f
 | Hack agent before training | **Adopt.** One Claude red-team thread, no credit. |
 | Hack zeroing before the group mean | **Adopt** (H11). |
 | Infra errors classified separately | **Adopt** (H5). |
-| Deterministic cyber grading | **Adopt.** Blue-team answers are exact entities. |
+| Deterministic grading | **Adopt.** Every answer is an exact number, name or list. |
 | Separate checkpoint-selection set | **Adopt** (H7, section 8). |
 | Quality ranking among passing attempts | **Later.** Needs a grader model. |
 | Async rollouts, staleness caps | **Skip.** ART is synchronous at our scale. |
@@ -134,29 +136,28 @@ Dashboard panels worth copying: pass rate with and without infra errors, pass-ra
 
 | Source | Domain | Context | Answer and check | Difficulty knobs |
 |---|---|---|---|---|
-| **Cyber log-injection generator** (ours) | Blue team | 64K-512K tokens | First compromised host (exact), malicious ProcessGuids or timestamps (set-F1), lateral-movement account (exact), technique ID when one is injected (exact) | Log volume, attack slices injected, how many hosts, how indirect the question is |
 | **Code call-graph generator** (ours) | Code | 130K-1M chars | "All transitive callers of X", answered with `ast`/tree-sitter; set-F1 | Repo size, call depth, obfuscation |
 | **Needle-function generator** (RepoQA method) | Code | Same | Behavioural description → qualified name; exact | Repo size, similar decoy functions |
-| **SWE-smith** (59K synthetic bugs, MIT) | Code | Repo-sized | Gold file/function from the patch; set-F1 | Repo size |
-| **OOLONG-synth validation** | Aggregation | 1K to 4M tokens | Exact; numbers scored 0.75^|diff| | Built-in length buckets |
+| **OOLONG-style aggregation generator** (ours; OOLONG-synth itself fails the licence bar) | Aggregation | 35K-400K chars | Counts (int), topic or user lists (set-F1), most active user (exact) | Context length, labels, users, question kind |
 | **Long Code Arena bug localization, Python train** (Apache-2.0) | Code | Repo-sized | Set-F1 on changed files | `repo_tokens_count` buckets |
 
-Cyber sources: benign background from OTRF / Sysmon / Loghub Linux-SSH; attack slices from `splunk/attack_data` (Apache-2.0, by ATT&CK technique), OTRF Security-Datasets, EVTX-ATTACK-SAMPLES; random time-shifts and host/user/IP/GUID renaming per seed. Questions describe behaviour, not event IDs, so sub-calls are needed. The Cyber Defense Benchmark (arXiv 2604.19533) builds its eval the same way.
+Aggregation sources (all CC-BY or CC0): CLINC150 and MASSIVE voice-assistant utterances, LEDGAR contract provisions and arXiv paper titles, each grouped into coarse labels. SWE-smith isn't used, because LCA covers the repo share. **Cyber was dropped by decision 7c (Rishi, 2026-10-11)**, with its sources and benchmarks.
 
-**Hold out for eval:** OOLONG-synth test and OOLONG-real; **CyberSOCEval** malware part (609 questions, often 128K+ tokens, exact-set scoring); **ExCyTIn-Bench** (589 questions, entity answers); the Cyber Defense Benchmark (release unverified); AIT-LDS v2 as held-out log sources; LCA Java/Kotlin test, LocBench, LongCodeBench, LongBench-v2 code; BrowseComp-Plus and MRCR.
+**Hold out for eval:** OOLONG-synth test and OOLONG-real; HuffPost headlines as a held-out aggregation source; LCA Python test, LCA Java/Kotlin test, LocBench, LongCodeBench, LongBench-v2 code; BrowseComp-Plus and MRCR.
 
-**Avoid or use with care:** SWE-bench Lite and BOTS v1-v2 (answers public), CTIBench / CyberMetric / SecBench (short, multiple choice), CIC-IDS (numeric CSV), Loghub BGL/Thunderbird unless the label column is stripped, LoCoBench (subjective scoring). Licences: AIT-LDS and CTIBench are non-commercial, OTRF shows two licences, EVTX samples are GPL-3.0.
+**Avoid or use with care:** SWE-bench Lite (answers public), LoCoBench (subjective scoring).
 
 ### 3.4 Mix and sizes
 
 | Share | Source |
 |---|---|
-| ~35% | Cyber log-injection generator |
-| ~30% | OOLONG-synth validation |
-| ~20% | Code generators (call-graph, needle-function) |
-| ~15% | Long Code Arena bug localization or SWE-smith |
+| 45% | OOLONG-style aggregation generator |
+| 40% | Code generators (call graph 20%, needle function 20%) |
+| 15% | Long Code Arena bug localization |
 
-Generators make items on demand, so there is no fixed item count; the real-data sources (OOLONG, LCA, SWE-smith) need a few hundred items each. There is **no pre-filter pass**: it would cost ~$40-120 of inference. Every family starts at level 1 (today's task size, where the base model passes about half the time) and the controller moves it from there.
+This is decision 7c (Rishi, 2026-10-11). It replaced 7a's research mix of ~35% cyber, ~30% OOLONG, ~20% code and ~15% repo localization, giving cyber's 35% to code (+20) and aggregation (+15).
+
+Generators make items on demand, so there is no fixed item count; the real-data source (LCA) needs a few hundred items, and has 531 usable training issues. There is **no pre-filter pass**: it would cost ~$40-120 of inference. Every family starts at level 1 (today's task size, where the base model passes about half the time) and the controller moves it from there.
 
 ---
 
@@ -351,8 +352,8 @@ The selection-set evals during training stay on W&B, since the stop rules (8.6) 
 | Tier | Contents | Used for | Touched |
 |---|---|---|---|
 | **Selection set** | Held-out seeds of training generators at fixed difficulty levels + one held-out generator family | Picking the checkpoint | Every eval |
-| **Held-out test** | Never-trained generators and sources: held-out log sources (AIT-LDS), ATT&CK techniques, code languages, OOLONG test sources, separately written and paraphrased question templates | The generalization claim | Once |
-| **Public benchmarks** | CyberSOCEval malware, ExCyTIn, LCA Java/Kotlin, OOLONG-real, LongBench-v2 code, BrowseComp-Plus subset | Comparable numbers | Once |
+| **Held-out test** | Never-trained sources and variants: a held-out aggregation source, held-out code behaviours and call styles, LCA's test split, OOLONG test sources, separately written question templates | The generalization claim | Once |
+| **Public benchmarks** | LCA Java/Kotlin, OOLONG-real, LongBench-v2 code, BrowseComp-Plus subset | Comparable numbers | Once |
 
 Never pick a checkpoint on a number you will report.
 
@@ -443,7 +444,7 @@ About $25 stays in reserve. Each phase that spends inference waits for Rishi's g
 ### Decisions for Rishi
 
 1. **Inference split:** second seed ~$12, baselines ~$5, production ceiling ~$150, selection-set evals ~$25, reserve ~$25, final eval outside W&B?
-2. **Domain mix:** ~35% cyber / 20% code / 30% OOLONG / 15% repo localization, or more code and cyber?
+2. **Domain mix:** **decided 2026-10-11 (7a, then 7c): cyber dropped; 45% aggregation, 40% code generators, 15% repo localization.** See [step-7-results.md](step-7-results.md) §6.
 3. **Partial credit:** **decided 2026-10-10: calibrate it against the blind guess.** See [production-spec.md](production-spec.md) §3.
 4. **CISPO clip:** **decided 2026-10-10: restore the default** (`epsilon=1.0`, `epsilon_high=4.0` in ART 0.5.20). Learning rate also settled: 1e-5 for the second seed, 2e-5 in production only if the second seed is stable. See [production-spec.md](production-spec.md) §5.
 5. **Bridge names:** **decided 2026-10-10: `llm` / `llm_batch` / `submit` / `context`.** See [production-spec.md](production-spec.md) §1.
@@ -478,7 +479,6 @@ MiMo figures come from secondary write-ups of a self-reported run. The blind-gue
 **Datasets**
 - OOLONG: [arXiv:2511.02817](https://arxiv.org/abs/2511.02817), [oolong-synth](https://huggingface.co/datasets/oolongbench/oolong-synth), [oolong-real](https://huggingface.co/datasets/oolongbench/oolong-real); [BrowseComp-Plus](https://huggingface.co/datasets/Tevatron/browsecomp-plus); [OpenAI MRCR](https://huggingface.co/datasets/openai/mrcr); [LongBench-v2](https://huggingface.co/datasets/zai-org/LongBench-v2)
 - Code: [LCA bug localization](https://huggingface.co/datasets/JetBrains-Research/lca-bug-localization), [LocBench](https://huggingface.co/datasets/czlll/Loc-Bench_V1), [SWE-smith](https://huggingface.co/datasets/SWE-bench/SWE-smith), [SWE-rebench](https://huggingface.co/datasets/nebius/SWE-rebench), [LongCodeBench](https://arxiv.org/abs/2505.07897), [RepoQA](https://github.com/evalplus/repoqa)
-- Cyber: [CyberSOCEval](https://arxiv.org/abs/2509.20166) ([data](https://github.com/CrowdStrike/cybersoceval_data)), [ExCyTIn-Bench](https://arxiv.org/abs/2507.14201), [Cyber Defense Benchmark](https://arxiv.org/abs/2604.19533), [splunk/attack_data](https://github.com/splunk/attack_data), [OTRF Security-Datasets](https://github.com/OTRF/Security-Datasets), [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES), [Loghub](https://github.com/logpai/loghub), [AIT-LDS v2](https://zenodo.org/records/5789064)
 
 **Reward hacking and evaluation**
 - [SWE-bench git history leak](https://github.com/SWE-bench/SWE-bench/issues/465), [Cursor: reward hacking in coding benchmarks](https://cursor.com/blog/reward-hacking-coding-benchmarks), [ImpossibleBench](https://arxiv.org/abs/2510.20270), [METR on reward hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking), [Monitoring reasoning for misbehavior](https://arxiv.org/abs/2503.11926), [Natural emergent misalignment from reward hacking](https://arxiv.org/abs/2511.18397)

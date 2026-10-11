@@ -18,7 +18,7 @@
 These decisions are still open and touch this spec. Each section notes where.
 - **3b**, how the sandbox reaches the bridge: it changes only the transport in §1.4, not the API.
 - **3c**, which packages are in the sandbox: it decides whether the prompt gets one extra line (§2).
-- **7a**, the domain mix: it sets the task sampling weights in §6.
+- **7a and 7c** (both decided 2026-10-11), the domain mix: it sets the task sampling weights in §6. 7c dropped cyber, so the mix is 45% aggregation, 40% code generators and 15% repo localization.
 - **11a**, which model serves sub-calls once deployed: in training, sub-calls are always served by the frozen base model.
 
 ---
@@ -250,7 +250,7 @@ await backend.train(
 
 ## 6. Tasks and the difficulty controller
 
-- **Each step:** 8 tasks, drawn across families by the domain mix (decision 7a). Every task gets a fresh random 64-bit seed. Generators, seeds and gold answers stay on the host (H3).
+- **Each step:** 8 tasks, drawn across families by the domain mix (`tasks.DOMAIN_MIX`, decisions 7a and 7c): aggregation 45%, call graph 20%, needle 20%, repo localization 15%. Every task gets a fresh random 64-bit seed. Generators, seeds and gold answers stay on the host (H3).
 - **Levels:** every family has levels, from level 1 (today's ~35K characters) up to a top level of ~400K characters, which can be covered in ~20 sub-calls. Step 7 defines each generator's levels.
 - **The rule:** for each family, take the exact-accuracy pass rate over its episodes from the last 3 steps.
   - Above ~70%: move up a level.
@@ -317,7 +317,7 @@ Production code goes at the top level of `rlm_rl/` and `scripts/`. Archived code
 | `rlm_rl/detectors.py` | Hack rules (§7) | new |
 | `rlm_rl/controller.py` | Difficulty controller (§6) | new |
 | `rlm_rl/config.py` | Every pinned value in this spec, saved as `config.json` | new |
-| `rlm_rl/tasks/` | `tickets.py` now; cyber, call-graph, needle and loaders in step 7 | `ticket_tasks.py` |
+| `rlm_rl/tasks/` | `tickets.py`; from step 7, `aggregation.py`, `synthcode.py` (call graph, needle), `repoloc.py` and `oolong.py` | `ticket_tasks.py` |
 | `rlm_rl/evals.py` | Selection set, capability check, eval transcript logging | `rlm_env.evaluate_rlm` |
 | `scripts/train.py` | Resumable GRPO loop, stop rules, LR rule, operator stop switch | `run_rlsd_vs_grpo.py` |
 | `scripts/eval.py` | Standalone evals: baselines, the final eval | new |

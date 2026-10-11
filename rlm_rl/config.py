@@ -111,20 +111,19 @@ def second_seed(run: str = "second-seed-v1") -> RunConfig:
                      max_steps=20, final_eval="heldout-seed1", ceilings=dict(SECOND_SEED_CEILINGS))
 
 
-def production(run: str, learning_rate: float, leave_out_missing: bool = False, tasks_from: str = "7a") -> RunConfig:
+def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunConfig:
     """Plan step 12. `learning_rate` is the second seed's call (spec §5.2): 2e-5 if its checks passed, else 1e-5.
 
-    The mix is decision 7a's. Its cyber share has no family yet, so this raises unless `leave_out_missing`,
-    which trains on the built domains alone, spread over 100% (scripts/train.py --leave-out-missing).
-    `tasks_from="tickets"` keeps step 6's ticket stand-in (the ticket mix, selection-tickets-v1 and no
-    capability file), for the loop's tests and dry runs that don't need the datasets.
+    The mix is `tasks.production_mix()` (decisions 7a and 7c). `tasks_from="tickets"` keeps step 6's ticket
+    stand-in (the ticket mix, selection-tickets-v1 and no capability file), for the loop's tests and dry runs
+    that don't need the datasets.
     """
     if learning_rate not in (LR_PRODUCTION_HIGH, LR_FLOOR):
         raise ValueError(f"production starts at {LR_PRODUCTION_HIGH} or {LR_FLOOR} (spec §5.2), not {learning_rate}")
     if tasks_from == "tickets":
         mix, selection, capability_set = dict(TICKET_MIX), "selection-tickets-v1", None
     elif tasks_from == "7a":
-        mix = tasks.production_mix(leave_out_missing=leave_out_missing)
+        mix = tasks.production_mix()
         tasks.check_mix(mix)
         selection, capability_set = PRODUCTION_SELECTION, CAPABILITY_SET
     else:
@@ -178,14 +177,13 @@ def art_version() -> str | None:
 
 
 def manifest(cfg: RunConfig) -> dict:
-    """The dataset manifest (spec §8, plan step 7): generator versions, the mix, the eval sets, the domains not
-    yet built, and the hash of manifests/dataset-manifest.json, which pins every source file by sha256."""
+    """The dataset manifest (spec §8, plan step 7): generator versions, the mix, the eval sets, and the hash of
+    manifests/dataset-manifest.json, which pins every source file by sha256."""
     try:
         dataset = hashlib.sha256(DATASET_MANIFEST.read_bytes()).hexdigest()
     except OSError:
         dataset = None
     data = {"generators": tasks.versions(cfg.mix), "mix": cfg.mix, "dataset_manifest_sha256": dataset,
-            "missing_domains": tasks.missing_domains() if cfg.kind == "production" else [],
             "evals": {"selection": cfg.selection, "final": cfg.final_eval, "capability": cfg.capability_set}}
     return {**data, "sha256": hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()}
 

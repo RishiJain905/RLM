@@ -1,6 +1,6 @@
 # Production RL build plan
 
-> **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. Nothing has been built, run, committed or pushed, and no W&B credit has been spent.
+> **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. **Updated 2026-10-11:** steps 1-7 are built, and decision 7c dropped cyber from the run (step 7). No W&B credit has been spent.
 >
 > **Source of truth:** [rl-run-research.md](rl-run-research.md). Its html version says the same thing. Section numbers (§) below point into it. Anything marked *(mine)* is my recommendation, not the research's. Anything marked *(inferred)* hasn't been checked yet.
 >
@@ -8,7 +8,7 @@
 
 ## The goal
 
-The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverless RL, using long-context blue-team cyber and code tasks. The environment is sandboxed so it can't be gamed. Everything has to fit in the ~$218 of W&B inference credit left. The trained model then has to be shown to beat the base model on held-out tasks.
+The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverless RL, using long-context aggregation and code tasks. The environment is sandboxed so it can't be gamed. Everything has to fit in the ~$218 of W&B inference credit left. The trained model then has to be shown to beat the base model on held-out tasks.
 
 ## Where we start
 
@@ -40,7 +40,7 @@ The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverle
 | 4 | Limiter, infra flags, eval logging (do first) | PC | H5, H6, H9 | $0 | none |
 | 5 | Environment v2 | PC | H1, H11, H13 | $0 | 5a |
 | 6 | Training loop and monitoring | PC | §5.3, §8.5, §8.6 | $0 | none |
-| 7 | Data | PC + Design | H7, H8 | $0 | 7a, 7b |
+| 7 | Data | PC + Design | H7, H8 | $0 | 7a, 7b, 7c |
 | 8 | Red-team | Claude agent | H11, re-checks H1-H4 | $0 | none |
 | 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c |
 | 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | 10a, 10b, 10c |
@@ -331,24 +331,20 @@ None open. The clip is decided in 1c.
 
 **Type:** PC + Design · **Cost:** $0 · **Holes:** H7, H8 · **Research:** §3, §8.1
 
+**Status: complete (2026-10-11).** Results: [step-7-results.md](step-7-results.md). Decisions 7a, 7b and 7c are below. Decision 7c dropped cyber, so production trains on aggregation and code only.
+
 ### What we build
 
-**Training sources.** Each one gets difficulty levels, from today's ~35K characters up to ~400K:
+**Training sources.** Each one gets difficulty levels, from today's ~35K characters up to ~400K. The production mix is set by decision 7c:
 
-| Source | Domain | Answer and check | Difficulty knobs |
-|---|---|---|---|
-| Cyber log-injection generator (ours) | Blue team | First compromised host (exact), malicious ProcessGuids or timestamps (set-F1), lateral-movement account (exact), technique ID when one is injected (exact) | Log volume, attack slices, number of hosts, how indirect the question is |
-| Code call-graph generator (ours) | Code | All transitive callers of X, from `ast` / tree-sitter (set-F1) | Repo size, call depth, obfuscation |
-| Needle-function generator (RepoQA method) | Code | Behavioural description → qualified name (exact) | Repo size, similar decoy functions |
-| OOLONG-synth validation | Aggregation | Exact; numbers scored 0.75^\|diff\| | Built-in length buckets |
-| Long Code Arena bug localization, Python train | Code | Set-F1 on changed files | Repo token buckets |
-| SWE-smith | Code | Gold file or function from the patch (set-F1) | Repo size |
+| Family | Share | Source | Answer and check | Difficulty knobs |
+|---|---|---|---|---|
+| OOLONG-style aggregation generator (ours) | 45% | Labelled texts from CLINC150, MASSIVE, LEDGAR contract provisions and arXiv titles (all CC-BY or CC0) | Counts (int), topic or user lists (set-F1), the most active user (exact) | Context length, number of labels and users, question kind |
+| Code call-graph generator (ours) | 20% | Generated Python packages | All transitive callers of X (set-F1) | Package size, call depth, hidden call styles |
+| Needle-function generator (RepoQA method) | 20% | Generated Python packages | Behavioural description → qualified name (exact) | Package size, look-alike decoys |
+| Long Code Arena bug localization, Python train | 15% | Real GitHub issues and repositories | Set-F1 on changed files | Context size, filler drawn from the changed files' folders |
 
-**How the cyber generator works:**
-- Benign background logs come from OTRF, Sysmon and Loghub Linux-SSH.
-- Attack slices come from `splunk/attack_data`, OTRF Security-Datasets and EVTX-ATTACK-SAMPLES.
-- Each seed gets random time shifts and renamed hosts, users, IPs and GUIDs.
-- Questions describe behaviour rather than event IDs, so the model has to read.
+OOLONG-synth itself fails the licence bar (7b), so our generator rebuilds its method on permissive data. SWE-smith isn't used, because LCA covers the repo share.
 
 **Every training task must** (§3.1):
 - need long context
@@ -359,26 +355,25 @@ None open. The clip is decided in 1c.
 - expose difficulty knobs
 
 **Eval tiers (H7):**
-- **Selection set.** 64 fixed tasks: held-out seeds at fixed levels, plus one held-out generator family. It picks the checkpoint and runs at every eval.
-- **Held-out test.** AIT-LDS v2 log sources, unseen ATT&CK techniques and code languages, OOLONG test sources, and separately written and paraphrased question templates. An n-gram overlap check runs against training. It is touched once.
-- **Public benchmarks.**
-  - CyberSOCEval malware (609 questions, often 128K+ tokens)
-  - ExCyTIn-Bench (589 questions)
+- **Selection set (`selection-v1`).** 64 fixed tasks: held-out seeds of the training generators at fixed levels, three LCA repositories training never sees, and the ticket tasks as the held-out generator family. It picks the checkpoint and runs at every eval.
+- **Held-out test (`heldout-test-v1`).** 170 tasks, touched once:
+  - a held-out aggregation source (HuffPost headlines)
+  - held-out behaviours and call styles in the code generators
+  - LCA's Python test split
+  - a sample of OOLONG-synth's test split
+  - separately written question templates
+  
+  An n-gram overlap check runs against training.
+- **Public benchmarks.** These are touched once, in step 13:
   - LCA Java/Kotlin test
   - OOLONG-real
   - LongBench-v2 code
   - a BrowseComp-Plus subset
   - LocBench, LongCodeBench and MRCR
-  - the Cyber Defense Benchmark, if it is released
-
-  These are touched once.
-- **Capability check.** About 100 prompts: IFEval, an MMLU-Pro subset, a short coding set and chat prompts. It catches frying.
+- **Capability check.** 100 prompts: IFEval, an MMLU-Pro subset, CRUXEval as the short coding set, and chat prompts. It catches frying.
 
 **Avoid:**
-- SWE-bench Lite and BOTS v1-v2: their answers are public.
-- CTIBench, CyberMetric and SecBench: short multiple choice.
-- CIC-IDS: numeric CSV.
-- Loghub BGL/Thunderbird, unless the label column is stripped.
+- SWE-bench Lite: its answers are public.
 - LoCoBench: subjective scoring.
 
 **No pre-filter pass.** It would cost ~$40-120 of inference. Every family starts at level 1, where the base model passes about half the time, and the controller moves it from there.
@@ -394,18 +389,20 @@ Production and the baselines need this data. The second seed doesn't, because it
 - Every training source passes the licence bar (7b).
 - A dataset manifest pins every version.
 
+All four pass (step-7-results.md §4-§7).
+
 ### Decisions for this step
 
-**7a. Domain mix**
-- **The research mix: ~35% cyber, ~30% OOLONG, ~20% code generators, ~15% repo localization. Recommended (research).** OOLONG is ready-made with length buckets, so there is less to build.
-- **Heavier on your two use cases,** for example 45% cyber, 30% code generators, 15% repo localization and 10% OOLONG. This is closer to blue team and coding, but it means more generator work and less general aggregation practice.
-- **Something else.**
+**7a. Domain mix: decided 2026-10-11.** The research mix: 35% cyber, 30% OOLONG-style aggregation, 20% code generators, 15% repo localization. Decision 7c later replaced it.
 
-**7b. Licence bar for training data**
-- **Permissive licences only (Apache-2.0, MIT, CC-BY and similar) in training; anything else is eval-only or dropped. Recommended (mine).** The LoRA is going on your Hugging Face, so this keeps it clean. It rules out EVTX-ATTACK-SAMPLES (GPL-3.0) for training and means checking which of OTRF's two licences applies.
-- **Decide case by case for each source.**
+**7b. Licence bar for training data: decided 2026-10-11.** Permissive licences only (Apache-2.0, MIT, CC-BY, CC0 and similar) in training. Anything else is eval-only or dropped. `tasks.check_mix()` enforces it.
 
-AIT-LDS and CTIBench are non-commercial. AIT-LDS is already eval-only, and CTIBench is on the avoid list.
+**7c. The cyber share: decided 2026-10-11.** Drop cyber as a whole, and split its 35% between better coding and one more thing we already have. That gives:
+- code generators 40% (call graph 20%, needle 20%)
+- aggregation 45%
+- repo localization 15%
+
+Aggregation gained two sources (LEDGAR and arXiv titles) for its bigger share.
 
 ---
 

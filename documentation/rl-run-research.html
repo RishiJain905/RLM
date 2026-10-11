@@ -159,7 +159,7 @@ footer a { color: var(--muted); }
     <div class="rec"><b>Do:</b> calibrated partial credit, Docker sandbox, infra-error flags, hack zeroing, held-out generators, red-team. <a href="#holes">Each hole and its fix</a>.</div></div>
   <div class="card t-p2"><div class="k">Datasets</div>
     <p>Current tasks are ~8-10K tokens, inside the model's 262K window, so they don't test long context.</p>
-    <div class="rec"><b>Do:</b> generators with difficulty levels (cyber log-injection, code call-graph, needle-function) + OOLONG-synth validation + Long Code Arena train. Public benchmarks are eval-only.</div></div>
+    <div class="rec"><b>Do:</b> generators with difficulty levels (OOLONG-style aggregation, code call-graph, needle-function) + Long Code Arena train. Public benchmarks are eval-only. Cyber was dropped by decision 7c (2026-10-11).</div></div>
   <div class="card t-warn"><div class="k">Cost and how long to train</div>
     <p>Inference pays for every rollout and eval: yesterday's ~2,060 episodes cost $32.32, ~$0.016 each. Training GPU is ~$0.16 a step and not a constraint.</p>
     <div class="rec"><b>Fits:</b> ~$218 of inference covers second seed, baselines, a ~$150 production ceiling (~80-180 steps), evals and a reserve. Stop by rule, not a step count.</div></div>
@@ -316,7 +316,7 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
 <tr><td>Tokens / step</td><td>2.7-3.7B</td><td>~1-3M</td></tr>
 <tr><td>Episode</td><td>~100K tokens, 57-65 turns</td><td>8-15 root turns, up to ~30 sub-calls</td></tr>
 <tr><td>Cost</td><td>$2.6M Pro, $0.9M Flash (44% rollouts, 13% grading)</td><td>~$150 inference ceiling, no fixed step count</td></tr>
-<tr><td>Mix</td><td>68% code, 13% visual, 12% tool use, 4% cyber, 3% context</td><td>cyber logs, code, OOLONG-style aggregation</td></tr>
+<tr><td>Mix</td><td>68% code, 13% visual, 12% tool use, 4% cyber, 3% context</td><td>45% OOLONG-style aggregation, 40% code generators, 15% repo localization</td></tr>
 <tr><td>Difficulty control</td><td>Dynamic sampler kept 1,568 mixed prompts; pruned 100%-pass prompts</td><td>Difficulty controller; all-equal groups dropped</td></tr>
 <tr><td>Result</td><td>DeepSWE avg@3: Pro 58.4 → 72.6, Flash 48.7 → 65.7 (self-reported)</td><td>—</td></tr>
 </table></div>
@@ -351,7 +351,7 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
 <tr><td>Hack agent before training</td><td><span class="pill good">adopt</span> one Claude thread red-teams the env, no credit</td></tr>
 <tr><td>Hack zeroing before the group mean</td><td><span class="pill good">adopt</span> H11</td></tr>
 <tr><td>Infra errors classified separately</td><td><span class="pill good">adopt</span> H5</td></tr>
-<tr><td>Deterministic cyber grading</td><td><span class="pill good">adopt</span> blue-team answers are exact entities</td></tr>
+<tr><td>Deterministic grading</td><td><span class="pill good">adopt</span> every answer is an exact number, name or list</td></tr>
 <tr><td>Separate checkpoint-selection set</td><td><span class="pill good">adopt</span> H7</td></tr>
 <tr><td>Quality ranking among passes</td><td><span class="pill warn">later</span> needs a grader model</td></tr>
 <tr><td>Async rollouts, staleness caps</td><td><span class="pill">skip</span> ART is synchronous at our scale</td></tr>
@@ -386,27 +386,25 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
     <p class="muted" style="margin-top:6px">Right for proving the method and for the second seed (H12), not for production.</p></div>
 </div>
 
-<h3 style="margin-top:18px">Recommended training mix</h3>
-<div class="stack" role="img" aria-label="Mix: 35% cyber, 30% OOLONG, 20% code generators, 15% repo localization">
-  <div style="width:35%;background:var(--bad)"></div><div style="width:30%;background:var(--p2)"></div>
-  <div style="width:20%;background:var(--p1)"></div><div style="width:15%;background:var(--good)"></div>
+<h3 style="margin-top:18px">Training mix (decision 7c, 2026-10-11)</h3>
+<div class="stack" role="img" aria-label="Mix: 45% OOLONG-style aggregation, 40% code generators, 15% repo localization">
+  <div style="width:45%;background:var(--p2)"></div>
+  <div style="width:40%;background:var(--p1)"></div><div style="width:15%;background:var(--good)"></div>
 </div>
 <div class="legend">
-  <span><span class="sw" style="background:var(--bad)"></span>35% cyber log-injection generator · 64K-512K tok</span>
-  <span><span class="sw" style="background:var(--p2)"></span>30% OOLONG-synth validation · length buckets</span>
-  <span><span class="sw" style="background:var(--p1)"></span>20% code generators · 130K-1M chars</span>
-  <span><span class="sw" style="background:var(--good)"></span>15% LCA bug localization / SWE-smith</span>
+  <span><span class="sw" style="background:var(--p2)"></span>45% OOLONG-style aggregation generator · CLINC150, MASSIVE, LEDGAR, arXiv titles</span>
+  <span><span class="sw" style="background:var(--p1)"></span>40% code generators · call graph 20%, needle 20%</span>
+  <span><span class="sw" style="background:var(--good)"></span>15% LCA bug localization</span>
 </div>
+<p class="muted" style="margin-top:6px">Decision 7a's research mix was 35% cyber, 30% OOLONG, 20% code and 15% repo localization. Decision 7c dropped cyber and gave its 35% to code (+20) and aggregation (+15).</p>
 <p class="muted" style="margin-top:8px">Generators make items on demand. No pre-filter pass (it would cost ~$40-120 of inference): every family starts at level 1, today's task size, and the controller moves it from there.</p>
 
 <div class="tablewrap panel" style="padding:6px 8px;margin-top:12px">
 <table>
 <tr><th>Train source</th><th>Answer and check</th><th>Difficulty knobs</th></tr>
-<tr><td><b>Cyber log-injection generator</b> (ours)</td><td>First compromised host (exact), malicious ProcessGuids (set-F1), lateral-movement account (exact)</td><td>Log volume, attack slices, hosts, question indirection</td></tr>
+<tr><td><b>OOLONG-style aggregation generator</b> (ours; OOLONG-synth fails the licence bar)</td><td>Counts (int), topic or user lists (set-F1), most active user (exact)</td><td>Context length, labels, users, question kind</td></tr>
 <tr><td><b>Code call-graph generator</b> (ours)</td><td>All transitive callers of X, from <code>ast</code>/tree-sitter; set-F1</td><td>Repo size, call depth, obfuscation</td></tr>
 <tr><td><b>Needle-function generator</b> (RepoQA method)</td><td>Behavioural description → qualified name; exact</td><td>Repo size, similar decoys</td></tr>
-<tr><td><b>SWE-smith</b></td><td>Gold file/function from the patch; set-F1</td><td>Repo size</td></tr>
-<tr><td><b>OOLONG-synth validation</b></td><td>Exact; numbers scored 0.75^|diff|</td><td>Built-in length buckets</td></tr>
 <tr><td><b>Long Code Arena bug localization</b>, Python train</td><td>Set-F1 on changed files</td><td>Repo-token buckets</td></tr>
 </table></div>
 
@@ -414,20 +412,14 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
   <div class="card t-p1"><h3>Hold out for eval</h3>
     <ul>
       <li>OOLONG-synth test, OOLONG-real</li>
-      <li><b>CyberSOCEval</b> malware part (609 Qs, often 128K+ tokens, exact-set scoring)</li>
-      <li><b>ExCyTIn-Bench</b> (589 Qs, entity answers)</li>
-      <li>Cyber Defense Benchmark (release unverified)</li>
-      <li>LCA Java/Kotlin test, LocBench, LongCodeBench, LongBench-v2 code</li>
-      <li>AIT-LDS v2 as held-out log sources</li>
+      <li>HuffPost headlines as a held-out aggregation source</li>
+      <li>LCA Python and Java/Kotlin tests, LocBench, LongCodeBench, LongBench-v2 code</li>
       <li>BrowseComp-Plus, MRCR</li>
     </ul></div>
   <div class="card t-bad"><h3>Avoid or use with care</h3>
     <ul>
-      <li>SWE-bench Lite, BOTS v1-v2: answers public</li>
-      <li>CTIBench, CyberMetric, SecBench: short, multiple choice</li>
-      <li>CIC-IDS: numeric CSV</li>
-      <li>Loghub BGL/Thunderbird unless labels are stripped</li>
-      <li>Licences: AIT-LDS and CTIBench non-commercial; EVTX samples GPL-3.0</li>
+      <li>SWE-bench Lite: answers public</li>
+      <li>LoCoBench: subjective scoring</li>
     </ul></div>
 </div>
 
@@ -563,8 +555,8 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
 <h2 id="eval">Evaluation</h2>
 <div class="tiers">
   <div class="tier t-p1"><div class="k">Tier 1</div><h3>Selection set</h3><p>Held-out seeds of training generators at fixed difficulty levels + one held-out generator family.</p><div class="when">Picks the checkpoint. Used at every eval.</div></div>
-  <div class="tier t-p2"><div class="k">Tier 2</div><h3>Held-out test</h3><p>Never-trained generators and sources: other log sources, ATT&amp;CK techniques, code languages, OOLONG test sources, separately written question templates.</p><div class="when">The generalization claim. Touched once.</div></div>
-  <div class="tier t-good"><div class="k">Tier 3</div><h3>Public benchmarks</h3><p>CyberSOCEval malware, ExCyTIn, LCA Java/Kotlin, OOLONG-real, LongBench-v2 code, BrowseComp-Plus subset.</p><div class="when">Comparable numbers. Touched once.</div></div>
+  <div class="tier t-p2"><div class="k">Tier 2</div><h3>Held-out test</h3><p>Never-trained sources and variants: a held-out aggregation source, held-out code behaviours and call styles, LCA's test split, OOLONG test sources, separately written question templates.</p><div class="when">The generalization claim. Touched once.</div></div>
+  <div class="tier t-good"><div class="k">Tier 3</div><h3>Public benchmarks</h3><p>LCA Java/Kotlin, OOLONG-real, LongBench-v2 code, BrowseComp-Plus subset.</p><div class="when">Comparable numbers. Touched once.</div></div>
 </div>
 <div class="grid" style="margin-top:12px">
   <div class="card"><h3>Baselines</h3>
@@ -634,7 +626,7 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
 <h3>Decisions for Rishi</h3>
 <ol class="steps">
   <li><b>Inference split:</b> second seed ~$12, baselines ~$5, production ceiling ~$150, selection-set evals ~$25, reserve ~$25, final eval outside W&amp;B?</li>
-  <li><b>Domain mix:</b> ~35% cyber / 20% code / 30% OOLONG / 15% repo localization, or more code and cyber?</li>
+  <li><b>Domain mix:</b> <b>decided 2026-10-11 (7a, then 7c): cyber dropped; 45% aggregation, 40% code generators, 15% repo localization.</b></li>
   <li><b>Partial credit:</b> decided 2026-10-10: calibrate it against the blind guess (production-spec.md §3).</li>
   <li><b>CISPO clip:</b> decided 2026-10-10: restore the default. Learning rate 1e-5 for the second seed, 2e-5 in production only if it is stable (production-spec.md §5).</li>
   <li><b>Bridge names:</b> decided 2026-10-10: <code>llm</code> / <code>llm_batch</code> / <code>submit</code> / <code>context</code> (production-spec.md §1).</li>

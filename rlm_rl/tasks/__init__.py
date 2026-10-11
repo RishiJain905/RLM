@@ -8,11 +8,9 @@ Each family maps to the module that generates it. A generator module provides
 `make_task(seed, family, level, task_id)`, `MAX_LEVEL` and `GENERATOR_VERSION`, and every task
 it makes carries its blind guess in `task.grading` (spec §3).
 
-Plan step 7 adds the production families and decision 7a's domain mix (`DOMAIN_MIX`). The cyber
-domain's 35% share is still unbuilt (Rishi cut it from step 7 on 2026-10-11), so `production_mix()`
-refuses to make a mix without it unless told to leave it out. Families whose name ends in `_heldout`,
-`_select` or `_test` are eval-only (H7), and `check_mix()` keeps them, and any family that reads a
-source outside the licence bar (7b), out of training.
+Plan step 7 adds the production families and the domain mix (`DOMAIN_MIX`, decisions 7a and 7c).
+Families whose name ends in `_heldout`, `_select` or `_test` are eval-only (H7), and `check_mix()`
+keeps them, and any family that reads a source outside the licence bar (7b), out of training.
 """
 
 import importlib
@@ -32,9 +30,11 @@ GENERATORS = {
 }
 EVAL_ONLY_SUFFIXES = ("_heldout", "_select", "_test")
 
-# Decision 7a (Rishi, 2026-10-11): the production domain mix, and the training families that fill each domain.
-DOMAIN_MIX = {"cyber": 0.35, "aggregation": 0.30, "code": 0.20, "repo": 0.15}
-DOMAIN_FAMILIES = {"cyber": (), "aggregation": ("aggregation",), "code": ("callgraph", "needle"), "repo": ("repo_loc",)}
+# The production domain mix, and the training families that fill each domain. Decision 7a (Rishi, 2026-10-11) was
+# 35% cyber, 30% aggregation, 20% code, 15% repo. Decision 7c (Rishi, 2026-10-11) dropped cyber and split its 35%
+# between the code generators (+20) and aggregation (+15).
+DOMAIN_MIX = {"aggregation": 0.45, "code": 0.40, "repo": 0.15}
+DOMAIN_FAMILIES = {"aggregation": ("aggregation",), "code": ("callgraph", "needle"), "repo": ("repo_loc",)}
 
 
 def new_seed() -> int:
@@ -83,20 +83,10 @@ def training_sources(family: str) -> tuple[str, ...]:
     return tuple(getattr(generator(family), "TRAIN_SOURCES", ()))
 
 
-def missing_domains() -> list[str]:
-    return [domain for domain, families in DOMAIN_FAMILIES.items() if not families]
-
-
-def production_mix(leave_out_missing: bool = False) -> dict[str, float]:
-    """Decision 7a as family weights: each domain's share split evenly over its families. A domain with no
-    families yet (cyber) raises, unless `leave_out_missing`, which spreads the built domains over 100%."""
-    missing = missing_domains()
-    if missing and not leave_out_missing:
-        raise ValueError(f"domain(s) {missing} have no task family yet (cyber was deferred from plan step 7); "
-                         "pass leave_out_missing=True to train without them")
-    built = {d: w for d, w in DOMAIN_MIX.items() if DOMAIN_FAMILIES[d]}
-    total = sum(built.values())
-    return {f: w / total / len(DOMAIN_FAMILIES[d]) for d, w in built.items() for f in DOMAIN_FAMILIES[d]}
+def production_mix() -> dict[str, float]:
+    """The domain mix as family weights: each domain's share split evenly over its families."""
+    total = sum(DOMAIN_MIX.values())
+    return {f: w / total / len(DOMAIN_FAMILIES[d]) for d, w in DOMAIN_MIX.items() for f in DOMAIN_FAMILIES[d]}
 
 
 def check_mix(mix: dict[str, float]) -> None:

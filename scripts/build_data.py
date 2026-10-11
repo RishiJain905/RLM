@@ -2,6 +2,7 @@
 
     python scripts/build_data.py lca-git          # unpack each LCA repo archive's git data (once, ~10 GB)
     python scripts/build_data.py lca-index        # index the LCA Python items the repo-localization family uses
+    python scripts/build_data.py aggregation-pools  # the fixed sample of arXiv titles the aggregation family uses
     python scripts/build_data.py capability       # the ~100-prompt capability check (rlm_rl/capability.py format)
     python scripts/build_data.py all
 
@@ -91,6 +92,15 @@ def lca_index(args) -> None:
         log(f"lca-index {split}: kept {kept} of {len(rows)}; skipped {skipped}")
 
 
+# ----------------------------------------------------------------------------- aggregation pools
+
+
+def aggregation_pools(args) -> None:
+    out = data.build_arxiv_pool()
+    sizes = {label: len(texts) for label, texts in data.arxiv_title_pools().items()}
+    log(f"aggregation-pools: arXiv titles {sizes} -> {out}")
+
+
 # ----------------------------------------------------------------------------- capability check
 
 
@@ -111,11 +121,11 @@ def capability(args) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("what", choices=["lca-git", "lca-index", "capability", "all"])
+    parser.add_argument("what", choices=["lca-git", "lca-index", "aggregation-pools", "capability", "all"])
     parser.add_argument("--seed", type=int, default=7, help="the capability check's fixed sample")
     args = parser.parse_args()
-    steps = {"lca-git": [lca_git], "lca-index": [lca_index], "capability": [capability],
-             "all": [lca_git, lca_index, capability]}[args.what]
+    steps = {"lca-git": [lca_git], "lca-index": [lca_index], "aggregation-pools": [aggregation_pools],
+             "capability": [capability], "all": [lca_git, lca_index, aggregation_pools, capability]}[args.what]
     for step in steps:
         step(args)
     return 0
