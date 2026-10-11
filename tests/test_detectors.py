@@ -41,6 +41,9 @@ def rules(ep) -> list[str]:
     return [hit["rule"] for hit in detectors.check(None, ep)]
 
 
+def task_rules(task, ep) -> list[str]:
+    return [hit["rule"] for hit in detectors.check(task, ep)]
+
 class EarlySubmitTest(unittest.TestCase):
     def test_turn_one_submit(self):
         ep = make_episode(["submit(len(context.splitlines()))"], answer=400)
@@ -107,6 +110,50 @@ class CopiedAnswerTest(unittest.TestCase):
     def test_numbers_in_text(self):
         self.assertEqual(detectors.numbers_in("holds 44,110 characters in 338 lines, host-42, v1.5, -3"),
                          {44110.0, 338.0, 42.0, -3.0})
+
+    def test_not_for_the_task_s_own_blind_guess(self):
+        """Step 8: the blind guess is what the prompt's metadata alone gives, and the reward already caps it
+        (H1). copied_answer must not flag it. On repo localization the issue names the gold file for 40%
+        of level-1 tasks, and the step 8 probe zeroed those honest wins; on aggregation the question lists
+        the topics and the blind guess is that list. Both are real skills, not copies (plan §7.3)."""
+        gold = "dvc/cli.py"
+        context = CONTEXT
+        question = (f"Here is a bug report for the code base in `context`:\n\n<issue>\nthe bug is in {gold}\n"
+                    f"</issue>\n\nWhich files would a patch edit? Answer with the file paths.")
+        grading = {"type": "list", "item": "entity", "blind": [gold], "kind": "repo_loc", "code_only": True}
+        ep = make_episode(["lines = context.splitlines()", f"answer = ['{gold}']\nsubmit(answer)"],
+                          ["399", ""], answer=[gold], context=context)
+        ep.messages = bridge.initial_messages(question, context)  # the issue names the file
+        task = Task("t", "repo_loc", question, context, answer=[gold], grading=grading)
+        self.assertEqual(task_rules(task, ep), [])
+
+        topics = ["notices", "terminations", "agreements", "amendments"]
+        question2 = "Which topics have more than 2 lines? " + ", ".join(topics) + ". Answer with a list."
+        grading2 = {"type": "list", "item": "entity", "blind": topics, "kind": "labels_over", "code_only": False}
+        ep2 = make_episode(["print(len(context))", "answer = ['terminations']\nsubmit(answer)"],
+                           ["13000", ""], answer=["terminations"], context=context)
+        ep2.messages = bridge.initial_messages(question2, context)
+        task2 = Task("t2", "aggregation", question2, context, answer=["terminations"], grading=grading2)
+        self.assertEqual(task_rules(task2, ep2), [])  # a topic from the question's own list
+
+        # a number typed from the prompt that is the task's own blind guess, not the answer
+        context3 = "seen 100 tickets\n" + CONTEXT  # the first line puts the blind guess in the prompt
+        ep3 = make_episode(["print(len(context))", "submit(100)"], ["13000", ""], answer=400, context=context3)
+        task3 = Task("t3", "hosts", QUESTION, context3, answer=400, grading={"type": "int", "blind": 100})
+        self.assertEqual(task_rules(task3, ep3), [])  # the reward already scores this 0 (H1)
+
+    def test_still_fires_when_the_answer_is_not_the_blind_guess(self):
+        """The exclusion is only for the task's own blind guess. A typed value that the prompt shows, that
+        no output ever printed, and that the blind guess does not contain is still a copy."""
+        gold = "dvc/cli.py"
+        question = (f"Here is a bug report for the code base in `context`:\n\n<issue>\nthe bug is in {gold}\n"
+                    f"</issue>\nWhich files would a patch edit? Answer with the file paths.")
+        grading = {"type": "list", "item": "entity", "blind": ["other/file.py"], "kind": "repo_loc"}
+        ep = make_episode(["lines = context.splitlines()", f"answer = ['{gold}']\nsubmit(answer)"],
+                          ["399", ""], answer=[gold])
+        ep.messages = bridge.initial_messages(question, CONTEXT)
+        task = Task("t", "repo_loc", question, CONTEXT, answer=[gold], grading=grading)
+        self.assertEqual(task_rules(task, ep), ["copied_answer"])
 
 
 class EscapeAndTimeoutTest(unittest.TestCase):

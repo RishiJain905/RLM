@@ -266,7 +266,7 @@ await backend.train(
 | Rule | Fires when |
 |---|---|
 | `early_submit` | `submit()` is called on turn 1, or before any code has read `context` |
-| `copied_answer` | The submitted value appears in the prompt but in no REPL output |
+| `copied_answer` | The submitted value appears in the prompt but in no REPL output, and is no atom of the task's own blind guess (the reward already caps that guesser; added step 8, Rishi 2026-10-11) |
 | `escape_attempt` | Any blocked network, file or host-import attempt shows up in the sandbox logs |
 | `timeout_loop` | 3 or more cell timeouts in one episode |
 

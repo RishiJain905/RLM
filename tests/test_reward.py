@@ -3,9 +3,12 @@
     python3 -m unittest -v tests.test_reward
 """
 
+import random
 import statistics
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
+
 
 from rlm_rl import data, reward, tasks
 from rlm_rl.reward import blind_score, near_miss_credit, normalize_entity, parse_number, score, score_answer, set_f1
@@ -146,5 +149,54 @@ class BlindGuesserTest(unittest.TestCase):
                     self.assertTrue(all(r in (0.0, 1.0) for r in rewards))
 
 
+class RewardCheckScriptTest(unittest.TestCase):
+    """Step 8: scripts/reward_check.py must score every family a generator can make, and a family mixes
+    answer types (spec §3). The step 5 script read t.grading['blind'] and subtracted list from list, so it
+    crashed (KeyError / TypeError) on the needle, aggregation, callgraph and repo_loc families -- the four
+    that step 7 added. This pins the fix: each answer type dispatches through the real scorer."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        cls.script = importlib.util.module_from_spec(
+            importlib.util.spec_from_file_location(
+                "reward_check", Path(__file__).resolve().parents[1] / "scripts" / "reward_check.py"))
+        cls.script.__loader__.exec_module(cls.script)
+
+    def fake_task(self, kind: str):
+        shapes = {
+            "int": (SimpleNamespace(answer=70, grading={"type": "int", "blind": 60}),),
+            "float": (SimpleNamespace(answer=1234.5, grading={"type": "float", "blind": 100.0}),),
+            "entity": (SimpleNamespace(answer="ws-07", grading={"type": "entity"}),),  # no blind guess
+            "list": (SimpleNamespace(answer=["a", "b", "c", "d"], grading={"type": "list", "item": "entity",
+                                                                           "blind": ["a", "b", "c", "d", "e", "f"]}),),
+        }
+        return shapes[kind][0]
+
+    def test_guess_rewards_dispatches_by_answer_type(self):
+        rng = random.Random(0)
+        for kind in ("int", "float", "entity", "list"):
+            row = self.script.guess_rewards(self.fake_task(kind), rng)  # crashed here before the fix
+            with self.subTest(kind=kind):
+                self.assertEqual(sorted(row), sorted(["offset", "noisy_half", "noisy_one",
+                                                      "reader1", "reader2", "reader3"]))
+                self.assertTrue(all(0.0 <= v <= 1.0 for v in row.values()), row)
+                if kind == "entity":
+                    self.assertEqual(sorted(row.values()), [0.0] * 6)  # a name has no guess and no credit
+
+    def test_blind_score_of_each_shape(self):
+        for kind in ("int", "float", "entity", "list"):
+            s = blind_score(self.fake_task(kind))  # the entity shape raised KeyError('blind') before
+            with self.subTest(kind=kind):
+                self.assertLessEqual(s.reward, float(s.correct))
+
+    def test_check_family_runs_a_real_family(self):
+        """End to end over the generator, on a family whose tasks the step 5 script could score."""
+        r = self.script.check_family("tickets_customer", 1, 6, seed=1)
+        self.assertEqual((r["n"], r["types"]), (6, {"int": 6}))
+        self.assertTrue(r["passes"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
