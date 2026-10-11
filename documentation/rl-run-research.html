@@ -635,9 +635,9 @@ CISPO loss on those tokens ──► LoRA update</pre></div>
 <ol class="steps">
   <li><b>Inference split:</b> second seed ~$12, baselines ~$5, production ceiling ~$150, selection-set evals ~$25, reserve ~$25, final eval outside W&amp;B?</li>
   <li><b>Domain mix:</b> ~35% cyber / 20% code / 30% OOLONG / 15% repo localization, or more code and cyber?</li>
-  <li><b>Partial credit:</b> calibrate it against the blind guess (recommended), or drop it?</li>
-  <li><b>CISPO clip:</b> restore the default now that RLSD is gone (recommended)?</li>
-  <li><b>Bridge names:</b> <code>llm</code> / <code>llm_batch</code> / <code>submit</code> (recommended)?</li>
+  <li><b>Partial credit:</b> decided 2026-10-10: calibrate it against the blind guess (production-spec.md §3).</li>
+  <li><b>CISPO clip:</b> decided 2026-10-10: restore the default. Learning rate 1e-5 for the second seed, 2e-5 in production only if it is stable (production-spec.md §5).</li>
+  <li><b>Bridge names:</b> decided 2026-10-10: <code>llm</code> / <code>llm_batch</code> / <code>submit</code> / <code>context</code> (production-spec.md §1).</li>
   <li><b>Deployed sub-calls:</b> the base model (as trained) or the trained LoRA?</li>
 </ol>
 </div>

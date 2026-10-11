@@ -444,9 +444,9 @@ About $25 stays in reserve. Each phase that spends inference waits for Rishi's g
 
 1. **Inference split:** second seed ~$12, baselines ~$5, production ceiling ~$150, selection-set evals ~$25, reserve ~$25, final eval outside W&B?
 2. **Domain mix:** ~35% cyber / 20% code / 30% OOLONG / 15% repo localization, or more code and cyber?
-3. **Partial credit:** calibrate it against the blind guess (recommended), or drop it?
-4. **CISPO clip:** restore the default now that RLSD is gone (recommended)?
-5. **Bridge names:** `llm` / `llm_batch` / `submit` (recommended)?
+3. **Partial credit:** **decided 2026-10-10: calibrate it against the blind guess.** See [production-spec.md](production-spec.md) §3.
+4. **CISPO clip:** **decided 2026-10-10: restore the default** (`epsilon=1.0`, `epsilon_high=4.0` in ART 0.5.20). Learning rate also settled: 1e-5 for the second seed, 2e-5 in production only if the second seed is stable. See [production-spec.md](production-spec.md) §5.
+5. **Bridge names:** **decided 2026-10-10: `llm` / `llm_batch` / `submit` / `context`.** See [production-spec.md](production-spec.md) §1.
 6. **Deployed sub-calls:** the base model, as trained, or the trained LoRA?
 
 ---
