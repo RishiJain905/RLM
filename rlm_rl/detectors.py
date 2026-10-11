@@ -45,7 +45,7 @@ _NUMBER_TEXT_RE = re.compile(r"(?:(?<![\w.])-)?(?<![\w.])(?:\d{1,3}(?:,\d{3})+|\
 def settings() -> dict:
     """The pinned detector rules and thresholds, for the run's config.json (spec §8)."""
     return {"rules": list(RULES), "escape_kinds": sorted(ESCAPE_KINDS), "timeout_loop_min": TIMEOUT_LOOP_MIN,
-            "copy_min_chars": COPY_MIN_CHARS, "copy_skip_blind": True}
+            "copy_min_number": COPY_MIN_NUMBER, "copy_min_chars": COPY_MIN_CHARS, "copy_skip_blind": True}
 
 
 def numbers_in(text: str) -> set[float]:
@@ -100,6 +100,11 @@ def _blind_atoms(task: Any) -> tuple[set, set]:
     caps what it earns (H1: no more than its exact-hit rate). copied_answer must not flag it (step 8,
     plan §7.3): at level 1 the repo-localization issue itself names the gold file for 40% of tasks,
     and the old rule zeroed those honest wins -- 9 of the 13 fired honest episodes in the step 8 probe.
+
+    Where the blind guess is every name the task can have (callgraph: every function; aggregation
+    labels_over: every topic; users_with_label: every user), every possible answer is made of its atoms,
+    so copied_answer never fires on those tasks. That is intended: there the rule cannot tell copying
+    from reading, and the reward bounds any subset guesser (step 8: 0.16 at most, vs 0.53+ honest).
     """
     if task is None:
         return set(), set()

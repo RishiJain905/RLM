@@ -108,6 +108,16 @@ All tables from `scripts/reward_check.py` (slope 1, the spec):
 
 Files changed (committed and pushed to `claude/project-thread-9nnh3n`, Rishi's approval 2026-10-11): `rlm_rl/detectors.py`, `scripts/reward_check.py`, `tests/test_detectors.py` (+2 tests), `tests/test_reward.py` (+1 test class, 3 tests), `manifests/data-check.json` (regenerated, timing-only diff), `documentation/production-spec.md` (§7 `copied_answer` row) and this file. Probe artifacts kept in `.art/step8/` (git-ignored). The dry-run scaffold (`results/dry/nb4*`) was removed after recording.
 
+### Review follow-up (2026-10-11)
+
+An independent review found the step 8 commit (4764edd) clean and the gate verdict sound, with three small fixes, applied in the next commit at Rishi's request:
+
+1. `detectors.settings()` had dropped `copy_min_number` from the run's config record (the threshold of 100 was still enforced). Restored.
+2. `RewardCheckScriptTest` did not reproduce the old crash: `test_blind_score_of_each_shape` passes on the step 5 code (it tests `reward.py`, which step 8 did not change), and the end-to-end test only ran `tickets_customer`, which never crashed. It is now `test_check_family_runs_real_families` over `tickets_customer`, `callgraph` and `needle`; on the step 5 script it fails with the original `TypeError` (callgraph) and `KeyError: 'blind'` (needle).
+3. The blind-guess exemption is broader than finding 1's wording: on `callgraph` and aggregation's `labels_over` and `users_with_label` the blind guess is every possible name, so `copied_answer` never fires on those tasks. Intended (the rule cannot tell copying from reading there, and the reward bounds subset guessers at 0.16 at most); now stated in `_blind_atoms`' docstring and the spec §7 row. The review also checked that one blind atom letting a whole repo_loc list through opens nothing: on the probe's 60 repo_loc tasks, the blind guess plus the file shown in the prompt sample is exact 3 times vs 22 for the blind guess alone.
+
+Re-run in a cloud copy without Docker or the D: data: 210 tests collected, 191 pass, 19 skip (Docker image, step 7 data, LCA index, tokenizer), 0 fail. The full suite with Docker and data runs on the PC.
+
 ## Known residual items (accepted, not bugs)
 
 - Offset/noisy guessing earns 0.118-0.206 on the ticket families and ≤0.165 elsewhere (inside the accepted 0.13-0.21 band; 5b keeps slope 1). `near_blind` (flat in the dry run) and the audit watch for drift.

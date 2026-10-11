@@ -186,15 +186,18 @@ class RewardCheckScriptTest(unittest.TestCase):
 
     def test_blind_score_of_each_shape(self):
         for kind in ("int", "float", "entity", "list"):
-            s = blind_score(self.fake_task(kind))  # the entity shape raised KeyError('blind') before
+            s = blind_score(self.fake_task(kind))  # H1 on each shape the script feeds it
             with self.subTest(kind=kind):
                 self.assertLessEqual(s.reward, float(s.correct))
 
-    def test_check_family_runs_a_real_family(self):
-        """End to end over the generator, on a family whose tasks the step 5 script could score."""
-        r = self.script.check_family("tickets_customer", 1, 6, seed=1)
-        self.assertEqual((r["n"], r["types"]), (6, {"int": 6}))
-        self.assertTrue(r["passes"])
+    def test_check_family_runs_real_families(self):
+        """End to end over the generators. The step 5 script crashed on callgraph (TypeError, list - list) and
+        needle (KeyError 'blind'); both build without the D: data, so they pin the fix here."""
+        for family, kind in (("tickets_customer", "int"), ("callgraph", "list"), ("needle", "entity")):
+            with self.subTest(family=family):
+                r = self.script.check_family(family, 1, 3, seed=1)
+                self.assertEqual((r["n"], r["types"]), (3, {kind: 3}))
+                self.assertTrue(r["passes"])
 
 
 if __name__ == "__main__":
