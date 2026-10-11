@@ -41,6 +41,7 @@ Production code (built against `documentation/production-spec.md`):
 - `rlm_rl/capability_set.py` - builds its 100 prompts (IFEval, MMLU-Pro, CRUXEval, chat) onto the data root
 - `rlm_rl/data.py` - where the datasets live (`D:\RLM-data`, outside git), each source's licence and role, the licence bar, and the labelled text pools
 - `rlm_rl/backend.py` - the loop's view of W&B serverless RL through ART: train, checkpoints, forks, logging
+- `rlm_rl/dashboard.py` and `dashboard_page.html` - the live dashboard: an allowlisted copy of `results/<run>.json` and a few sampled training rollouts, embedded in one self-contained page, and the scan that keeps keys, seeds and eval items off it
 - `rlm_rl/tasks/` - host-only task generation (random 64-bit seeds; eval seed lists go in the git-ignored `private/`), the family registry and decision 7a's domain mix, and the families, each with five difficulty levels:
   - `tickets.py` - the ticket tasks (the second seed's families, held out of production)
   - `aggregation.py` - OOLONG-style aggregation over labelled texts (CLINC150, MASSIVE, LEDGAR contract provisions, arXiv titles), plus a held-out variant on HuffPost headlines
@@ -55,6 +56,7 @@ Production code (built against `documentation/production-spec.md`):
 - `scripts/data_check.py` - plan step 7's checks (H7, H8, H1, licences, the mix, the eval sets), written to `manifests/data-check.json`
 - `scripts/backtest_detectors.py` - replays the 20-step run's episodes through the detectors to count false alarms
 - `scripts/train.py` - start, stop, resume and check a training run, live or as a dry run against fakes (`--dry-run`, no W&B, no credit)
+- `scripts/dashboard.py` - build and check the live dashboard page, and wait for each new step so a Claude session can republish it (`documentation/step-9-results.md`)
 - `tests/` - regression tests; run them inside WSL2 with `.venv-linux/bin/python scripts/sandbox_ctl.py check`. `tests/fake_model.py` is a local stand-in for the W&B model server, so tests never spend credit; `tests/dryrun.py` runs the whole training loop against it and a fake backend
 
 The sandbox runs from WSL2 (Ubuntu) with Docker Desktop's WSL integration turned on.

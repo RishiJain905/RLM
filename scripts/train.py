@@ -76,6 +76,8 @@ async def run_dry(args, cfg) -> dict:
     from tests.dryrun import DryRun
 
     async with DryRun(results_dir(args), seed=args.seed, persist=True) as dry:
+        if args.latency:  # slows the fake server to a live run's pace, e.g. for the dashboard (plan step 9)
+            dry.server.latency = (args.latency * 0.5, args.latency * 1.5)
         run = dry.training_run(args.run, cfg=cfg, prune=not args.no_prune, stop_after=args.stop_after)
         install_stop_handler(run)
         return await go(run, args, cfg)
@@ -147,6 +149,8 @@ def main() -> int:
         p.add_argument("--no-prune", action="store_true", help="keep every checkpoint")
         p.add_argument("--results", help="results folder (default results/, or results/dry/ for a dry run)")
         p.add_argument("--seed", type=int, default=0, help="dry run only: the fake policy's seed")
+        p.add_argument("--latency", type=float, default=0.0,
+                       help="dry run only: mean seconds the fake server takes per request, to pace the run")
         if name == "start":
             p.add_argument("--kind", choices=config.RUN_KINDS, required=True)
             p.add_argument("--max-steps", type=int, help="override the run kind's step limit")

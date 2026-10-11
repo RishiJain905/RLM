@@ -14,3 +14,5 @@ results/*/pending/
 results/*/capability/
 results/*/abandoned/
 results/dry/
+results/dashboard/
+.playwright-mcp/

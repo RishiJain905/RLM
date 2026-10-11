@@ -1,0 +1,1008 @@
+<title>RLM Live Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a sticky instrument strip over one column of labelled panels; every chart is a small multiple on one shared step axis. Chrome stays monochrome so colour only ever means data or status. */
+:root {
+  --bg: #f2f4f7; --panel: #ffffff; --wash: #eceff4; --ink: #0f1621; --ink-2: #4a5565; --muted: #7d8898;
+  --line: #e1e5eb; --axis: #c2c9d3; --ring: rgba(15, 22, 33, 0.10);
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #008300; --c7: #4a3aa7; --c8: #e34948;
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+  --good-ink: #006300; --warn-ink: #7a5200; --serious-ink: #a4441c; --crit-ink: #ad2727;
+  --seq-0: #eef4fc; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
+  --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: #ffffff; --seq-t-5: #ffffff; --seq-t-6: #ffffff;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.78rem; --step-0: 0.9rem; --step-1: 1.05rem; --step-2: 1.35rem; --step-3: 1.9rem;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+    --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+    --good-ink: #3fc23f; --warn-ink: #f5bd47; --serious-ink: #f09a77; --crit-ink: #ec7373;
+    --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+    --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: var(--ink); --seq-t-5: #0b0e13; --seq-t-6: #0b0e13;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+  --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+  --good-ink: #3fc23f; --warn-ink: #f5bd47; --serious-ink: #f09a77; --crit-ink: #ec7373;
+  --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+  --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: var(--ink); --seq-t-5: #0b0e13; --seq-t-6: #0b0e13;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.45; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--c1); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; }
+
+/* instrument strip */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; gap: 8px; padding-block: 12px 0; }
+.idrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 0; font-family: var(--font-display); font-stretch: 100%; font-weight: 800; font-size: var(--step-2); letter-spacing: -0.01em; text-wrap: balance; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: var(--step--1); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.badge.dry { border-color: var(--warn); color: var(--warn-ink); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-weight: 600; font-size: var(--step--1); border: 1px solid currentColor; white-space: nowrap; }
+.pill .ic { font-family: var(--font-data); font-size: 0.8em; }
+.t-good { color: var(--good-ink); } .t-warn { color: var(--warn-ink); } .t-serious { color: var(--serious-ink); } .t-crit { color: var(--crit-ink); } .t-muted { color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+.running .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 600; }
+.reason { font-size: var(--step--1); color: var(--ink-2); max-width: 90ch; }
+.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+.nav::-webkit-scrollbar { display: none; }
+.nav a { flex: none; padding: 8px 10px 9px; font-size: var(--step--1); font-weight: 600; color: var(--ink-2); text-decoration: none; border-bottom: 2px solid transparent; }
+.nav a:hover { color: var(--ink); border-bottom-color: var(--axis); }
+.banner { margin-block: 12px 0; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); color: var(--ink); font-size: var(--step--1); }
+.toast { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 40; background: var(--ink); color: var(--panel); padding: 8px 12px; border-radius: var(--radius); font-size: var(--step--1); font-weight: 600; box-shadow: 0 4px 18px var(--ring); }
+
+/* panels */
+main { display: grid; gap: 18px; padding-block: 18px 40px; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 14px; min-width: 0; scroll-margin-top: 150px; }
+.phead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.phead h2 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); letter-spacing: 0; text-wrap: balance; }
+.phead p { margin: 4px 0 0; color: var(--ink-2); font-size: var(--step--1); max-width: 78ch; }
+.flag { font: inherit; font-size: var(--step--1); font-weight: 600; color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; white-space: nowrap; }
+.flag:hover { color: var(--ink); border-color: var(--axis); background: var(--wash); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 14px 16px; }
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.sub { font-size: var(--step--1); color: var(--ink-2); }
+.empty { color: var(--muted); font-size: var(--step--1); padding: 10px 0; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.tile .lab { font-size: var(--step--1); color: var(--ink-2); font-weight: 600; }
+.tile .val { font-size: var(--step-3); font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
+.tile .val small { font-size: var(--step-0); font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.tile .ctx { font-size: var(--step--1); color: var(--ink-2); }
+.tile svg { width: 100%; height: 30px; display: block; margin-top: 4px; }
+
+/* charts */
+figure.chart { margin: 0; display: grid; gap: 4px; min-width: 0; }
+figure.chart figcaption { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0 10px; }
+.c-title { font-weight: 600; font-size: var(--step--1); color: var(--ink); }
+.c-val { font-family: var(--font-data); font-size: var(--step--1); font-weight: 600; color: var(--ink); white-space: nowrap; }
+.c-note { grid-column: 1 / -1; font-size: 0.74rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 0.74rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.key { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.key.box { width: 9px; height: 9px; border-radius: 2px; }
+.key.ghost { background: var(--muted) !important; opacity: 0.6; }
+.plot { position: relative; min-width: 0; border-radius: 4px; }
+.plot svg { display: block; overflow: visible; }
+.plot:focus-visible { outline-offset: 0; }
+.grid-l { stroke: var(--line); stroke-width: 1; }
+.base-l { stroke: var(--axis); stroke-width: 1; }
+.ax-t { fill: var(--muted); font-family: var(--font-data); font-size: 10px; font-variant-numeric: tabular-nums; }
+.ref-l { stroke: var(--ink-2); stroke-width: 1; opacity: 0.55; }
+.ref-t { fill: var(--ink-2); font-size: 10px; font-family: var(--font-body); }
+.xmark-l { stroke: var(--crit); stroke-width: 1; opacity: 0.7; }
+.xmark-t { fill: var(--crit-ink); font-size: 10px; font-weight: 600; }
+.cross { stroke: var(--ink-2); stroke-width: 1; }
+.end-t { font-size: 10px; fill: var(--ink-2); font-family: var(--font-body); }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--axis); border-radius: var(--radius); padding: 8px 10px; font-size: 0.76rem; box-shadow: 0 6px 20px var(--ring); max-width: 280px; }
+.tip .th { font-family: var(--font-data); color: var(--ink-2); margin-bottom: 4px; }
+.tip .tr { display: grid; grid-template-columns: 14px auto 1fr; align-items: center; gap: 6px; }
+.tip .tr b { font-family: var(--font-data); font-weight: 600; }
+.tip .tr span:last-child { color: var(--ink-2); }
+
+/* meters */
+.meters { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.meter { display: grid; gap: 5px; }
+.meter .row { display: flex; justify-content: space-between; gap: 10px; font-size: var(--step--1); }
+.meter .row b { font-family: var(--font-data); }
+.track { height: 8px; border-radius: 4px; background: var(--seq-1); overflow: hidden; }
+.fill { height: 100%; border-radius: 4px; background: var(--c1); }
+.fill.warn { background: var(--warn); } .fill.crit { background: var(--crit); }
+
+/* heatmap, tables */
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; font-size: var(--step--1); width: 100%; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.74rem; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.heat td.cell { text-align: center; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 64px; border: 2px solid var(--panel); border-radius: 4px; }
+.heat td.cell small { display: block; font-size: 0.66rem; opacity: 0.8; }
+.heat td.fam { font-weight: 600; }
+.heat td.now { box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* rules, notices, samples */
+.rules { display: grid; gap: 8px; }
+.rule { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 4px 14px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rule:last-child { border-bottom: 0; }
+.rule .nm { font-weight: 650; }
+.rule .nm small { display: block; color: var(--muted); font-weight: 500; font-size: 0.72rem; }
+.rule .tx { font-size: var(--step--1); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.notices { list-style: none; margin: 0; padding: 0; display: grid; max-height: 520px; overflow: auto; border-top: 1px solid var(--line); }
+.notices li { display: grid; grid-template-columns: 92px 64px 1fr; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: var(--step--1); align-items: baseline; }
+.notices time, .notices .st { font-family: var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.notices .kd { font-weight: 650; margin-right: 6px; }
+.samples { display: grid; gap: 8px; }
+details.sample { border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+details.sample > summary { cursor: pointer; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; list-style: none; }
+details.sample > summary::-webkit-details-marker { display: none; }
+details.sample > summary::before { content: "+"; font-family: var(--font-data); color: var(--muted); width: 10px; }
+details.sample[open] > summary::before { content: "\2212"; }
+details.sample > summary .meta { font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); }
+.sbody { padding: 0 12px 12px; display: grid; gap: 10px; min-width: 0; }
+.sbody h4 { margin: 6px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-family: var(--font-display); font-stretch: 112%; }
+.sbody p { margin: 0; max-width: 80ch; }
+pre { margin: 0; font-family: var(--font-data); font-size: 0.74rem; line-height: 1.5; background: var(--wash); border-radius: 4px; padding: 8px 10px; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word; }
+.turn { display: grid; gap: 6px; border-left: 2px solid var(--line); padding-left: 10px; min-width: 0; }
+.verdict { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: var(--step--1); }
+.verdict dt { color: var(--ink-2); } .verdict dd { margin: 0; font-family: var(--font-data); word-break: break-word; }
+.btn { font: inherit; font-size: var(--step--1); font-weight: 600; border: 1px solid var(--ink); background: var(--ink); color: var(--panel); border-radius: var(--radius); padding: 6px 12px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--ink); }
+textarea.csv { width: 100%; min-height: 120px; font-family: var(--font-data); font-size: 0.72rem; background: var(--wash); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+footer { color: var(--ink-2); font-size: var(--step--1); padding-block: 0 40px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 92ch; }
+@media (max-width: 640px) {
+  .notices li { grid-template-columns: 70px 1fr; }
+  .notices li .st { display: none; }
+  .rule { grid-template-columns: 1fr; }
+  section.panel { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .running .dot { animation: none; } * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <div class="idrow">
+      <span class="eyebrow">RLM · GRPO on W&amp;B serverless · Qwen3.8-27B LoRA</span>
+    </div>
+    <div class="idrow">
+      <h1 id="run-name">RLM live run</h1>
+      <span id="kind" class="badge"></span>
+      <span id="dry" class="badge dry" hidden>Dry run: fake model, no W&amp;B, $0</span>
+      <span id="status" class="pill"></span>
+    </div>
+    <div id="reason" class="reason" hidden></div>
+    <div class="readout" id="readout"></div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview">Overview</a><a href="#cost">Cost</a><a href="#pass">Pass rates</a><a href="#policy">Policy health</a>
+      <a href="#behaviour">RLM behaviour</a><a href="#reward">Reward and cheating</a><a href="#infra">Infra and timing</a>
+      <a href="#evals">Evals</a><a href="#rules">Stop rules</a><a href="#notices">Notices</a><a href="#samples">Transcripts</a><a href="#data">Data</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="stale" class="banner" hidden></div>
+  <main id="main">
+    <section class="panel" id="overview" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Overview</div><h2>Where the run stands</h2><p id="overview-sub"></p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="panel" id="cost" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/cost</div><h2>Inference spend</h2><p>Every rollout, sub-call, KL re-score and eval is paid from the W&amp;B inference pot. These are the loop's estimates at the research's prices; W&amp;B's billing page is the truth.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="meters" id="meters"></div>
+      <div class="grid" id="cost-charts"></div>
+    </section>
+
+    <section class="panel" id="pass" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p>Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="pass-charts"></div>
+      <div class="grid wide" id="pass-extra"></div>
+    </section>
+
+    <section class="panel" id="policy" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/policy · actor</div><h2>Policy health</h2><p>Entropy and within-group reward std are the collapse signals behind the learning-rate rule. Grey lines are the thresholds the loop checks.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="policy-charts"></div>
+    </section>
+
+    <section class="panel" id="behaviour" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/shape</div><h2>RLM behaviour</h2><p>How the root model uses the REPL: sub-calls against its budget of 30, turns against the cap of 12, and how long its transcripts get.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="behaviour-charts"></div>
+    </section>
+
+    <section class="panel" id="reward" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/reward</div><h2>Reward and cheating</h2><p>Exact accuracy is the headline. A firing hack detector zeroes the rollout's reward before the group mean, so a hack becomes a negative example.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="reward-charts"></div>
+      <div id="audits"></div>
+    </section>
+
+    <section class="panel" id="infra" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/infra · rlm/time</div><h2>Infra and timing</h2><p>Infra episodes never reach training. Above 1% the run pauses for Rishi.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="infra-charts"></div>
+    </section>
+
+    <section class="panel" id="evals" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">val</div><h2>Evals</h2><p id="evals-sub"></p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid wide" id="eval-charts"></div>
+      <div id="eval-table"></div>
+    </section>
+
+    <section class="panel" id="rules" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Stop rules</div><h2>What would stop or pause the run</h2><p>Checked after every step. A stop keeps the best checkpoint; a pause waits for Rishi. Every stop can be resumed.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="rules" id="rule-list"></div>
+    </section>
+
+    <section class="panel" id="notices" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Notices</div><h2>Operator log</h2><p>Incidents and interventions: pauses, fixes, rollbacks, level moves and resumes, newest first.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="chips" id="notice-filter" role="group" aria-label="Filter notices"></div>
+      <ul class="notices" id="notice-list"></ul>
+    </section>
+
+    <section class="panel" id="samples" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Sampled transcripts</div><h2>Training rollouts</h2><p>A win and a failure from each step, plus any rollout a detector flagged. Samples from the newest steps and from every eval checkpoint are kept. Text is cut short; eval transcripts never appear here.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="chips" id="sample-filter" role="group" aria-label="Filter transcripts"></div>
+      <div class="samples" id="sample-list"></div>
+    </section>
+
+    <section class="panel" id="data" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Table view</div><h2>The latest steps</h2><p>The numbers behind the charts. Copy every step as CSV to look at them yourself.</p></div><div class="chips"><button class="btn ghost" type="button" id="copy-csv">Copy all steps as CSV</button></div></div>
+      <div class="scroll" id="step-table"></div>
+      <textarea class="csv" id="csv-box" readonly hidden aria-label="Steps as CSV"></textarea>
+    </section>
+  </main>
+  <footer>
+    <p id="foot-src"></p>
+    <p>Never on this page: keys, task seeds, eval seed lists, eval tasks or benchmark items, and checkpoint names. Every build is scanned for them before it is published.</p>
+    <p>Friends watching: flag anything that looks off with a section's Flag button or comment mode. Rishi decides whether to stop, fix or resume the run.</p>
+  </footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="application/json" id="dash-data">/*__DASHBOARD_DATA__*/null</script>
+<script>
+(function () {
+  "use strict";
+  var D = null;
+  try { D = JSON.parse(document.getElementById("dash-data").textContent); } catch (e) { D = null; }
+  if (!D || !D.run) {
+    document.getElementById("main").innerHTML = "";
+    var p = document.createElement("p"); p.className = "empty"; p.textContent = "No run data in this page yet.";
+    document.getElementById("main").appendChild(p);
+    return;
+  }
+
+  // ------------------------------------------------------------------ helpers
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function get(o, path) { for (var i = 0; i < path.length; i++) { if (o == null) return null; o = o[path[i]]; } return o == null ? null : o; }
+  function median(a) { a = a.filter(isNum).slice().sort(function (x, y) { return x - y; }); if (!a.length) return null; var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+  function mean(a) { a = a.filter(isNum); return a.length ? a.reduce(function (s, v) { return s + v; }, 0) / a.length : null; }
+  var F = {
+    pct: function (v) { return isNum(v) ? (v * 100).toFixed(Math.abs(v) >= 0.995 || v === 0 ? 0 : 1) + "%" : "–"; },
+    pct2: function (v) { return isNum(v) ? (v * 100).toFixed(2) + "%" : "–"; },
+    num: function (v) { if (!isNum(v)) return "–"; var a = Math.abs(v); if (a >= 10000) return Math.round(v).toLocaleString("en-US"); if (a >= 100) return v.toFixed(0); if (a >= 10) return v.toFixed(1); if (a >= 1) return v.toFixed(2); if (a === 0) return "0"; return v.toPrecision(3); },
+    int: function (v) { return isNum(v) ? Math.round(v).toLocaleString("en-US") : "–"; },
+    usd: function (v) { return isNum(v) ? "$" + (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) : "–"; },
+    usd3: function (v) { return isNum(v) ? "$" + v.toFixed(3) : "–"; },
+    secs: function (v) { if (!isNum(v)) return "–"; if (v < 90) return v.toFixed(v < 10 ? 1 : 0) + " s"; if (v < 5400) return (v / 60).toFixed(1) + " min"; return (v / 3600).toFixed(1) + " h"; },
+    mins: function (v) { return isNum(v) ? (v / 60).toFixed(v < 600 ? 1 : 0) : "–"; },
+    lr: function (v) { if (!isNum(v)) return "–"; if (v === 0) return "0"; return v.toExponential(1).replace(".0e", "e"); },
+    compact: function (v) { if (!isNum(v)) return "–"; var a = Math.abs(v); if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M"; if (a >= 1e4) return (v / 1e3).toFixed(0) + "K"; if (a >= 1e3) return (v / 1e3).toFixed(1) + "K"; return F.num(v); }
+  };
+  function clock(t) { if (!isNum(t)) return "–"; var d = new Date(t * 1000); return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function stamp(t) { if (!isNum(t)) return "–"; var d = new Date(t * 1000); return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + clock(t); }
+  function ago(t) { if (!isNum(t)) return ""; var s = Math.max(0, Date.now() / 1000 - t); if (s < 60) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago"; if (s < 86400) return (s / 3600).toFixed(1) + " h ago"; return Math.round(s / 86400) + " d ago"; }
+
+  var run = D.run, cfg = run.config || {}, steps = D.steps || [], evals = D.evals || [];
+  var last = steps.length ? steps[steps.length - 1] : null;
+  var FAMILY_SLOT = { aggregation: 1, callgraph: 2, needle: 3, repo_loc: 4, repo_loc_select: 4, tickets_all: 6, tickets_customer: 7 };
+  var fams = Object.keys(cfg.mix || {});
+  steps.forEach(function (r) { Object.keys(r.families || {}).forEach(function (f) { if (fams.indexOf(f) < 0) fams.push(f); }); });
+  var spare = [5, 8, 7, 6];
+  fams.forEach(function (f) { if (!FAMILY_SLOT[f]) FAMILY_SLOT[f] = spare.shift() || 8; });
+  function famColor(f) { return "var(--c" + (FAMILY_SLOT[f] || 8) + ")"; }
+  function famLabel(f) { return f.replace(/_/g, " "); }
+
+  // shared step axis: 0 .. the last step seen (at least 10)
+  var lastStep = 0;
+  steps.forEach(function (r) { lastStep = Math.max(lastStep, r.step); });
+  (D.abandoned || []).forEach(function (a) { (a.steps || []).forEach(function (r) { lastStep = Math.max(lastStep, r.step); }); });
+  evals.forEach(function (e) { lastStep = Math.max(lastStep, e.checkpoint || 0); });
+  var X0 = 0, X1 = Math.max(10, lastStep);
+
+  function series(label, color, f, opts) {
+    opts = opts || {};
+    var pts = [];
+    steps.forEach(function (r) { var v = f(r); if (isNum(v)) pts.push([r.step, v]); });
+    return Object.assign({ label: label, color: color, pts: pts }, opts);
+  }
+  function ghosts(f) {
+    return (D.abandoned || []).map(function (a, i) {
+      var pts = []; (a.steps || []).forEach(function (r) { var v = f(r); if (isNum(v)) pts.push([r.step, v]); });
+      return { label: "rolled back (branch " + a.branch + ")", ghost: true, pts: pts };
+    }).filter(function (s) { return s.pts.length; });
+  }
+  function rollbackMarks() {
+    return (D.abandoned || []).map(function (a) { return { x: a.after, label: "rollback" }; });
+  }
+
+  // ------------------------------------------------------------------ charts
+  var registry = [], tip = $("tip");
+  var ro = typeof ResizeObserver === "function" ? new ResizeObserver(function (entries) {
+    entries.forEach(function (en) { var c = en.target.__chart; if (c && Math.abs(en.contentRect.width - c.w) > 2) c.draw(); });
+  }) : null;
+
+  function niceTicks(lo, hi, n) {
+    if (lo === hi) { hi = lo + (lo === 0 ? 1 : Math.abs(lo) * 0.5); lo = lo === 0 ? 0 : lo - Math.abs(lo) * 0.5; }
+    var span = hi - lo, raw = span / Math.max(1, n), mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+    var step = (r >= 5 ? 10 : r >= 2 ? 5 : r >= 1 ? 2 : 1) * mag;
+    if (r < 1.5) step = mag; else if (r < 3) step = 2 * mag; else if (r < 7) step = 5 * mag; else step = 10 * mag;
+    var t0 = Math.floor(lo / step + 1e-9) * step, t1 = Math.ceil(hi / step - 1e-9) * step, out = [];
+    for (var t = t0; t <= t1 + step * 1e-6; t += step) out.push(+t.toPrecision(12));
+    return out;
+  }
+  function xTicks() { var span = X1 - X0, step = span <= 12 ? 2 : span <= 30 ? 5 : span <= 80 ? 10 : span <= 200 ? 25 : 50, out = []; for (var t = 0; t <= X1; t += step) out.push(t); return out; }
+
+  function chart(host, spec) {
+    var fig = el("figure", "chart"), cap = el("figcaption");
+    var title = el("div", "c-title", spec.title), val = el("div", "c-val");
+    cap.appendChild(title); cap.appendChild(val);
+    if (spec.note) cap.appendChild(el("div", "c-note", spec.note));
+    fig.appendChild(cap);
+    var shown = spec.series.filter(function (s) { return !s.ghost && !s.threshold; });
+    var legendItems = spec.series.filter(function (s) { return s.pts.length || !s.ghost; });
+    if (shown.length >= 2 || legendItems.some(function (s) { return s.ghost || s.threshold; })) {
+      var lg = el("div", "legend"), seen = {};
+      legendItems.forEach(function (s) {
+        var lab = s.ghost ? "rolled back" : s.label; if (seen[lab]) return; seen[lab] = 1;
+        var it = el("span"), k = el("span", "key" + (spec.kind === "bar" ? " box" : "") + (s.ghost ? " ghost" : ""));
+        if (!s.ghost) k.style.background = s.threshold ? "var(--ink-2)" : s.color;
+        if (s.threshold) k.style.opacity = "0.55";
+        it.appendChild(k); it.appendChild(document.createTextNode(lab)); lg.appendChild(it);
+      });
+      fig.appendChild(lg);
+    }
+    var plot = el("div", "plot"); plot.tabIndex = 0; plot.setAttribute("role", "img");
+    fig.appendChild(plot); host.appendChild(fig);
+    var fmt = spec.fmt || F.num;
+    var main = shown[0];
+    if (spec.headline) val.textContent = spec.headline;
+    else if (main && main.pts.length) val.textContent = fmt(main.pts[main.pts.length - 1][1]);
+    else val.textContent = "no data yet";
+    plot.setAttribute("aria-label", spec.title + ": latest " + val.textContent + ". Values are in the table view.");
+
+    var c = { spec: spec, plot: plot, w: 0 };
+    var xs, maps, cross, dots, X, Y, m, H;
+    c.draw = function () {
+      var W = Math.max(220, Math.round(plot.clientWidth || 300)); c.w = W;
+      H = spec.height || 132;
+      var endLabels = spec.endLabels && shown.length >= 2 && shown.length <= 4;
+      m = { l: 40, r: endLabels ? 78 : 12, t: 12, b: 20 };
+      var all = [];
+      spec.series.forEach(function (s) { s.pts.forEach(function (p) { all.push(p[1]); if (s.se) { var e = s.se[p[0]]; if (isNum(e)) { all.push(p[1] + e); all.push(p[1] - e); } } }); });
+      if (spec.kind === "bar" && spec.stacked) {
+        var tot = {}; spec.series.forEach(function (s) { s.pts.forEach(function (p) { tot[p[0]] = (tot[p[0]] || 0) + p[1]; }); });
+        all = Object.keys(tot).map(function (k) { return tot[k]; });
+      }
+      (spec.refs || []).forEach(function (r) { if (isNum(r.y)) all.push(r.y); });
+      var lo = spec.yMin != null ? spec.yMin : Math.min.apply(null, all.length ? all : [0]);
+      var hi = spec.yMax != null ? spec.yMax : Math.max.apply(null, all.length ? all : [1]);
+      if (spec.zero !== false && spec.yMin == null) lo = Math.min(lo, 0);
+      if (spec.yMaxAtLeast != null) hi = Math.max(hi, spec.yMaxAtLeast);
+      var ticks = niceTicks(lo, hi, 3);
+      if (spec.yMin == null) lo = ticks[0]; if (spec.yMax == null) hi = ticks[ticks.length - 1];
+      ticks = ticks.filter(function (t) { return t >= lo - 1e-12 && t <= hi + 1e-12; });
+      var x0 = spec.x0 != null ? spec.x0 : X0, x1 = X1;
+      X = function (s) { return m.l + (s - x0) / Math.max(1e-9, x1 - x0) * (W - m.l - m.r); };
+      Y = function (v) { return m.t + (1 - (v - lo) / Math.max(1e-12, hi - lo)) * (H - m.t - m.b); };
+      var svg = sv("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H });
+      ticks.forEach(function (t) {
+        svg.appendChild(sv("line", { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), "class": t === lo ? "base-l" : "grid-l" }));
+        var tx = sv("text", { x: m.l - 6, y: Y(t) + 3.5, "text-anchor": "end", "class": "ax-t" }); tx.textContent = (spec.tickFmt || fmt)(t); svg.appendChild(tx);
+      });
+      xTicks().forEach(function (t) {
+        if (t < x0 || t > x1) return;
+        var tx = sv("text", { x: X(t), y: H - 5, "text-anchor": "middle", "class": "ax-t" }); tx.textContent = String(t); svg.appendChild(tx);
+      });
+      (spec.refs || []).forEach(function (r) {
+        if (!isNum(r.y) || r.y < lo || r.y > hi) return;
+        svg.appendChild(sv("line", { x1: m.l, x2: W - m.r, y1: Y(r.y), y2: Y(r.y), "class": "ref-l" }));
+        var tx = sv("text", { x: W - m.r - 2, y: Y(r.y) - 3, "text-anchor": "end", "class": "ref-t" }); tx.textContent = r.label; svg.appendChild(tx);
+      });
+      (spec.xmarks || []).forEach(function (mk) {
+        if (!isNum(mk.x)) return;
+        svg.appendChild(sv("line", { x1: X(mk.x), x2: X(mk.x), y1: m.t, y2: H - m.b, "class": "xmark-l" }));
+        var tx = sv("text", { x: X(mk.x) + 3, y: m.t + 8, "class": "xmark-t" }); tx.textContent = mk.label; svg.appendChild(tx);
+      });
+      xs = {}; maps = [];
+      if (spec.kind === "bar") {
+        var band = (W - m.l - m.r) / Math.max(1, x1 - x0 + 1), bw = Math.max(1, Math.min(24, band - (band > 4 ? 1.5 : 0.5)));
+        var acc = {};
+        spec.series.forEach(function (s) {
+          var mp = {};
+          s.pts.forEach(function (p) {
+            var base = spec.stacked ? (acc[p[0]] || 0) : 0, top = base + p[1]; xs[p[0]] = 1; mp[p[0]] = p[1];
+            if (p[1] > 0) {
+              var y1 = Y(top), y0 = Y(base);
+              svg.appendChild(sv("rect", { x: X(p[0]) - bw / 2, y: y1, width: bw, height: Math.max(0.5, y0 - y1), style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:" + (bw > 3 ? 1 : 0.5) }));
+            }
+            if (spec.stacked) acc[p[0]] = top;
+          });
+          maps.push({ s: s, mp: mp });
+        });
+      } else {
+        spec.series.slice().reverse().forEach(function (s) {
+          var mp = {}; s.pts.forEach(function (p) { mp[p[0]] = p[1]; if (!s.ghost) xs[p[0]] = 1; });
+          maps.push({ s: s, mp: mp });
+          if (!s.pts.length) return;
+          var d = "", prev = null, gap = spec.maxGap || 1;
+          s.pts.forEach(function (p) {
+            var px = X(p[0]).toFixed(1), py = Y(p[1]).toFixed(1);
+            if (spec.stepLine && prev) d += "L" + px + "," + Y(prev[1]).toFixed(1);
+            d += (prev && p[0] - prev[0] <= gap ? "L" : "M") + px + "," + py; prev = p;
+          });
+          if (s.area && !s.ghost) {
+            var first = s.pts[0], lastp = s.pts[s.pts.length - 1];
+            svg.appendChild(sv("path", { d: d + "L" + X(lastp[0]).toFixed(1) + "," + Y(Math.max(lo, 0)).toFixed(1) + "L" + X(first[0]).toFixed(1) + "," + Y(Math.max(lo, 0)).toFixed(1) + "Z", style: "fill:" + s.color + ";opacity:0.10;stroke:none" }));
+          }
+          var stroke = s.ghost ? "var(--muted)" : s.threshold ? "var(--ink-2)" : s.color;
+          svg.appendChild(sv("path", { d: d, fill: "none", style: "stroke:" + stroke + ";stroke-width:" + (s.ghost || s.threshold ? 1.5 : 2) + ";stroke-linejoin:round;stroke-linecap:round;opacity:" + (s.ghost ? 0.55 : s.threshold ? 0.5 : 1) }));
+          if (s.se) s.pts.forEach(function (p) { var e = s.se[p[0]]; if (isNum(e)) svg.appendChild(sv("line", { x1: X(p[0]), x2: X(p[0]), y1: Y(p[1] - e), y2: Y(p[1] + e), style: "stroke:" + s.color + ";stroke-width:1.5;opacity:0.6" })); });
+          if (s.markers) s.pts.forEach(function (p) { svg.appendChild(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 3.5, style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:2" })); });
+          if (!s.ghost && !s.threshold) {
+            var lp = s.pts[s.pts.length - 1];
+            svg.appendChild(sv("circle", { cx: X(lp[0]), cy: Y(lp[1]), r: 4, style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:2" }));
+          }
+          if (s.ring) s.ring.forEach(function (x) { if (isNum(mp[x])) svg.appendChild(sv("circle", { cx: X(x), cy: Y(mp[x]), r: 7, fill: "none", style: "stroke:var(--ink);stroke-width:1.5" })); });
+        });
+        maps.reverse();  // drawn last-first so the first series sits on top; listed first-first
+        if (endLabels) {
+          var ends = shown.filter(function (s) { return s.pts.length; }).map(function (s) { var p = s.pts[s.pts.length - 1]; return { s: s, x: X(p[0]), y: Y(p[1]) }; });
+          var ys = ends.map(function (e) { return e.y; }).sort(function (a, b) { return a - b; }), clash = false;
+          for (var i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] < 11) clash = true;
+          if (!clash) ends.forEach(function (e) { var t = sv("text", { x: e.x + 8, y: e.y + 3.5, "class": "end-t" }); t.textContent = e.s.label; svg.appendChild(t); });
+        }
+      }
+      cross = sv("line", { x1: 0, x2: 0, y1: m.t, y2: H - m.b, "class": "cross", visibility: "hidden" });
+      svg.appendChild(cross);
+      dots = maps.filter(function (o) { return spec.kind !== "bar" && !o.s.threshold; }).map(function (o) {
+        var dt = sv("circle", { r: 4, visibility: "hidden", style: "fill:" + (o.s.ghost ? "var(--muted)" : o.s.color) + ";stroke:var(--panel);stroke-width:2" });
+        svg.appendChild(dt); return { o: o, dt: dt };
+      });
+      var hit = sv("rect", { x: m.l, y: 0, width: Math.max(1, W - m.l - m.r), height: H, fill: "transparent" });
+      svg.appendChild(hit);
+      var keys = Object.keys(xs).map(Number).sort(function (a, b) { return a - b; });
+      function nearest(px) { var best = null, bd = 1e9; keys.forEach(function (k) { var d = Math.abs(X(k) - px); if (d < bd) { bd = d; best = k; } }); return best; }
+      hit.addEventListener("pointermove", function (ev) { var r = svg.getBoundingClientRect(); setHover(nearest(ev.clientX - r.left), c, ev); });
+      hit.addEventListener("pointerleave", function () { setHover(null, c); });
+      plot.onkeydown = function (ev) {
+        if (!keys.length) return; var i = keys.indexOf(hoverStep);
+        if (ev.key === "ArrowRight") i = Math.min(keys.length - 1, i < 0 ? keys.length - 1 : i + 1);
+        else if (ev.key === "ArrowLeft") i = Math.max(0, i < 0 ? keys.length - 1 : i - 1);
+        else return;
+        ev.preventDefault(); setHover(keys[i], c, null);
+      };
+      plot.onblur = function () { setHover(null, c); };
+      plot.innerHTML = ""; plot.appendChild(svg);
+      if (hoverStep != null) c.hover(hoverStep, false);
+    };
+    c.hover = function (s, isSource, ev) {
+      if (!cross) return;
+      if (s == null || s < (spec.x0 != null ? spec.x0 : X0) || s > X1) {
+        cross.setAttribute("visibility", "hidden"); dots.forEach(function (d) { d.dt.setAttribute("visibility", "hidden"); });
+        if (isSource) tip.hidden = true; return;
+      }
+      cross.setAttribute("x1", X(s)); cross.setAttribute("x2", X(s)); cross.setAttribute("visibility", "visible");
+      dots.forEach(function (d) { var v = d.o.mp[s]; if (isNum(v)) { d.dt.setAttribute("cx", X(s)); d.dt.setAttribute("cy", Y(v)); d.dt.setAttribute("visibility", "visible"); } else d.dt.setAttribute("visibility", "hidden"); });
+      if (!isSource) return;
+      tip.innerHTML = "";
+      tip.appendChild(el("div", "th", (spec.xLabel || "Step") + " " + s));
+      var any = false;
+      maps.forEach(function (o) {
+        var v = o.mp[s]; if (!isNum(v)) return; any = true;
+        var row = el("div", "tr"), k = el("span", "key" + (o.s.ghost ? " ghost" : ""));
+        if (!o.s.ghost) k.style.background = o.s.threshold ? "var(--ink-2)" : o.s.color;
+        row.appendChild(k); row.appendChild(el("b", null, (spec.tipFmt || fmt)(v)));
+        row.appendChild(el("span", null, o.s.ghost ? "rolled back" : o.s.label)); tip.appendChild(row);
+      });
+      if (!any) tip.appendChild(el("div", null, "no value at this step"));
+      tip.hidden = false;
+      var r = plot.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      var px = ev ? ev.clientX : r.left + X(s), py = ev ? ev.clientY : r.top + 20;
+      var left = px + 14; if (left + tw > window.innerWidth - 8) left = px - tw - 14;
+      tip.style.left = Math.max(8, left) + "px"; tip.style.top = Math.max(8, Math.min(window.innerHeight - th - 8, py - th - 10)) + "px";
+    };
+    plot.__chart = c; registry.push(c); c.draw(); if (ro) ro.observe(plot);
+    return c;
+  }
+  var hoverStep = null;
+  function setHover(s, src, ev) { hoverStep = s; registry.forEach(function (c) { c.hover(s, c === src, ev); }); }
+  window.addEventListener("scroll", function () { if (!tip.hidden) { tip.hidden = true; } }, { passive: true });
+
+  function sparkline(svgHost, pts, color) {
+    if (pts.length < 2) return;
+    var w = 200, h = 30, ys = pts.map(function (p) { return p[1]; }), lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+    if (hi - lo < 1e-9) { hi += 0.5; lo -= 0.5; }
+    var x0 = pts[0][0], x1 = pts[pts.length - 1][0];
+    function X(x) { return 2 + (x - x0) / Math.max(1, x1 - x0) * (w - 8); } function Y(v) { return 3 + (1 - (v - lo) / (hi - lo)) * (h - 6); }
+    var d = pts.map(function (p, i) { return (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join("");
+    var s = sv("svg", { viewBox: "0 0 " + w + " " + h, preserveAspectRatio: "none", "aria-hidden": "true" });
+    s.appendChild(sv("path", { d: d, fill: "none", style: "stroke:var(--axis);stroke-width:1.5;vector-effect:non-scaling-stroke" }));
+    var lp = pts[pts.length - 1];
+    s.appendChild(sv("circle", { cx: X(lp[0]), cy: Y(lp[1]), r: 3, style: "fill:" + color }));
+    svgHost.appendChild(s);
+  }
+
+  // ------------------------------------------------------------------ header
+  var STATUS = {
+    running: ["Running", "t-good", "●"], paused: ["Paused for Rishi", "t-warn", "‖"], stopped: ["Stopped", "t-serious", "■"],
+    finished: ["Finished", "t-good", "✓"], crashed: ["Crashed", "t-crit", "×"], interrupted: ["Interrupted", "t-crit", "×"]
+  };
+  var KIND = { second_seed: "Second seed (step 10)", production: "Production (step 12)" };
+  $("run-name").textContent = run.name || "RLM run";
+  $("kind").textContent = KIND[run.kind] || run.kind || "";
+  $("dry").hidden = !D.dry_run;
+  var st = STATUS[run.status] || [run.status || "unknown", "t-muted", "?"];
+  var pill = $("status"); pill.className = "pill " + st[1] + (run.status === "running" ? " running" : "");
+  pill.innerHTML = ""; var ic = el("span", run.status === "running" ? "dot" : "ic", run.status === "running" ? null : st[2]); pill.appendChild(ic); pill.appendChild(document.createTextNode(st[0]));
+  if (run.stop && run.status !== "running") {
+    $("reason").hidden = false;
+    $("reason").textContent = "Rule " + run.stop.rule + " at step " + run.stop.at_step + ": " + run.stop.reason + (run.best ? ". Best checkpoint " + run.best.checkpoint + " (" + F.pct(run.best.accuracy) + " on " + run.best.eval + ")." : "");
+  }
+
+  var durations = steps.slice(-5).map(function (r) { return get(r, ["time", "total_s"]); });
+  var medStep = median(durations);
+  function inProgress() {
+    if (run.status !== "running" || !run.live) return null;
+    var started = last ? last.finished_at : run.created_at;
+    evals.forEach(function (e) { if (isNum(e.at) && e.at > started && run.live.step > (last ? last.step : 0)) started = e.at; });
+    return { step: run.live.step, phase: run.live.phase, started: started };
+  }
+  var PHASE = { rollouts: "rolling out", kl: "re-scoring for KL", training: "training on W&B", eval: "running the selection eval", capability: "running the capability check" };
+  function renderReadout() {
+    var box = $("readout"); box.innerHTML = "";
+    function item(label, value) { var s = el("span"); s.appendChild(document.createTextNode(label + " ")); s.appendChild(el("b", null, value)); box.appendChild(s); }
+    item("step", String(last ? last.step : 0) + (cfg.max_steps ? " of " + cfg.max_steps : ""));
+    item("checkpoint", String(run.latest != null ? run.latest : 0) + (run.branch ? " · branch " + run.branch : ""));
+    item("lr", F.lr(get(D, ["lr", "current"])));
+    var ip = inProgress();
+    if (ip) {
+      var t = "step " + ip.step + " " + (PHASE[ip.phase] || ip.phase);
+      if (isNum(medStep) && isNum(ip.started) && (ip.phase === "rollouts" || ip.phase === "kl" || ip.phase === "training")) t += ", due ~" + clock(ip.started + medStep);
+      item("now", t);
+    }
+    item("updated", clock(D.built_at) + " (" + ago(D.built_at) + ")");
+    if (isNum(medStep)) item("median step", F.secs(medStep));
+    var stale = $("stale"), age = Date.now() / 1000 - D.built_at, limit = Math.max(900, 3 * (medStep || 300));
+    if (run.status === "running" && age > limit) {
+      stale.hidden = false;
+      stale.textContent = "No new data for " + Math.round(age / 60) + " minutes, longer than three typical steps. The run or the session that publishes this page may have stopped.";
+    } else if (run.status === "running" && isNum(run.heartbeat_age_s) && run.heartbeat_age_s > 300) {
+      stale.hidden = false;
+      stale.textContent = "The training loop had not written its state for " + Math.round(run.heartbeat_age_s / 60) + " minutes when this page was built. It may have stopped without saying so.";
+    } else stale.hidden = true;
+  }
+  renderReadout(); setInterval(renderReadout, 15000);
+
+  // ------------------------------------------------------------------ overview
+  var tiles = $("tiles");
+  function tile(label, value, unit, ctx, spark, color) {
+    var t = el("div", "tile"); t.appendChild(el("div", "lab", label));
+    var v = el("div", "val", value); if (unit) v.appendChild(el("small", null, unit)); t.appendChild(v);
+    if (ctx) t.appendChild(el("div", "ctx", ctx));
+    if (spark) sparkline(t, spark, color || "var(--c1)");
+    tiles.appendChild(t); return t;
+  }
+  var passPts = steps.filter(function (r) { return isNum(get(r, ["pass", "rate"])); }).map(function (r) { return [r.step, r.pass.rate]; });
+  var pass10 = mean(steps.slice(-10).map(function (r) { return get(r, ["pass", "rate"]); }));
+  tile("Training pass rate, last step", last ? F.pct(get(last, ["pass", "rate"])) : "–", null,
+       "Mean over the last 10 steps " + F.pct(pass10) + (last ? " · trainable groups " + get(last, ["pass", "trainable_groups"]) + " of " + get(last, ["pass", "groups"]) : ""), passPts.slice(-40), "var(--c1)");
+  var selName = cfg.selection || cfg.final_eval;
+  var selPts = evals.filter(function (e) { return e.name === selName && isNum(get(e, ["summary", "accuracy"])); });
+  var base0 = selPts.filter(function (e) { return e.checkpoint === 0; })[0];
+  if (selPts.length) {
+    var latestE = selPts[selPts.length - 1];
+    tile((run.best ? "Best " : "Latest ") + selName, F.pct(run.best ? run.best.accuracy : latestE.summary.accuracy), null,
+         (run.best ? "checkpoint " + run.best.checkpoint + " · " : "") + "latest " + F.pct(latestE.summary.accuracy) + " at checkpoint " + latestE.checkpoint + (base0 ? " · base model " + F.pct(base0.summary.accuracy) : ""),
+         selPts.map(function (e) { return [e.checkpoint, e.summary.accuracy]; }), "var(--c1)");
+  } else tile(selName ? selName : "Evals", "–", null, selName ? "No eval yet. " + (cfg.eval_every ? "It runs every " + cfg.eval_every + " steps." : "It runs at step " + cfg.max_steps + ".") : "No eval configured.");
+  var sp = D.spend || {}, ceil = sp.ceilings || {};
+  tile("Inference spent this run", F.usd(sp.total_usd), null, "steps " + F.usd(sp.train_usd) + " of " + F.usd(ceil.train) + " · evals " + F.usd(sp.eval_usd) + " of " + F.usd(ceil.eval));
+  var rules = D.stop_rules || {}, rnames = Object.keys(rules), fired = rnames.filter(function (k) { return rules[k].state === "fired"; }), watch = rnames.filter(function (k) { return rules[k].state === "watch"; });
+  tile("Stop rules", fired.length ? fired.length + " fired" : watch.length ? watch.length + " to watch" : rnames.length ? "all clear" : "–", null,
+       fired.length ? fired.join(", ") : watch.length ? watch.join(", ") : rnames.length ? rnames.length + " rules checked after step " + (last ? last.step : 0) : "Checked once the first step is done.");
+  var ctl = (D.controller || {}).families || {}, levelTxt = Object.keys(ctl).map(function (f) { return famLabel(f) + " L" + ctl[f].level + "/" + ctl[f].max_level; });
+  tile("Difficulty levels", Object.keys(ctl).length ? Object.keys(ctl).map(function (f) { return ctl[f].level; }).join(" · ") : "–", null, levelTxt.join(", ") || "Every family starts at level 1.");
+  $("overview-sub").textContent = (run.kind === "second_seed" ? "The 20-step GRPO replication on the ticket tasks, run on environment v2. Its held-out eval is compared with the first seed's 0.70." : "GRPO at 8 tasks × 4 rollouts a step on aggregation (45%), the code generators (40%) and repo localization (15%), until a stop rule fires or the spend ceiling is reached.") + (D.dry_run ? " This is a dry run of the training loop with a fake model, for testing the page." : "");
+
+  // ------------------------------------------------------------------ cost
+  var meters = $("meters");
+  function meter(label, value, cap, note) {
+    var m = el("div", "meter"), row = el("div", "row"); row.appendChild(el("span", null, label)); row.appendChild(el("b", null, F.usd(value) + (isNum(cap) ? " of " + F.usd(cap) : "")));
+    m.appendChild(row);
+    var tr = el("div", "track"), f = el("div", "fill"), share = isNum(cap) && cap > 0 ? Math.min(1, Math.max(0, value / cap)) : 0;
+    f.style.width = (share * 100).toFixed(1) + "%"; if (share > 0.95) f.className = "fill crit"; else if (share > 0.8) f.className = "fill warn";
+    tr.appendChild(f); tr.setAttribute("role", "meter"); tr.setAttribute("aria-valuemin", "0"); tr.setAttribute("aria-valuemax", String(cap || 0)); tr.setAttribute("aria-valuenow", String(value || 0)); tr.setAttribute("aria-label", label);
+    m.appendChild(tr); if (note) m.appendChild(el("div", "sub", note)); meters.appendChild(m);
+  }
+  var recentCost = mean(steps.slice(-5).map(function (r) { return get(r, ["cost", "step_usd"]); }));
+  var leftTrain = isNum(ceil.train) ? ceil.train - (sp.train_usd || 0) : null;
+  var stepsLeft = isNum(leftTrain) && isNum(recentCost) && recentCost > 0 ? Math.floor(leftTrain / recentCost) : null;
+  meter("Steps (rollouts and KL)", sp.train_usd || 0, ceil.train, isNum(recentCost) ? F.usd3(recentCost) + " a step over the last 5 · about " + (stepsLeft != null ? F.int(stepsLeft) + " steps left at that rate" : "–") : "No step measured yet.");
+  var mainEvals = evals.filter(function (e) { return e.name !== "capability"; });
+  meter("Evals", sp.eval_usd || 0, ceil.eval, evals.length ? evals.length + " evals so far" + (mainEvals.length ? ", the latest " + mainEvals[mainEvals.length - 1].name + " " + F.usd3(mainEvals[mainEvals.length - 1].cost_usd) : "") : "No eval yet.");
+  var pot = D.pot || {};
+  var potUsed = (pot.inference_usd || 0) - (pot.inference_left_usd || 0) + (sp.total_usd || 0);
+  meter("W&B inference pot used (estimate)", potUsed, pot.inference_usd,
+        "About " + F.usd(pot.inference_left_usd) + " was left on " + pot.as_of + ", before this run, so about " + F.usd(Math.max(0, (pot.inference_left_usd || 0) - (sp.total_usd || 0))) + " is left now. " +
+        (isNum(ceil.train) && ceil.train > 150 ? "The train ceiling is above $150, so the $" + pot.reserve_usd + " reserve is in use." : "The $" + (pot.reserve_usd || 25) + " reserve is untouched; spending it is Rishi's call."));
+  meter("Training GPU pot used (estimate)", (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0), pot.gpu_usd, "This run: " + F.usd(sp.training_gpu_usd_est || 0) + " at ~$0.16 a step. A separate pot, and not a constraint.");
+  var cc = $("cost-charts");
+  chart(cc, { title: "Cost per step", kind: "bar", fmt: F.usd3, series: [series("rollouts and sub-calls", "var(--c1)", function (r) { return isNum(get(r, ["cost", "step_usd"])) ? r.cost.step_usd - (get(r, ["cost", "kl_usd"]) || 0) : null; }), series("KL re-score", "var(--c2)", function (r) { return get(r, ["cost", "kl_usd"]); })], stacked: true, headline: last ? F.usd3(get(last, ["cost", "step_usd"])) : null });
+  var cum = [], accum = 0; steps.forEach(function (r) { accum += get(r, ["cost", "step_usd"]) || 0; cum.push([r.step, accum]); });
+  chart(cc, { title: "Step spend so far", fmt: F.usd, series: [{ label: "steps spend", color: "var(--c1)", pts: cum, area: true }], refs: isNum(ceil.train) && accum > ceil.train * 0.5 ? [{ y: ceil.train, label: "ceiling " + F.usd(ceil.train) }] : [], note: isNum(ceil.train) ? "The loop never starts a step that would cross the " + F.usd(ceil.train) + " ceiling." : null });
+
+  // ------------------------------------------------------------------ pass rates
+  var pc = $("pass-charts");
+  chart(pc, { title: "Pass rate", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [series("without infra", "var(--c1)", function (r) { return get(r, ["pass", "rate"]); }), series("with infra", "var(--c2)", function (r) { return get(r, ["pass", "rate_with_infra"]); })].concat(ghosts(function (r) { return get(r, ["pass", "rate"]); })), xmarks: rollbackMarks() });
+  chart(pc, { title: "Pass rate by family (controller's 3-step window)", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true,
+              series: fams.map(function (f) { return series(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "window_pass_rate"]); }); }),
+              refs: [{ y: 0.7, label: "up 70%" }, { y: 0.2, label: "down 20%" }] });
+  chart(pc, { title: "Difficulty level by family", fmt: function (v) { return "L" + v; }, tickFmt: function (v) { return v % 1 ? "" : "L" + v; }, yMin: 1, yMax: Math.max(5, Math.max.apply(null, Object.keys(ctl).map(function (f) { return ctl[f].max_level || 5; }).concat([5]))), stepLine: true, endLabels: true,
+              series: fams.map(function (f) { return series(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "level"]); }); }) });
+  chart(pc, { title: "Groups per step", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: (cfg.tasks_per_step || 8),
+              series: [series("trainable", "var(--c1)", function (r) { return get(r, ["pass", "trainable_groups"]); }), series("all 0", "var(--c2)", function (r) { return get(r, ["pass", "all_zero_groups"]); }),
+                       series("all 1", "var(--c3)", function (r) { return get(r, ["pass", "all_one_groups"]); }), series("other equal", "var(--c4)", function (r) { return get(r, ["pass", "other_equal_groups"]); }),
+                       series("too small", "var(--c5)", function (r) { return get(r, ["pass", "small_groups"]); })],
+              headline: last ? get(last, ["pass", "trainable_groups"]) + " trainable" : null, note: "All-equal groups give GRPO no signal and are dropped, not refilled." });
+  var pe = $("pass-extra");
+  // histogram of the last 10 steps
+  (function () {
+    var bins = ["0/4", "1/4", "2/4", "3/4", "4/4"], tot = {}, recent = steps.slice(-10);
+    recent.forEach(function (r) { bins.forEach(function (b) { tot[b] = (tot[b] || 0) + (get(r, ["pass", "histogram", b]) || 0); }); });
+    var fig = el("figure", "chart"), cap = el("figcaption"); cap.appendChild(el("div", "c-title", "Correct rollouts per group, last " + recent.length + " steps")); cap.appendChild(el("div", "c-val", F.int(bins.reduce(function (s, b) { return s + (tot[b] || 0); }, 0)) + " groups"));
+    cap.appendChild(el("div", "c-note", "A group is one task's 4 rollouts. Mass at 0/4 or 4/4 means the levels are off."));
+    fig.appendChild(cap);
+    var W = 420, H = 132, mx = Math.max.apply(null, bins.map(function (b) { return tot[b] || 0; }).concat([1])), s = sv("svg", { viewBox: "0 0 " + W + " " + H, width: "100%", height: H, role: "img", "aria-label": "Histogram of correct rollouts per group" });
+    var bw = Math.min(24, (W - 40) / bins.length - 12);
+    bins.forEach(function (b, i) {
+      var cx = 30 + (i + 0.5) * (W - 40) / bins.length, v = tot[b] || 0, h = (H - 40) * v / mx, y = H - 22 - h;
+      s.appendChild(sv("rect", { x: cx - bw / 2, y: y, width: bw, height: Math.max(0, h), rx: 3, style: "fill:" + (b === "0/4" || b === "4/4" ? "var(--c2)" : "var(--c1)") }));
+      var vt = sv("text", { x: cx, y: y - 4, "text-anchor": "middle", "class": "ax-t" }); vt.textContent = String(v); s.appendChild(vt);
+      var lt = sv("text", { x: cx, y: H - 6, "text-anchor": "middle", "class": "ax-t" }); lt.textContent = b; s.appendChild(lt);
+    });
+    s.appendChild(sv("line", { x1: 20, x2: W - 10, y1: H - 22, y2: H - 22, "class": "base-l" }));
+    var pl = el("div", "plot"); pl.appendChild(s); fig.appendChild(pl); pe.appendChild(fig);
+  })();
+  // pass rate by family and level
+  (function () {
+    var fig = el("figure", "chart"), cap = el("figcaption"); cap.appendChild(el("div", "c-title", "Pass rate by family and level, whole run")); cap.appendChild(el("div", "c-val", ""));
+    cap.appendChild(el("div", "c-note", "Correct over scored rollouts at each level. The outlined cell is each family's current level."));
+    fig.appendChild(cap);
+    var maxL = 1; Object.keys(ctl).forEach(function (f) { maxL = Math.max(maxL, ctl[f].max_level || 5); }); maxL = Math.max(maxL, 5);
+    var agg = {};
+    steps.forEach(function (r) { Object.keys(r.families || {}).forEach(function (f) { var x = r.families[f]; if (!isNum(x.level) || !isNum(x.scored) || !x.scored) return; var k = f + "/" + x.level; agg[k] = agg[k] || { c: 0, n: 0 }; agg[k].n += x.scored; agg[k].c += (x.pass_rate || 0) * x.scored; }); });
+    var wrap = el("div", "scroll"), t = el("table", "heat"), hr = el("tr");
+    hr.appendChild(el("th", null, "family")); for (var L = 1; L <= maxL; L++) hr.appendChild(el("th", "n", "L" + L)); t.appendChild(hr);
+    fams.forEach(function (f) {
+      var tr = el("tr"), name = el("td", "fam"), k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; name.appendChild(k); name.appendChild(document.createTextNode(famLabel(f))); tr.appendChild(name);
+      for (var L = 1; L <= maxL; L++) {
+        var a = agg[f + "/" + L], td = el("td", "cell");
+        if (a && a.n) {
+          var rate = a.c / a.n, idx = Math.min(6, Math.max(0, Math.round(rate * 6)));
+          td.style.background = "var(--seq-" + idx + ")";
+          td.style.color = "var(--seq-t-" + idx + ")";
+          td.textContent = F.pct(rate); td.appendChild(el("small", null, Math.round(a.n) + " rollouts"));
+        } else { td.textContent = "–"; td.style.color = "var(--muted)"; }
+        if (ctl[f] && ctl[f].level === L) td.className += " now";
+        tr.appendChild(td);
+      }
+      t.appendChild(tr);
+    });
+    wrap.appendChild(t); fig.appendChild(wrap); pe.appendChild(fig);
+  })();
+
+  // ------------------------------------------------------------------ policy
+  var po = $("policy-charts");
+  function rollingThreshold(path, window, frac, kind) {
+    var out = [], vals = steps.map(function (r) { return [r.step, get(r, path)]; });
+    for (var i = 0; i < vals.length; i++) {
+      var prev = vals.slice(Math.max(0, i - window), i).map(function (p) { return p[1]; }).filter(isNum);
+      if (prev.length < 3) continue;
+      var ref = kind === "max" ? Math.max.apply(null, prev) : mean(prev);
+      out.push([vals[i][0], ref * frac]);
+    }
+    return out;
+  }
+  chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "collapse line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks() });
+  chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks() });
+  chart(po, { title: "KL to base (logged, not in the loss)", fmt: F.num, series: [series("KL (k1)", "var(--c1)", function (r) { return get(r, ["policy", "kl_to_base"]); }), series("k3 estimator", "var(--c2)", function (r) { return get(r, ["policy", "kl_k3"]); })].concat(ghosts(function (r) { return get(r, ["policy", "kl_to_base"]); })), note: "From 4 rollouts a step re-scored under the base model." });
+  var gnMed = median(steps.map(function (r) { return get(r, ["policy", "grad_norm"]); }));
+  chart(po, { title: "Grad norm", fmt: F.num, series: [series("grad norm", "var(--c1)", function (r) { return get(r, ["policy", "grad_norm"]); })].concat(ghosts(function (r) { return get(r, ["policy", "grad_norm"]); })), refs: isNum(gnMed) ? [{ y: 3 * gnMed, label: "3× median" }] : [], maxGap: 3 });
+  chart(po, { title: "probs_corr (trainer vs sampler logprobs)", fmt: function (v) { return isNum(v) ? v.toFixed(3) : "–"; }, zero: false, series: [series("probs_corr", "var(--c1)", function (r) { return get(r, ["policy", "probs_corr"]); })], refs: [{ y: 0.98, label: "0.98 floor" }], yMaxAtLeast: 1, maxGap: 3 });
+  chart(po, { title: "Clip fraction (CISPO, weights clipped to [0, 5])", fmt: F.pct2, series: [series("clipped tokens", "var(--c1)", function (r) { return get(r, ["policy", "clip_fraction"]); })], maxGap: 3, note: "The 20-step run read ~97% with the clip forced to 1. Near 0 is the new normal." });
+  chart(po, { title: "Importance ratio", fmt: F.num, zero: false, endLabels: true, series: [series("mean", "var(--c1)", function (r) { return get(r, ["policy", "importance_ratio_mean"]); }), series("p95", "var(--c2)", function (r) { return get(r, ["policy", "importance_ratio_p95"]); }), series("p99", "var(--c3)", function (r) { return get(r, ["policy", "importance_ratio_p99"]); })], maxGap: 3 });
+  chart(po, { title: "Learning rate", fmt: F.lr, tickFmt: F.lr, stepLine: true, series: [series("learning rate", "var(--c1)", function (r) { return r.lr; })], yMin: 0, yMaxAtLeast: 2.5e-5, xmarks: rollbackMarks(), note: D.lr && D.lr.fallback_used ? "Fell back to " + F.lr(D.lr.floor) + " after a collapse (spec §5.2)." : "Falls back to " + F.lr(get(D, ["lr", "floor"])) + " after a collapse at 2e-5." });
+  chart(po, { title: "Train loss", fmt: F.num, zero: false, series: [series("loss", "var(--c1)", function (r) { return get(r, ["policy", "loss"]); })], maxGap: 3 });
+
+  // ------------------------------------------------------------------ behaviour
+  var bh = $("behaviour-charts");
+  chart(bh, { title: "Sub-calls per episode", fmt: F.num, series: [series("sub-calls", "var(--c1)", function (r) { return get(r, ["shape", "subcalls"]); }, { area: true })], refs: [{ y: 30, label: "budget 30" }], yMaxAtLeast: 5, note: "Watch for sub-calls climbing toward 30 without accuracy following." });
+  chart(bh, { title: "Budget-hit rate", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes that used all 30", "var(--c1)", function (r) { return get(r, ["shape", "budget_hit"]); })] });
+  chart(bh, { title: "Root turns per episode", fmt: F.num, series: [series("turns", "var(--c1)", function (r) { return get(r, ["shape", "turns"]); }, { area: true })], refs: [{ y: 12, label: "cap 12" }], yMaxAtLeast: 4 });
+  chart(bh, { title: "First-turn submits", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("first-turn submit", "var(--c1)", function (r) { return get(r, ["shape", "first_turn_submit"]); })] });
+  chart(bh, { title: "Trouble per episode", fmt: F.num, endLabels: true, yMaxAtLeast: 1, series: [series("REPL errors", "var(--c1)", function (r) { return get(r, ["shape", "repl_errors"]); }), series("cell timeouts", "var(--c2)", function (r) { return get(r, ["shape", "timeouts"]); }), series("turns without code", "var(--c3)", function (r) { return get(r, ["shape", "no_code_turns"]); }), series("outputs cut at 2,000 chars", "var(--c4)", function (r) { return get(r, ["shape", "output_truncations"]); })] });
+  chart(bh, { title: "Root transcript length (tokens)", fmt: F.compact, endLabels: true, series: [series("mean", "var(--c1)", function (r) { return get(r, ["shape", "transcript_tokens_mean"]); }), series("p95", "var(--c2)", function (r) { return get(r, ["shape", "transcript_tokens_p95"]); }), series("max", "var(--c3)", function (r) { return get(r, ["shape", "transcript_tokens_max"]); })], note: "Sets packed_sequence_length for production." });
+  chart(bh, { title: "Output tokens per episode", fmt: F.compact, endLabels: true, series: [series("root", "var(--c1)", function (r) { return get(r, ["shape", "root_completion_tokens"]); }), series("sub-calls", "var(--c2)", function (r) { return get(r, ["shape", "subcall_tokens"]); })] });
+  chart(bh, { title: "Context size (characters)", fmt: F.compact, series: [series("mean context", "var(--c1)", function (r) { return get(r, ["shape", "context_chars"]); }, { area: true })], note: "Rises as families move up levels: ~35K at level 1, ~400K at level 5." });
+  chart(bh, { title: "Episodes with a turn cut off at the token cap", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes with a cut-off turn", "var(--c1)", function (r) { return get(r, ["shape", "episodes_with_truncated_turn"]); })], note: "Root turns are capped at 3,072 output tokens." });
+
+  // ------------------------------------------------------------------ reward
+  var rw = $("reward-charts");
+  chart(rw, { title: "Exact accuracy and mean reward", fmt: F.pct, tipFmt: F.num, yMin: 0, yMax: 1, endLabels: true, series: [series("exact accuracy", "var(--c1)", function (r) { return get(r, ["reward", "exact"]); }), series("mean reward", "var(--c2)", function (r) { return get(r, ["reward", "mean"]); })] });
+  chart(rw, { title: "Partial credit and near-blind answers", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, endLabels: true, series: [series("partial credit", "var(--c1)", function (r) { return get(r, ["reward", "partial"]); }), series("near the blind guess", "var(--c2)", function (r) { return get(r, ["reward", "near_blind"]); })], note: "A rising near-blind rate means answers are drifting toward the metadata guess." });
+  var rulesSeen = {}; steps.forEach(function (r) { Object.keys(get(r, ["reward", "hacks"]) || {}).forEach(function (k) { rulesSeen[k] = 1; }); });
+  var ruleNames = Object.keys(rulesSeen).length ? Object.keys(rulesSeen) : ["early_submit", "copied_answer", "escape_attempt", "timeout_loop"];
+  var hackTotal = steps.reduce(function (s, r) { return s + (get(r, ["reward", "hacked"]) || 0); }, 0);
+  chart(rw, { title: "Hack-detector hits by rule", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: 2, headline: hackTotal + " this run",
+              series: ruleNames.map(function (k, i) { return series(k.replace(/_/g, " "), "var(--c" + (i + 1) + ")", function (r) { return get(r, ["reward", "hacks", k]); }); }) });
+  chart(rw, { title: "Episodes that submitted", fmt: F.pct, yMin: 0, yMax: 1, series: [series("submitted", "var(--c1)", function (r) { return get(r, ["reward", "submitted"]); })] });
+  (function () {
+    var host = $("audits"), keys = Object.keys(D.audits || {}).map(Number).sort(function (a, b) { return a - b; });
+    var h = el("div", "c-title", "Claude audit of sampled wins (clean solve rate)"); host.appendChild(h);
+    if (!keys.length) { host.appendChild(el("p", "empty", "The first audit sample is written at checkpoint 10.")); return; }
+    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+    ["checkpoint", "wins sampled", "audited", "clean share", "status"].forEach(function (x, i) { hr.appendChild(el("th", i && i < 4 ? "n" : null, x)); }); t.appendChild(hr);
+    keys.forEach(function (c) { var a = D.audits[String(c)], tr = el("tr"); tr.appendChild(el("td", null, String(c))); tr.appendChild(el("td", "n", F.int(a.sampled))); tr.appendChild(el("td", "n", F.int(a.audited))); tr.appendChild(el("td", "n", F.pct(a.clean_share))); tr.appendChild(el("td", null, a.status === "audited" ? "audited" : a.status === "no_sample" ? "no wins to sample" : "waiting for the audit")); t.appendChild(tr); });
+    wrap.appendChild(t); host.appendChild(wrap);
+  })();
+
+  // ------------------------------------------------------------------ infra
+  var inf = $("infra-charts");
+  chart(inf, { title: "Infra error rate", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.02, series: [series("infra episodes", "var(--c1)", function (r) { return get(r, ["infra", "rate"]); }, { area: true })], refs: [{ y: 0.01, label: "1% pause line" }], note: run.kind === "second_seed" ? "Any infra episode pauses the second seed." : "Production pauses above 1% over the last 10 steps (4 of 320 episodes)." });
+  chart(inf, { title: "Request trouble per step", fmt: F.int, yMin: 0, yMaxAtLeast: 2, endLabels: true, series: [series("429s", "var(--c1)", function (r) { return get(r, ["infra", "rate_limited"]); }), series("5xx", "var(--c2)", function (r) { return get(r, ["infra", "server_errors"]); }), series("retries", "var(--c3)", function (r) { return get(r, ["infra", "retries"]); })] });
+  chart(inf, { title: "Step time (minutes)", kind: "bar", stacked: true, fmt: F.mins, tipFmt: F.secs, headline: last ? F.secs(get(last, ["time", "total_s"])) : null,
+               series: [series("rollouts", "var(--c1)", function (r) { return get(r, ["time", "rollouts_s"]); }), series("KL", "var(--c2)", function (r) { return get(r, ["time", "kl_s"]); }), series("training", "var(--c3)", function (r) { return get(r, ["time", "train_s"]); })] });
+  chart(inf, { title: "Tokens per step", fmt: F.compact, endLabels: true, series: [series("root prompt", "var(--c1)", function (r) { return get(r, ["tokens", "root_prompt_tokens"]); }), series("sub-call prompt", "var(--c2)", function (r) { return get(r, ["tokens", "subcall_prompt_tokens"]); }), series("root output", "var(--c3)", function (r) { return get(r, ["tokens", "root_completion_tokens"]); })] });
+  chart(inf, { title: "Requests in flight, step peak", fmt: F.int, yMin: 0, yMaxAtLeast: 32, series: [series("peak in flight", "var(--c1)", function (r) { return get(r, ["infra", "peak_in_flight"]); })], refs: [{ y: 30, label: "cap 30" }] });
+
+  // ------------------------------------------------------------------ evals
+  var ev = $("eval-charts");
+  var evalNames = []; evals.forEach(function (e) { if (evalNames.indexOf(e.name) < 0) evalNames.push(e.name); });
+  var sub = [];
+  if (cfg.selection) sub.push("The selection set (" + cfg.selection + ", 64 fixed tasks) runs every " + cfg.eval_every + " steps, with the capability check, and picks the best checkpoint.");
+  if (cfg.final_eval) sub.push("The final eval (" + cfg.final_eval + ") runs once at step " + cfg.max_steps + ".");
+  sub.push("Checkpoint 0 is the base model. Bars show ±1 standard error.");
+  $("evals-sub").textContent = sub.join(" ");
+  function evalSeries(name, color) {
+    var pts = [], se = {};
+    evals.filter(function (e) { return e.name === name && isNum(get(e, ["summary", "accuracy"])); }).forEach(function (e) { pts.push([e.checkpoint, e.summary.accuracy]); if (isNum(e.summary.accuracy_se)) se[e.checkpoint] = e.summary.accuracy_se; });
+    return { label: name, color: color, pts: pts, se: se, markers: true };
+  }
+  var refs = [];
+  (D.baselines || []).forEach(function (b) { if (evalNames.indexOf(b.eval) >= 0 || b.eval === cfg.final_eval) refs.push({ y: b.accuracy, label: b.label.replace(/ \(20-step run\)/, "") + " " + F.pct(b.accuracy) }); });
+  var mainEval = cfg.selection || cfg.final_eval;
+  if (mainEval) {
+    var s1 = evalSeries(mainEval, "var(--c1)"); if (run.best && run.best.eval === mainEval) s1.ring = [run.best.checkpoint];
+    chart(ev, { title: "Accuracy on " + mainEval, xLabel: "Checkpoint", fmt: F.pct, yMin: 0, yMax: 1, maxGap: Infinity, series: [s1], refs: refs, height: 170, headline: s1.pts.length ? F.pct(s1.pts[s1.pts.length - 1][1]) + " latest" : "not run yet", note: run.best ? "Ringed: the best checkpoint so far, " + run.best.checkpoint + "." : null });
+  }
+  if (evals.some(function (e) { return e.name === "capability"; })) {
+    var cap = evalSeries("capability", "var(--c2)"); cap.label = "capability check";
+    var c0 = cap.pts.filter(function (p) { return p[0] === 0; })[0];
+    chart(ev, { title: "Capability check (frying)", xLabel: "Checkpoint", fmt: F.pct, yMin: 0, yMax: 1, maxGap: Infinity, series: [cap], refs: c0 ? [{ y: c0[1] - 0.02, label: "2 points below checkpoint 0" }] : [], height: 170, note: "About 100 IFEval, MMLU-Pro, CRUXEval and chat prompts at temperature 0." });
+  } else if (cfg.has_capability_set) {
+    ev.appendChild(el("p", "empty", "The capability check runs with each selection eval."));
+  }
+  (function () {
+    var host = $("eval-table"), main = evals.filter(function (e) { return e.name === mainEval; });
+    if (!main.length) { host.appendChild(el("p", "empty", mainEval ? "No " + mainEval + " result yet." : "No eval configured.")); return; }
+    var first = main[0], latest = main[main.length - 1], famsE = Object.keys(get(latest, ["summary", "by_family"]) || {});
+    if (!famsE.length) return;
+    host.appendChild(el("div", "c-title", "By family: checkpoint " + first.checkpoint + " against checkpoint " + latest.checkpoint));
+    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+    ["family", "tasks", "checkpoint " + first.checkpoint, "checkpoint " + latest.checkpoint, "change"].forEach(function (x, i) { hr.appendChild(el("th", i ? "n" : null, x)); }); t.appendChild(hr);
+    famsE.forEach(function (f) {
+      var a = get(first, ["summary", "by_family", f, "accuracy"]), b = get(latest, ["summary", "by_family", f, "accuracy"]), tr = el("tr");
+      var nm = el("td"), k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; nm.appendChild(k); nm.appendChild(document.createTextNode(famLabel(f))); tr.appendChild(nm);
+      tr.appendChild(el("td", "n", F.int(get(latest, ["summary", "by_family", f, "n"])))); tr.appendChild(el("td", "n", F.pct(a))); tr.appendChild(el("td", "n", F.pct(b)));
+      tr.appendChild(el("td", "n", isNum(a) && isNum(b) ? (b - a >= 0 ? "+" : "−") + Math.abs((b - a) * 100).toFixed(0) + " pts" : "–")); t.appendChild(tr);
+    });
+    wrap.appendChild(t); host.appendChild(wrap);
+  })();
+
+  // ------------------------------------------------------------------ stop rules
+  (function () {
+    var host = $("rule-list");
+    var NAMES = { plateau: ["1. Plateau", "stop"], overfitting: ["2. Overfitting", "stop"], frying: ["3. Frying", "stop"], saturation: ["4. Saturation", "stop"], hacking: ["5. Hacking", "pause"] };
+    var STATE = { ok: ["OK", "t-good", "✓"], watch: ["Watch", "t-warn", "!"], fired: ["Fired", "t-crit", "×"], "n/a": ["Not yet", "t-muted", "–"] };
+    var names = Object.keys(D.stop_rules || {});
+    if (!names.length) { host.appendChild(el("p", "empty", "The rules are checked after the first step.")); }
+    names.forEach(function (k) {
+      var r = D.stop_rules[k], n = NAMES[k] || [k, r.action], s = STATE[r.state] || STATE["n/a"], row = el("div", "rule");
+      var nm = el("div", "nm", n[0]); nm.appendChild(el("small", null, r.action === "pause" ? "pauses for Rishi" : "stops, keeps the best")); row.appendChild(nm);
+      var tx = el("div", "tx"), p = el("span", "pill " + s[1]); p.appendChild(el("span", "ic", s[2])); p.appendChild(document.createTextNode(s[0])); tx.appendChild(p); tx.appendChild(el("span", null, r.text)); row.appendChild(tx);
+      host.appendChild(row);
+    });
+    var lr = D.lr || {}, row = el("div", "rule"), nm = el("div", "nm", "Learning-rate rule"); nm.appendChild(el("small", null, lr.rule === "fallback" ? "rolls back once, then rule 3" : "fixed")); row.appendChild(nm);
+    var tx = el("div", "tx"), ok = !lr.fallback_used, p = el("span", "pill " + (ok ? "t-good" : "t-warn")); p.appendChild(el("span", "ic", ok ? "✓" : "!")); p.appendChild(document.createTextNode(ok ? "No collapse" : "Fell back")); tx.appendChild(p);
+    tx.appendChild(el("span", null, ok ? "At " + F.lr(lr.current) + ". An entropy drop below 70% of its 10-step peak, or reward std under half its 10-step mean for 3 steps, " + (lr.current > lr.floor ? "rolls back to the last good checkpoint and continues at " + F.lr(lr.floor) + "." : "pauses the run for Rishi.") : "Collapse (" + (lr.fallback && lr.fallback.signal) + ") at step " + (lr.fallback && lr.fallback.at_step) + "; rolled back to checkpoint " + (lr.fallback && lr.fallback.to_checkpoint) + " at " + F.lr(lr.current) + ". Another collapse fires rule 3."));
+    row.appendChild(tx); host.appendChild(row);
+    if (lr.decision) {
+      var drow = el("div", "rule"), dn = el("div", "nm", "Production's learning rate"); dn.appendChild(el("small", null, "decided by this run")); drow.appendChild(dn);
+      var dt = el("div", "tx"), dp = el("span", "pill " + (lr.decision.passed ? "t-good" : "t-warn")); dp.appendChild(el("span", "ic", lr.decision.passed ? "✓" : "!")); dp.appendChild(document.createTextNode(F.lr(lr.decision.production_lr))); dt.appendChild(dp); dt.appendChild(el("span", null, lr.decision.note));
+      drow.appendChild(dt); host.appendChild(drow);
+    }
+    var infraRow = el("div", "rule"), inm = el("div", "nm", "Infra pause"); inm.appendChild(el("small", null, "pauses for Rishi")); infraRow.appendChild(inm);
+    var itx = el("div", "tx"), lastPause = last && last.infra_pause, ip = el("span", "pill " + (lastPause ? "t-crit" : "t-good")); ip.appendChild(el("span", "ic", lastPause ? "×" : "✓")); ip.appendChild(document.createTextNode(lastPause ? "Fired" : "OK")); itx.appendChild(ip);
+    itx.appendChild(el("span", null, lastPause || (run.kind === "second_seed" ? "Any infra episode in a step pauses the run." : "More than 1% infra episodes over the last 10 steps pauses the run.")));
+    infraRow.appendChild(itx); host.appendChild(infraRow);
+  })();
+
+  // ------------------------------------------------------------------ notices
+  var ui = { notices: "all", samples: "all", open: {} };
+  var GROUPS = {
+    all: ["All", null],
+    interventions: ["Interventions", /^(start|resume|rollback|lr|lr_fallback|lr_decision|ceiling|operator|paused|stopped|finished|pending)$/],
+    warnings: ["Warnings", /^(detectors|collapse|infra|logging|template|prune|skip|interrupted|crashed|capability|rule)$/],
+    evals: ["Evals and audits", /^(eval|audit)$/],
+    levels: ["Level moves", /^level$/]
+  };
+  var TONE = { rollback: "t-crit", lr_fallback: "t-crit", crashed: "t-crit", interrupted: "t-crit", paused: "t-warn", detectors: "t-warn", collapse: "t-warn", infra: "t-warn", logging: "t-warn", template: "t-warn", stopped: "t-serious", finished: "t-good", resume: "t-good", start: "t-good" };
+  function renderNotices() {
+    var host = $("notice-list"); host.innerHTML = "";
+    var re = GROUPS[ui.notices] ? GROUPS[ui.notices][1] : null;
+    var list = (D.notices || []).slice().reverse().filter(function (n) { return !re || re.test(n.kind); });
+    if (!list.length) { host.appendChild(el("li", "empty", "Nothing here yet.")); }
+    list.forEach(function (n) {
+      var li = el("li"), t = el("time", null, stamp(n.at)); li.appendChild(t); li.appendChild(el("span", "st", "step " + n.step));
+      var body = el("span"); body.appendChild(el("span", "kd " + (TONE[n.kind] || ""), n.kind.replace(/_/g, " "))); body.appendChild(document.createTextNode(n.text)); li.appendChild(body); host.appendChild(li);
+    });
+  }
+  function chips(hostId, groups, key, render) {
+    var host = $(hostId); host.innerHTML = "";
+    Object.keys(groups).forEach(function (g) {
+      var b = el("button", "chip", groups[g][0]); b.type = "button"; b.setAttribute("aria-pressed", String(ui[key] === g));
+      b.onclick = function () { ui[key] = g; chips(hostId, groups, key, render); render(); }; host.appendChild(b);
+    });
+  }
+
+  // ------------------------------------------------------------------ samples
+  var SGROUPS = { all: ["All", null], win: ["Wins", "win"], fail: ["Failures", "fail"], flagged: ["Flagged", "flagged"] };
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+  function pre(text) { var p = el("pre"); p.textContent = text; return p; }
+  function renderSamples() {
+    var host = $("sample-list"); host.innerHTML = "";
+    var list = (D.samples || []).filter(function (s) { var g = SGROUPS[ui.samples][1]; return !g || s.why === g || (g === "flagged" && s.why === "infra"); });
+    if (!list.length) { host.appendChild(el("p", "empty", (D.samples || []).length ? "No transcripts in this group." : "Transcripts appear after the first step.")); return; }
+    list.forEach(function (s) {
+      var d = el("details", "sample"); d.open = !!ui.open[s.key];
+      d.addEventListener("toggle", function () { if (d.open) ui.open[s.key] = 1; else delete ui.open[s.key]; });
+      var sm = el("summary"), WHY = { win: ["Win", "t-good", "✓"], fail: ["Failure", "t-serious", "×"], flagged: ["Flagged", "t-crit", "!"], infra: ["Infra", "t-warn", "!"] }[s.why] || [s.why, "t-muted", "·"];
+      var p = el("span", "pill " + WHY[1]); p.appendChild(el("span", "ic", WHY[2])); p.appendChild(document.createTextNode(WHY[0])); sm.appendChild(p);
+      var fk = el("span"), k = el("span", "key box"); k.style.background = famColor(s.family); k.style.marginRight = "6px"; fk.appendChild(k); fk.appendChild(document.createTextNode(famLabel(s.family) + " · level " + s.level)); sm.appendChild(fk);
+      sm.appendChild(el("span", "meta", "step " + s.step + " · reward " + F.num(s.reward) + " · " + plural(s.turn_count, "turn") + " · " + plural(s.subcalls_used || 0, "sub-call") + (s.hacks && s.hacks.length ? " · " + s.hacks.join(", ") : "") + (s.infra_kind ? " · infra: " + s.infra_kind : "")));
+      d.appendChild(sm);
+      var body = el("div", "sbody");
+      body.appendChild(el("h4", null, "Question")); body.appendChild(el("p", null, s.question));
+      body.appendChild(el("h4", null, "Context: " + F.int(s.context_chars) + " characters in " + F.int(s.context_lines) + " lines; the first 3 lines")); body.appendChild(pre(s.context_head || "(not shown)"));
+      (s.turns || []).forEach(function (t, i) {
+        var idx = i < 3 || !s.turns_omitted ? i + 1 : s.turn_count - (s.turns.length - i) + 1;
+        if (s.turns_omitted && i === 3) body.appendChild(el("p", "sub", "… " + s.turns_omitted + " turns not shown …"));
+        var tb = el("div", "turn"); tb.appendChild(el("h4", null, "Turn " + idx + (t.tokens ? " · " + t.tokens + " tokens" : "") + (t.finish === "length" ? " · cut off at the token cap" : "")));
+        if (t.plan) tb.appendChild(el("p", null, t.plan));
+        if (t.code) tb.appendChild(pre(t.code));
+        if (t.output || t.error) tb.appendChild(pre((t.output ? t.output : "") + (t.error ? (t.output ? "\n" : "") + "Error: " + t.error : "")));
+        if (t.restarted) tb.appendChild(el("p", "sub", "The REPL was restarted after this cell."));
+        body.appendChild(tb);
+      });
+      if ((s.subcalls || []).length) {
+        body.appendChild(el("h4", null, "Sub-calls: the first " + s.subcalls.length + " of " + (s.subcalls_used || s.subcalls.length)));
+        s.subcalls.forEach(function (c) { body.appendChild(pre("prompt: " + c.prompt + "\noutput: " + (c.error ? "(failed)" : c.output))); });
+      }
+      body.appendChild(el("h4", null, "Scoring"));
+      var dl = el("dl", "verdict");
+      function dd(a, b) { dl.appendChild(el("dt", null, a)); dl.appendChild(el("dd", null, b)); }
+      dd("submitted", s.submitted ? s.answer : "(no submit)"); dd("gold", s.gold); dd("reward", F.num(s.reward) + (s.correct ? " (exact)" : ""));
+      var comp = Object.keys(s.components || {}).map(function (k) { return k + " " + F.num(s.components[k]); }).join(", "); if (comp) dd("components", comp);
+      dd("detectors", s.hacks && s.hacks.length ? s.hacks.join(", ") : "none fired"); if (s.events || s.rejected) dd("sandbox", s.events + " audit events, " + s.rejected + " refused bridge requests");
+      body.appendChild(dl);
+      d.appendChild(body); host.appendChild(d);
+    });
+  }
+
+  // ------------------------------------------------------------------ table view
+  var COLS = [["step", function (r) { return r.step; }, String], ["status", function (r) { return r.status; }, String], ["pass", function (r) { return get(r, ["pass", "rate"]); }, F.pct],
+              ["trainable", function (r) { return get(r, ["pass", "trainable_groups"]); }, F.int], ["entropy", function (r) { return get(r, ["policy", "entropy"]); }, F.num],
+              ["KL", function (r) { return get(r, ["policy", "kl_to_base"]); }, F.num], ["reward std", function (r) { return get(r, ["policy", "reward_std"]); }, F.num],
+              ["grad norm", function (r) { return get(r, ["policy", "grad_norm"]); }, F.num], ["clip", function (r) { return get(r, ["policy", "clip_fraction"]); }, F.pct2],
+              ["sub-calls", function (r) { return get(r, ["shape", "subcalls"]); }, F.num], ["turns", function (r) { return get(r, ["shape", "turns"]); }, F.num],
+              ["hacks", function (r) { return get(r, ["reward", "hacked"]); }, F.int], ["infra", function (r) { return get(r, ["infra", "rate"]); }, F.pct],
+              ["cost", function (r) { return get(r, ["cost", "step_usd"]); }, F.usd3], ["time", function (r) { return get(r, ["time", "total_s"]); }, F.secs]];
+  (function () {
+    var host = $("step-table");
+    if (!steps.length) { host.appendChild(el("p", "empty", "No steps yet.")); return; }
+    var t = el("table"), hr = el("tr");
+    COLS.forEach(function (c, i) { hr.appendChild(el("th", i > 1 ? "n" : null, c[0])); }); t.appendChild(hr);
+    steps.slice(-15).reverse().forEach(function (r) { var tr = el("tr"); COLS.forEach(function (c, i) { tr.appendChild(el("td", i > 1 ? "n" : null, c[2](c[1](r)))); }); t.appendChild(tr); });
+    host.appendChild(t);
+  })();
+  function flatten(o, prefix, out) {
+    Object.keys(o).forEach(function (k) { var v = o[k], key = prefix ? prefix + "." + k : k; if (v && typeof v === "object" && !Array.isArray(v)) flatten(v, key, out); else if (!Array.isArray(v)) out[key] = v; });
+    return out;
+  }
+  function csv() {
+    var rows = steps.map(function (r) { return flatten(r, "", {}); }), cols = [];
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+    function q(v) { if (v == null) return ""; var s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+    return [cols.join(",")].concat(rows.map(function (r) { return cols.map(function (c) { return q(r[c]); }).join(","); })).join("\n");
+  }
+  $("copy-csv").onclick = function () {
+    var text = csv(), box = $("csv-box"), btn = this;
+    function fallback() { box.hidden = false; box.value = text; box.focus(); box.select(); btn.textContent = "Select and copy the text below"; }
+    try {
+      navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied " + steps.length + " steps"; setTimeout(function () { btn.textContent = "Copy all steps as CSV"; }, 2500); }, fallback);
+    } catch (e) { fallback(); }
+  };
+  $("foot-src").textContent = "This page mirrors results/" + (run.name || "run") + ".json, which the training loop rewrites every step; W&B holds the same metrics under rlm/. Built " + stamp(D.built_at) + ", run started " + stamp(run.created_at) + ".";
+
+  // ------------------------------------------------------------------ flags (comments) and live updates
+  function boot(prev) {
+    prev = prev || {};
+    if (prev.notices && GROUPS[prev.notices]) ui.notices = prev.notices;
+    if (prev.samples && SGROUPS[prev.samples]) ui.samples = prev.samples;
+    if (prev.open) ui.open = prev.open;
+    chips("notice-filter", GROUPS, "notices", renderNotices); renderNotices();
+    chips("sample-filter", SGROUPS, "samples", renderSamples); renderSamples();
+    var lastSeen = prev.lastStep, now = last ? last.step : 0;
+    if (isNum(lastSeen) && now > lastSeen) {
+      var toast = $("toast"); toast.textContent = (now - lastSeen === 1 ? "Step " + now + " arrived" : "Steps " + (lastSeen + 1) + " to " + now + " arrived"); toast.hidden = false;
+      setTimeout(function () { toast.hidden = true; }, 6000);
+    }
+  }
+  var hot = window.claude && window.claude.hot;
+  try { if (hot && typeof hot.snapshot === "function") hot.snapshot(function () { return { notices: ui.notices, samples: ui.samples, open: ui.open, lastStep: last ? last.step : 0 }; }); } catch (e) { /* the viewer's own update hook; optional */ }
+  try { if (hot && typeof hot.ready === "function") hot.ready(boot); else boot((hot && hot.data) || {}); } catch (e) { boot({}); }
+
+  if (window.claude && typeof window.claude.use === "function") {
+    window.claude.use("comments").then(function (comments) {
+      if (!comments) return;
+      var buttons = document.querySelectorAll("button.flag");
+      Array.prototype.forEach.call(buttons, function (b) {
+        b.hidden = false;
+        b.onclick = function () {
+          var section = b.closest("section");
+          comments.openComposer({ element: section }).then(function (r) { if (r && r.opened === false) b.textContent = "Close your open comment first"; }, function (err) {
+            if (err && (err.code === "unavailable" || err.code === "not_granted" || err.code === "forbidden")) Array.prototype.forEach.call(buttons, function (x) { x.hidden = true; });
+          });
+        };
+      });
+    }, function () { /* no comments here: the shell's own comment mode still works */ });
+  }
+})();
+</script>
