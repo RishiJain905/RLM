@@ -97,10 +97,14 @@ class TranscriptLog:
         self.torn_lines = 0
 
     def append(self, record: dict) -> None:
+        self.extend([record])
+
+    def extend(self, records: list[dict]) -> None:
+        """Append several records with one flush to disk (an fsync costs ~0.1 s in WSL2)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record, ensure_ascii=False, default=str)
+        lines = "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in records)
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+            f.write(lines)
             f.flush()
             os.fsync(f.fileno())
 

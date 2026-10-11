@@ -43,6 +43,7 @@ ENABLE_THINKING = False  # root and sub-calls (spec §5.1)
 # Qwen/Qwen3.8-27B special tokens, from its tokenizer_config.json. vLLM reports no logprob for a
 # prompt's first token, which is always <|im_start|>.
 IM_START_ID = 248045
+IM_END_ID = 248046
 THINK_START_ID = 248068
 THINK_END_ID = 248069
 
@@ -50,6 +51,9 @@ THINK_END_ID = 248069
 PRICE_INPUT = 0.40
 PRICE_CACHED_INPUT = 0.15
 PRICE_OUTPUT = 3.00
+
+CHAT_MAX_TOKENS = 1024  # one plain chat call: the capability check (step 6)
+CHAT_TEMPERATURE = 0.0  # fixed decoding, so a capability drop between checkpoints isn't sampling noise *(mine)*
 
 RETRY_STATUSES = frozenset({408, 409, 429})  # plus every 5xx
 SUBCALL_REJECT_STATUSES = frozenset({400, 413, 422})  # the model's prompt was refused: shown to it as an error
@@ -299,7 +303,12 @@ class ModelClient:
         self.limiter = limiter or Limiter()
         self.retry = retry
         self.stats = RequestStats()
+        self.spend: collections.defaultdict[str, Usage] = collections.defaultdict(Usage)  # every response, by kind
         self._rng = rng or random.Random()
+
+    def spent_usd(self) -> float:
+        """Estimated inference spend of every response this client has received (step 6's spend counter)."""
+        return sum(usage.cost_usd() for usage in self.spend.values())
 
     def reset_stats(self) -> dict:
         """Return this step's request stats and limiter peaks, then start counting again."""
@@ -345,6 +354,39 @@ class ModelClient:
 
         return complete
 
+    async def chat(self, messages: list[dict], *, model: str, max_tokens: int = CHAT_MAX_TOKENS,
+                   temperature: float = CHAT_TEMPERATURE) -> str:
+        """One plain chat call with thinking off, for the capability check. Raises RequestFailed."""
+        response = await self._request(
+            "chat", model, messages=messages, max_tokens=max_tokens, temperature=temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+        choice = self._first_choice(response, model)
+        if reasoning_tokens(response.usage):
+            self._fail("thinking_on", "a chat call spent reasoning tokens", model)
+        return choice.message.content or ""
+
+    async def prompt_logprobs(self, messages: list[dict], *, model: str) -> tuple[list[int], list[float | None]]:
+        """Score a finished conversation under `model`: each prompt token's id and logprob (KL to base, spec §5.3).
+
+        The conversation is sent as the prompt with `prompt_logprobs=0`, and one token is generated.
+        The first token has no logprob, as in the token-id rebuild. Raises RequestFailed.
+        """
+        response = await self._request(
+            "kl", model, messages=messages, max_tokens=1, temperature=ROOT_TEMPERATURE,
+            extra_body={"prompt_logprobs": 0, "chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+        entries = (response.model_extra or {}).get("prompt_logprobs")
+        if not entries:
+            self._fail("bad_response", "the response has no prompt logprobs", model)
+        ids, logprobs = [IM_START_ID], [None]
+        try:
+            for entry in entries[1:]:
+                token = next(iter(entry))
+                ids.append(int(token))
+                logprobs.append(float(entry[token]["logprob"]))
+        except (AttributeError, KeyError, StopIteration, TypeError, ValueError) as exc:
+            self._fail("bad_response", f"prompt logprobs could not be read ({exc!r})", model)
+        return ids, logprobs
+
     def _first_choice(self, response: Any, model: str) -> Any:
         choices = getattr(response, "choices", None)
         if not choices or getattr(choices[0], "message", None) is None:
@@ -366,8 +408,10 @@ class ModelClient:
             self.stats.attempts += 1
             async with self.limiter.slot(model):
                 try:
-                    return await self._client.chat.completions.create(model=model, timeout=self.retry.timeout_s,
-                                                                      **kwargs)
+                    response = await self._client.chat.completions.create(model=model, timeout=self.retry.timeout_s,
+                                                                          **kwargs)
+                    self.spend[kind].add(kind, getattr(response, "usage", None))
+                    return response
                 except openai.APIStatusError as exc:
                     status, cf_ray = exc.status_code, _header(exc, "cf-ray")
                     if status == 429:

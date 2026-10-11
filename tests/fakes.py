@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
+import os
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -127,3 +129,103 @@ class FakeSandbox:
         return CellResult(stdout[:bridge.OUTPUT_MAX_CHARS], len(stdout), error, submitted=state["submitted"],
                           answer=state["answer"], wall_s=time.monotonic() - started,
                           compute_s=time.monotonic() - started)
+
+
+class FakeBackend:
+    """An in-memory stand-in for backend.ArtBackend: no W&B, no credit.
+
+    Each model keeps a list of checkpoint steps. `train` checks the groups are trainable ART groups
+    (rewards, and root choices carrying token ids) and adds the next step; `fork` starts a model from
+    another's checkpoint; `train_metrics(name, step)` makes the metrics a test needs. Set
+    `fail_next_train` to an exception to make the next train call raise it before training, or
+    `fail_after_next_train` to raise it after the checkpoint exists. `fork_numbering="restart"`
+    numbers a fork's checkpoints from 1, one of the two ways the serverless backend might *(inferred)*.
+    """
+
+    def __init__(self, base_url: str, *, api_key: str = "test-key", fork_numbering: str = "continue",
+                 path: str | None = None):
+        import openai
+
+        self.path = path  # where the checkpoint lists persist between processes (the CLI dry run)
+        self.base_url = base_url
+        self.api_key = api_key
+        self.fork_numbering = fork_numbering  # "continue": a fork at k trains to k+1; "restart": to 1
+        self.models: dict[str, dict] = {}
+        self.trained: list[dict] = []
+        self.logged: list[dict] = []
+        self.deleted: list[tuple[str, list[int]]] = []
+        self.forks: list[tuple[str, str, int]] = []
+        self.fail_next_train: BaseException | None = None
+        self.fail_after_next_train: BaseException | None = None  # the job finishes, then the client loses it
+        self.train_metrics = lambda name, step: {"loss/grad_norm": 0.7, "loss/probs_corr": 0.997,
+                                                 "loss/clipped_token_fraction": 0.001,
+                                                 "loss/importance_ratio_mean": 1.0, "loss/train": -0.05}
+        self._openai = openai.AsyncOpenAI(base_url=base_url, api_key=api_key)
+        if path and os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                self.models = json.load(f)
+
+    def _persist(self) -> None:
+        if self.path:
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump(self.models, f)
+
+    async def open(self, name: str) -> None:
+        self.models.setdefault(name, {"steps": [], "next": 1})
+        self._persist()
+
+    def inference_name(self, name: str, step: int) -> str:
+        return f"{name}:step{step}"
+
+    def openai_client(self):
+        return self._openai
+
+    async def train(self, name: str, groups: list, **kwargs) -> tuple[int, dict]:
+        if self.fail_next_train is not None:
+            exc, self.fail_next_train = self.fail_next_train, None
+            raise exc
+        for group in groups:
+            assert len(group.trajectories) >= 2, "a trained group needs at least 2 trajectories"
+            assert len({t.reward for t in group.trajectories}) > 1, "an all-equal group reached training"
+            for traj in group.trajectories:
+                choices = [c for c in traj.messages_and_choices if not isinstance(c, dict)]
+                assert choices and all((c.model_extra or {}).get("token_ids") for c in choices)
+        model = self.models[name]
+        step = model["next"]
+        model["steps"].append(step)
+        model["next"] = step + 1
+        self._persist()
+        self.trained.append({"model": name, "step": step, "groups": len(groups), "kwargs": kwargs})
+        if self.fail_after_next_train is not None:
+            exc, self.fail_after_next_train = self.fail_after_next_train, None
+            raise exc
+        return step, self.train_metrics(name, step)
+
+    async def latest_step(self, name: str) -> int:
+        return max(self.models[name]["steps"], default=0)
+
+    async def list_steps(self, name: str) -> list[int]:
+        return list(self.models[name]["steps"])
+
+    async def delete_steps(self, name: str, steps: list[int]) -> None:
+        self.deleted.append((name, list(steps)))
+        self.models[name]["steps"] = [s for s in self.models[name]["steps"] if s not in steps]
+        self._persist()
+
+    async def fork(self, name: str, from_name: str, step: int) -> None:
+        if step not in self.models[from_name]["steps"]:
+            raise ValueError(f"{from_name} has no checkpoint {step}")
+        self.forks.append((name, from_name, step))
+        self.models[name] = {"steps": [step], "next": step + 1} if self.fork_numbering == "continue" else \
+            {"steps": [], "next": 1}
+        self._persist()
+
+    async def log(self, name: str, groups, *, split: str, step: int, metrics: dict) -> None:
+        self.logged.append({"model": name, "split": split, "step": step, "groups": len(groups or ()),
+                            "metrics": dict(metrics)})
+
+    def art_model(self, name: str):
+        return None
+
+    async def close(self) -> None:
+        await self._openai.close()

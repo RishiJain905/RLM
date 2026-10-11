@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from . import bridge, detectors, reward
+from . import bridge, detectors, reward, tasks as task_sets
 from .bridge import InfraError
 from .client import ModelClient
 from .env import Scorer, Task, run_episode
@@ -32,6 +32,11 @@ SYSTEM_PROMPT = bridge.SYSTEM_PROMPT  # tests/test_contract.py diffs this agains
 
 MAX_EPISODES_AT_ONCE = 32  # sandboxes running at once; the limiter paces the requests themselves
 
+# The selection set until plan step 7 builds the production one: 64 ticket tasks, 32 per family, across all 5
+# levels at fixed seeds (research §8.4). It stands in so the loop's eval, best-checkpoint and stop-rule code runs.
+SELECTION_TICKETS_V1 = {(family, level): count for family in ("tickets_all", "tickets_customer")
+                        for level, count in {1: 7, 2: 7, 3: 6, 4: 6, 5: 6}.items()}
+
 
 @dataclass
 class EvalResult:
@@ -41,6 +46,17 @@ class EvalResult:
     summary: dict
     ran: int  # episodes this call ran; the rest were already logged
     records: list[dict]
+
+
+def eval_set(name: str) -> tuple[list[Task], int]:
+    """An eval set the training loop runs, by name: (tasks, samples per task)."""
+    if name == "heldout-seed1":  # the first seed's 50 held-out tasks, 2 samples each (plan step 10)
+        from .tasks.tickets import legacy_tasks
+
+        return legacy_tasks(50, 99_999), 2
+    if name == "selection-tickets-v1":
+        return task_sets.fixed_set(name, SELECTION_TICKETS_V1), 1
+    raise KeyError(f"no eval set named {name!r}")
 
 
 def episode_key(name: str, step: int, task_id: str, sample: int) -> str:

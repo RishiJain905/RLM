@@ -32,13 +32,20 @@ Production code (built against `documentation/production-spec.md`):
 - `rlm_rl/detectors.py` - the hack detectors (`early_submit`, `copied_answer`, `escape_attempt`, `timeout_loop`), which zero a reward before the group mean
 - `rlm_rl/controller.py` - the difficulty controller: one level per task family, moved by its recent pass rate
 - `rlm_rl/transcripts.py` - one JSON line per finished episode, training and eval alike (`results/<run>/transcripts/`, git-ignored)
-- `rlm_rl/evals.py` - resumable evals that log every episode, locally and through ART's `model.log(..., split="val")`
+- `rlm_rl/evals.py` - resumable evals that log every episode, locally and through ART's `model.log(..., split="val")`, and the eval sets the training loop runs
+- `rlm_rl/config.py` - the run configs (second seed, production) and the pinned values saved with every checkpoint as `results/<run>/config.json`
+- `rlm_rl/training.py` - the resumable GRPO loop: steps, evals, the Claude audit's samples, kept checkpoints, the stop switch, resume from any kept checkpoint, and the spend ceiling
+- `rlm_rl/monitor.py` - every per-step metric for W&B and `results/<run>.json`, including entropy and KL to base
+- `rlm_rl/stoprules.py` - the five stop rules, the collapse check behind the learning-rate fallback, and the second seed's learning-rate decision
+- `rlm_rl/capability.py` - the capability check that watches for frying (its prompts come in plan step 7)
+- `rlm_rl/backend.py` - the loop's view of W&B serverless RL through ART: train, checkpoints, forks, logging
 - `rlm_rl/tasks/` - host-only task generation (random 64-bit seeds; eval seed lists go in the git-ignored `private/`), the family registry, and `tickets.py`, the ticket tasks with five difficulty levels
 - `scripts/sandbox_ctl.py` - build the sandbox image, run the regression tests, clean up after a crash
 - `scripts/audit.py` - read transcripts for the hack audit: per-log summary, sampled wins as Markdown, one episode in full, and the Claude audit at each checkpoint (`checkpoint`, `report`; see `documentation/audit-procedure.md`)
 - `scripts/reward_check.py` - what blind guessers earn under the reward, per family and level
 - `scripts/backtest_detectors.py` - replays the 20-step run's episodes through the detectors to count false alarms
-- `tests/` - regression tests; run them inside WSL2 with `.venv-linux/bin/python scripts/sandbox_ctl.py check`. `tests/fake_model.py` is a local stand-in for the W&B model server, so tests never spend credit
+- `scripts/train.py` - start, stop, resume and check a training run, live or as a dry run against fakes (`--dry-run`, no W&B, no credit)
+- `tests/` - regression tests; run them inside WSL2 with `.venv-linux/bin/python scripts/sandbox_ctl.py check`. `tests/fake_model.py` is a local stand-in for the W&B model server, so tests never spend credit; `tests/dryrun.py` runs the whole training loop against it and a fake backend
 
 The sandbox runs from WSL2 (Ubuntu) with Docker Desktop's WSL integration turned on.
 

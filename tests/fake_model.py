@@ -2,9 +2,13 @@
 
 It speaks enough of /v1/chat/completions for ModelClient: root calls get completion logprobs as
 "token_id:<id>" tokens and vLLM-style `prompt_logprobs` ending with the thinking-off block, so the
-token-id rebuild and the thinking checks run for real. It measures requests in flight on the
-server side, enforces W&B's limit of 20 per model name with a 429 (step 2 §5), and can inject
-faults. Root replies come from `policy(messages)`, sub-call replies from `answer(prompt)`.
+token-id rebuild and the thinking checks run for real. Prompts are rendered the way Qwen3.8's
+chat template renders them with thinking off: every assistant turn, past or being generated, starts
+with the empty think block, so a turn's prompt plus its sampled tokens is a prefix of the whole
+conversation (the KL-to-base rescoring in step 6 relies on this). It measures requests in flight on
+the server side, enforces W&B's limit of 20 per model name with a 429 (step 2 §5), and can inject
+faults. Root replies come from `policy(messages)`, sub-call replies from `answer(prompt)`; set
+`policy_for(model, messages)` or `answer_for(model, prompt)` to make them depend on the checkpoint.
 
     server = FakeModelServer()
     await server.start()
@@ -36,6 +40,7 @@ class AsyncCase(unittest.IsolatedAsyncioTestCase):
         self._asyncioRunner.get_loop().set_debug(False)
 
 NEWLINE_ID, DOUBLE_NEWLINE_ID, ASSISTANT_ID = 198, 271, 77091
+ROLE_IDS = {"system": 8948, "user": 872, "assistant": ASSISTANT_ID}
 THINKING_OFF_TAIL = [rclient.IM_START_ID, ASSISTANT_ID, NEWLINE_ID, rclient.THINK_START_ID, DOUBLE_NEWLINE_ID,
                      rclient.THINK_END_ID, DOUBLE_NEWLINE_ID]
 THINKING_ON_TAIL = [rclient.IM_START_ID, ASSISTANT_ID, NEWLINE_ID, rclient.THINK_START_ID, NEWLINE_ID]
@@ -44,6 +49,17 @@ THINKING_ON_TAIL = [rclient.IM_START_ID, ASSISTANT_ID, NEWLINE_ID, rclient.THINK
 def fake_ids(text: str) -> list[int]:
     """One fake token per 4 characters."""
     return [1000 + (sum(map(ord, text[i:i + 4])) % 90_000) for i in range(0, len(text), 4)] or [1000]
+
+
+def render(messages: list[dict], thinking: bool = False) -> list[int]:
+    """Prompt token ids as Qwen3.8's template lays them out, with fake ids for the text."""
+    ids = []
+    for m in messages:
+        ids += [rclient.IM_START_ID, ROLE_IDS[m["role"]], NEWLINE_ID]
+        if m["role"] == "assistant":
+            ids += THINKING_OFF_TAIL[3:]
+        ids += fake_ids(m["content"]) + [rclient.IM_END_ID, NEWLINE_ID]
+    return ids + (THINKING_ON_TAIL if thinking else THINKING_OFF_TAIL)
 
 
 def submit_policy(messages: list[dict]) -> str:
@@ -62,6 +78,11 @@ class FakeModelServer:
         self.latency = latency
         self.policy = policy
         self.answer = answer
+        self.policy_for: Callable[[str, list[dict]], str] | None = None
+        self.answer_for: Callable[[str, str], str] | None = None
+        # logprob of every sampled token, and of every prompt token when prompt_logprobs is asked for
+        self.completion_logprob: Callable[[str], float] = lambda model: -0.5
+        self.prompt_logprob: Callable[[str], float] = lambda model: -1.0
         self.thinking = thinking
         # fault(kind, body) -> HTTP status to fail with, "hang" to never answer, or None to serve normally
         self.fault: Callable[[str, dict], int | str | None] = lambda kind, body: None
@@ -133,7 +154,7 @@ class FakeModelServer:
         body = json.loads(raw)
         self.bodies.append(body)
         model = body["model"]
-        kind = "root" if body.get("logprobs") else "subcall"
+        kind = "root" if body.get("logprobs") else "kl" if body.get("prompt_logprobs") is not None else "subcall"
         self.requests[kind] += 1
         if self.per_model_limit is not None and self.in_flight_by_model[model] >= self.per_model_limit:
             return self._error(429, "Concurrency limit reached for requests")
@@ -162,11 +183,14 @@ class FakeModelServer:
         return status, {"error": {"message": message, "type": "error", "code": status}}, {"cf-ray": f"fake{self._rays:06d}-YYZ"}
 
     def _completion(self, kind: str, body: dict) -> dict:
-        messages = body["messages"]
-        text = self.policy(messages) if kind == "root" else self.answer(messages[-1]["content"])
-        completion = fake_ids(text)
-        prompt = [rclient.IM_START_ID] + [i for m in messages for i in fake_ids(m["content"])]
-        prompt += THINKING_ON_TAIL if self.thinking else THINKING_OFF_TAIL
+        messages, model = body["messages"], body["model"]
+        if kind == "root":
+            text = self.policy_for(model, messages) if self.policy_for else self.policy(messages)
+        else:
+            prompt_text = messages[-1]["content"]
+            text = self.answer_for(model, prompt_text) if self.answer_for else self.answer(prompt_text)
+        completion = fake_ids(text) + [rclient.IM_END_ID]
+        prompt = render(messages, self.thinking)
         choice = {"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}
         out = {"id": f"chatcmpl-{time.monotonic_ns()}", "object": "chat.completion", "created": int(time.time()),
                "model": body["model"], "choices": [choice],
@@ -175,9 +199,11 @@ class FakeModelServer:
                          "prompt_tokens_details": {"cached_tokens": 0},
                          "completion_tokens_details": {"reasoning_tokens": 8 if self.thinking else 0}}}
         if body.get("logprobs"):
-            choice["logprobs"] = {"content": [{"token": f"token_id:{i}", "logprob": -0.5, "bytes": None,
+            lp = self.completion_logprob(model)
+            choice["logprobs"] = {"content": [{"token": f"token_id:{i}", "logprob": lp, "bytes": None,
                                                "top_logprobs": []} for i in completion]}
         if body.get("prompt_logprobs") is not None:
-            out["prompt_logprobs"] = [None] + [{str(i): {"logprob": -1.0, "rank": 1, "decoded_token": "x"}}
+            lp = self.prompt_logprob(model)
+            out["prompt_logprobs"] = [None] + [{str(i): {"logprob": lp, "rank": 1, "decoded_token": "x"}}
                                                for i in prompt[1:]]
         return out

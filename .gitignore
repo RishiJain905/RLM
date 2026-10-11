@@ -10,3 +10,7 @@ checkpoints/
 private/
 results/*/transcripts/
 results/*/audit/
+results/*/pending/
+results/*/capability/
+results/*/abandoned/
+results/dry/

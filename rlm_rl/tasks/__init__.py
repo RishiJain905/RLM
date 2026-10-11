@@ -78,3 +78,20 @@ def draw(n: int, mix: dict[str, float], levels: dict[str, int]) -> list:
         out.extend(make_task(family, levels[family]) for _ in range(count))
     secrets.SystemRandom().shuffle(out)
     return out
+
+
+def fixed_set(name: str, plan: dict) -> list:
+    """A fixed eval set. `plan` maps (family, level) to a task count. The seeds are drawn once and kept in
+    private/seeds/<name>.json, so every eval of the set sees the same tasks, and no seed reaches the repo or a log."""
+    total = sum(plan.values())
+    try:
+        seeds = load_private_seeds(name)
+    except FileNotFoundError:
+        seeds = [new_seed() for _ in range(total)]
+        save_private_seeds(name, seeds)
+    if len(seeds) != total:
+        raise ValueError(f"private/seeds/{name}.json holds {len(seeds)} seeds, but the set needs {total}")
+    out, it = [], iter(seeds)
+    for (family, level), count in plan.items():
+        out.extend(make_task(family, level, next(it), f"{name}-{family}-L{level}-{i:02d}") for i in range(count))
+    return out
