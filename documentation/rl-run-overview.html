@@ -628,7 +628,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 
   <div class="col">
     <h3>What a trillion-parameter run taught a 27B one</h3>
-    <p>In September 2026 Xiaomi streamed the RL post-training of <span class="t" data-t="mimo">MiMo-V2.6</span> live. Its scale is nothing like ours (1,568 prompts × 16 rollouts a step, against our 8 × 4), but its algorithm is the same family, GRPO with mean-centred advantages and no std division, so its failures are the ones we would hit. Four of them shaped this build.</p>
+    <p>In September 2026 Xiaomi streamed the RL post-training of <span class="t" data-t="mimo">MiMo-V2.6</span> live. Its scale is nothing like ours (1,568 prompts × 16 rollouts a step, against our 8 × 4), but its algorithm is the same kind, GRPO with mean-centred advantages and no std division, so its failures are the ones we would hit. Four of them shaped this build.</p>
   </div>
   <div class="wide">
     <div class="grid g4" style="margin-top:20px">
@@ -1434,7 +1434,19 @@ const G = {
   gradnorm: ["Grad norm", "The size of each update's gradient. A spike above 3× its median is one of the checks that keeps production at the lower learning rate."],
   checkpoint: ["Checkpoint", "The LoRA weights after a step. Checkpoint 0 is the base model. Kept: every 5th, every evaluated one, the best and the latest."],
   fork: ["Fork / branch", "Resuming from an earlier checkpoint starts a new model on W&B from it, so nothing is deleted and later steps' logs move to abandoned/."],
-  rollout: ["Rollout / episode", "One full attempt at one task: up to 12 root turns ending in a submit, then scored. A step runs 32 of them."],
+  episode: ["Episode (rollout)", "One complete attempt by the root model at one task. It gets the question and the context's metadata, writes Python over up to 12 turns, may make up to 30 sub-calls, and ends when it calls submit() or runs out of turns. The host then scores it from 0 to 1. A training step runs 32 episodes: 8 tasks, each attempted 4 times. \"Rollout\" is RL's word for the same thing."],
+  reward: ["Reward", "The one number from 0 to 1 the host gives each episode: 1 for an exact answer, up to 0.8 partial credit for a close one, and 0 for no answer or when a hack detector fires. GRPO learns from each episode's reward relative to its group's mean."],
+  turn: ["Turn", "One round inside an episode: the root writes one block of Python, the REPL runs it, and the root sees up to 2,000 characters of output. An episode gets at most 12 turns."],
+  family: ["Task family", "A kind of task with its own generator and scoring. Production trains on aggregation, call graph, needle and repo localization; the second seed uses ticket tasks. Each family has its own difficulty level."],
+  policy: ["Policy", "RL's word for the model being trained: here the root model, Qwen3.8-27B plus the LoRA. Policy health means signs it is still learning well, such as entropy, KL and grad norm."],
+  lr: ["Learning rate (LR)", "How big a change each update makes. The 20-step run used 1e-5. Production may start at 2e-5 if the second seed looks healthy, and falls back to 1e-5 on a collapse."],
+  token: ["Token", "The unit a model reads and writes, a few characters of text. W&B bills inference per million tokens: $0.40 input, $0.15 cached input, $3.00 output."],
+  pot: ["Credit pots", "W&B credit comes in two separate pots: $250 for inference (every token the model reads or writes; the run's real limit, ~$218 left) and $1,000 for training GPU time (~$8 used)."],
+  eval: ["Eval", "Running the model on fixed tasks without training on them, to measure it. The selection set runs every 10 steps; the held-out test and public benchmarks run once at the end."],
+  transcript: ["Transcript", "The full record of one episode: every root turn, REPL output and sub-call, the answer, the reward and any detector flags. Every training and eval episode is logged as one."],
+  harness: ["Harness", "The program around a model that runs its loop and gives it tools. Part 2 builds a general RLM harness, a Python REPL with a host bridge, whose default root is our trained LoRA."],
+  sysprompt: ["System prompt", "The fixed instructions the root gets at the start of every episode: the bridge functions, the limits and how to submit. The prompt hash pins its text, so training and deployment use the same words."],
+  partial: ["Partial credit", "Reward for a wrong but close answer, up to 0.8. It is measured against the task's blind guess, so an answer no better than guessing earns 0."],
   step: ["Step", "One round of training: 8 tasks × 4 rollouts, filter, update. Checkpoint n−1 becomes checkpoint n."],
   echo: ["Echo Trap", "A known GRPO failure where rollouts in a group become near-identical, reward spread collapses, and learning stalls. Watched via within-group reward std."],
   oolong: ["OOLONG", "A long-context aggregation benchmark. Its synthetic set fails our licence bar, so our aggregation family rebuilds its method on permissive text; its test split is eval-only."],
@@ -2233,5 +2245,92 @@ $("#decisionCards").innerHTML = [
     const q = e.target.value.trim().toLowerCase();
     $$("div", dl).forEach(d => { d.hidden = q && !d.textContent.toLowerCase().includes(q); });
   });
+})();
+
+/* ------------------------------------------------------------------ auto-link glossary terms (hover for the definition) */
+(function () {
+  // [pattern, glossary key, case-sensitive]; longer phrases first so they win
+  const TERMS = [
+    ["Recursive Language Models?", "rlm"], ["RLMs?", "rlm", 1],
+    ["direct-reading baseline|direct reading", "direct"], ["selection sets?", "selection"], ["held-out tests?", "heldout"],
+    ["capability checks?", "capability"], ["difficulty controller|controller", "controller"], ["blind guess(?:es|er)?", "blind"],
+    ["(?:hack )?detectors?", "detector"], ["hack zeroing", "hackzero"], ["audit hook", "audithook"], ["Claude audit|audit", "audit"],
+    ["exact accuracy", "exact"], ["partial credit", "partial"], ["standard errors?", "se"], ["SE", "se", 1],
+    ["importance (?:ratio|weight)s?", "ratio"], ["clip fraction", "clipfrac"], ["grad(?:ient)? norm", "gradnorm"],
+    ["KL(?: to base)?", "kl", 1], ["entropy", "entropy"], ["Echo Trap", "echo"], ["loss mask", "mask"], ["prompt hash", "prompthash"],
+    ["system prompt", "sysprompt"], ["Bridge API(?: v1)?|host bridge|bridge", "bridge"], ["limiter", "limiter"],
+    ["infra(?:structure)? (?:errors?|failures?)|infra", "infra"], ["429s?", "r429"], ["sandbox(?:es)?", "sandbox"],
+    ["Landlock", "landlock"], ["Docker(?: container)?", "docker"], ["WSL2?", "wsl", 1],
+    ["second seed", "secondseed"], ["task seeds?", "seed"], ["(?:spending )?ceilings?", "ceiling"], ["reserve", "reserve"],
+    ["(?:inference|training(?:-GPU)?) pot|pots?", "pot"], ["learning rate", "lr"], ["LR", "lr", 1],
+    ["episodes?|rollouts?", "episode"], ["rewards?", "reward"], ["root turns?|turns?(?! each| into| out| up| on| off| checkpoint)", "turn"],
+    ["sub-calls?", "subcall"], ["root model|root", "root"], ["groups?", "group"], ["advantages?", "advantage"],
+    ["checkpoints?", "checkpoint"], ["levels?", "level"], ["task famil(?:y|ies)|famil(?:y|ies)", "family"], ["polic(?:y|ies)", "policy"],
+    ["tokens?", "token"], ["evals?", "eval"], ["transcripts?", "transcript"], ["harness(?:es)?", "harness"],
+    ["training steps?", "step"], ["collapses?", "collapse"], ["plateaus?", "plateau"], ["frying", "frying"], ["overfitting", "overfit"],
+    ["saturat(?:ed|ion)", "saturation"], ["(?:live )?dashboard", "dashboard"], ["notices?", "notice"],
+    ["(?:dataset )?manifest", "manifest"], ["code-solvable", "codesolv"], ["ticket tasks?|tickets?", "tickets"], ["holes?", "hole"],
+    ["temperature", "temperature"], ["thinking", "thinking"], ["Hugging Face", "hf"], ["McNemar(?: test)?", "mcnemar"],
+    ["Qwen3\\.8-27B", "qwen"], ["MiMo(?:-V2\\.6)?", "mimo"], ["OOLONG(?:-synth|-real)?", "oolong"], ["Long Code Arena|LCA", "lca"],
+    ["RepoQA", "repoqa"], ["W&B(?: serverless RL)?", "wandb"], ["ART", "art", 1], ["GRPO", "grpo", 1], ["CISPO", "cispo", 1],
+    ["SDPO", "sdpo", 1], ["RLSD", "rlsd", 1], ["SFT", "sft", 1], ["LoRA", "lora", 1], ["REPL", "repl", 1], ["RL", "rl", 1],
+  ].filter(([, k]) => G[k]);
+  const CODE = { context: "context", llm: "llm", "llm()": "llm", llm_batch: "llm_batch", "llm_batch()": "llm_batch", submit: "submit",
+    "submit()": "submit", early_submit: "early_submit", copied_answer: "copied_answer", escape_attempt: "escape_attempt",
+    timeout_loop: "timeout_loop", near_blind: "near_blind", e_blind: "e_blind", probs_corr: "probs_corr" };
+  const RE = new RegExp("(?<![\\w-])(?:" + TERMS.map(([p]) => "(" + p + ")").join("|") + ")(?![\\w-])", "gi");
+  const exact = TERMS.map(([p, , cs]) => cs ? new RegExp("^(?:" + p + ")$") : null);
+  const SKIP = "pre,code,script,style,svg,button,summary,a,input,textarea,label,.t,.chip,h1,h2,h3,h4,.chnum,.eyebrow,.k,.stat,.hbars,.legend,dt,nav,header,#tip,#glossary,#evLog,.tabs,.track";
+  const BLOCK = "p,li,figcaption,td,dd,.note,.trackdetail,.herocap,.small";
+  const keysIn = b => new Set($$(".t[data-t]", b).map(e => e.dataset.t));
+  const mark = el => { el.classList.add("t"); el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-describedby", "tip"); };
+
+  function link(root) {
+    if (!root.isConnected || root.closest("#glossary,#evLog,#tip")) return;
+    $$("code", root).forEach(c => {
+      const k = CODE[c.textContent.trim()];
+      if (!k || !G[k] || c.closest("pre,a,.t,button,summary,svg,#glossary,#evLog,h1,h2,h3,h4")) return;
+      const b = c.parentElement.closest(BLOCK) || c.parentElement, ks = keysIn(b);
+      if (ks.has(k)) return;
+      ks.add(k); c.dataset.t = k; mark(c);
+    });
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => n.nodeValue.trim().length > 1 && !n.parentElement.closest(SKIP) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
+    });
+    const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(n => {
+      const b = n.parentElement.closest(BLOCK) || n.parentElement, ks = keysIn(b), text = n.nodeValue;
+      let m, last = 0, frag = null;
+      RE.lastIndex = 0;
+      while ((m = RE.exec(text))) {
+        const i = m.slice(1).findIndex(g => g !== undefined);
+        if (i < 0 || (exact[i] && !exact[i].test(m[0]))) continue;
+        const k = TERMS[i][1];
+        if (ks.has(k)) continue;
+        ks.add(k);
+        frag = frag || document.createDocumentFragment();
+        frag.append(text.slice(last, m.index));
+        const sp = document.createElement("span"); sp.dataset.t = k; sp.textContent = m[0]; mark(sp); frag.append(sp);
+        last = m.index + m[0].length;
+      }
+      if (frag) { frag.append(text.slice(last)); n.replaceWith(frag); }
+    });
+  }
+
+  const main = $("main");
+  link(main);
+  // Panels that re-render (build track, episode captions, sandbox results, chart captions) get linked too.
+  let pending = new Set(), queued = false;
+  const obs = new MutationObserver(ms => {
+    ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) pending.add(n); else if (n.nodeType === 3 && n.parentElement) pending.add(n.parentElement); }));
+    if (queued) return; queued = true;
+    requestAnimationFrame(() => {
+      obs.disconnect();
+      const todo = [...pending]; pending = new Set(); queued = false;
+      todo.forEach(link);
+      obs.observe(main, { childList: true, subtree: true });
+    });
+  });
+  obs.observe(main, { childList: true, subtree: true });
 })();
 </script>
