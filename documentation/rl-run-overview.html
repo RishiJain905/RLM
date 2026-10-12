@@ -328,6 +328,10 @@ label.ctl output{color:var(--ink);font-weight:700}
 .stack100{display:flex;height:34px;border-radius:6px;overflow:hidden;gap:2px;background:var(--surface)}
 .stack100 div{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11.5px;color:#14121a;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden}
 .mixrow{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-top:10px}
+.stepgrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.stepgrid .sc{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0}
+.stepgrid .sc i{display:block;width:100%;height:11px;border-radius:2px}
+.stepgrid .sc span{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:center;margin-top:3px}
 .mixrow .k{font-family:var(--mono);font-size:11.5px;color:var(--muted);line-height:1.3}
 @media (max-width:520px){.mixrow{grid-template-columns:1fr}.hb{grid-template-columns:minmax(70px,34%) 1fr auto}body{font-size:17px}}
 </style>
@@ -362,7 +366,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <span class="chip prop">Proposed, not decided</span>
         <span class="chip illus">Illustration</span>
       </div>
-      <p class="small muted" style="margin-top:12px">Every number on this page comes from the project's committed docs and code (steps 1-8 on branch <code>claude/project-thread-9nnh3n</code>), step 9's results file (not yet committed) and the project's spend log. Anything not yet run is labelled. Dotted words explain themselves on hover or tap.</p>
+      <p class="small muted" style="margin-top:12px">Every number on this page comes from the project's committed docs and code (steps 1-9 on branch <code>claude/project-thread-9nnh3n</code>) and the project's spend log. Anything not yet run is labelled. Dotted words explain themselves on hover or tap.</p>
     </div>
     <figure class="heroviz" aria-label="Animated illustration of one episode: the root model probes a 391,846-character context, sends one chunk to a sub-call, fans out 19 more in parallel, sums the counts and submits.">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
@@ -391,20 +395,20 @@ label.ctl output{color:var(--ink);font-weight:700}
     <div class="grid g4">
       <div class="card"><div class="k">Method</div><div class="stat" style="margin-top:8px">GRPO</div><p style="margin-top:8px">On <span class="t" data-t="wandb">W&amp;B</span> serverless RL (<span class="t" data-t="art">ART</span> 0.5.20), training a LoRA on Qwen3.8-27B. Chosen after a three-way test with <span class="t" data-t="sdpo">SDPO</span> and <span class="t" data-t="rlsd">RLSD</span>, then a 20-step head-to-head with RLSD.</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
       <div class="card"><div class="k">Evidence so far</div><div class="stat" style="margin-top:8px">0.50 → 0.70</div><p style="margin-top:8px">Held-out accuracy, base vs GRPO after 20 steps, 100 episodes each: about 3 <span class="t" data-t="se">standard errors</span>. One seed only, which step 10 repeats.</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
-      <div class="card"><div class="k">Built so far</div><div class="stat" style="margin-top:8px">8 <small>of 13 steps</small></div><p style="margin-top:8px">Sandbox, limiter, reward, detectors, difficulty controller, training loop, data, red-team. 246 tests, 245 pass. $0 of W&amp;B credit spent on steps 3-8. Step 9's dashboard is built too, not yet committed.</p><p style="margin-top:8px"><span class="chip built">Built and tested</span></p></div>
+      <div class="card"><div class="k">Built so far</div><div class="stat" style="margin-top:8px">9 <small>of 13 steps</small></div><p style="margin-top:8px">Sandbox, limiter, reward, detectors, difficulty controller, training loop, data, red-team, live dashboard. Through step 8: 246 tests, 245 pass. $0 of W&amp;B credit spent on steps 3-9.</p><p style="margin-top:8px"><span class="chip built">Built and tested</span></p></div>
       <div class="card"><div class="k">The binding limit</div><div class="stat" style="margin-top:8px">~$218</div><p style="margin-top:8px">W&amp;B inference credit left of $250. Every rollout, sub-call and eval bills here. The $1,000 training-GPU pot is barely touched ($8.02).</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
     </div>
   </div>
 
   <div class="col" style="margin-top:34px">
     <h3 style="margin-top:0">The build, step by step</h3>
-    <p>The production plan has 13 steps. Steps 1-8 are done and committed. Step 9, the live dashboard, is built and tested on a dry run and waits for Rishi's OK to commit. Steps 10-13 spend credit, so each waits for Rishi's go-ahead. Pick a step.</p>
+    <p>The production plan has 13 steps. Steps 1-9 are done and committed; step 9, the live dashboard, was tested on a dry run. Steps 10-13 spend credit, so each waits for Rishi's go-ahead. Pick a step.</p>
   </div>
   <div class="wide">
     <figure class="fig">
       <div class="track" id="track" role="group" aria-label="The 13 build steps"></div>
       <div class="trackdetail" id="trackDetail" aria-live="polite"></div>
-      <figcaption><b>Green</b> steps are built and tested at $0 of W&amp;B credit, apart from step 2's $0.13 of checks. <b>Striped</b> is built and dry-run tested, not yet committed. <b>Dashed</b> steps are planned and spend inference credit, except step 13, which runs off W&amp;B.</figcaption>
+      <figcaption><b>Green</b> steps are built and tested at $0 of W&amp;B credit, apart from step 2's $0.13 of checks. <b>Dashed</b> steps are planned and spend inference credit, except step 13, which runs off W&amp;B.</figcaption>
     </figure>
   </div>
 
@@ -779,11 +783,12 @@ label.ctl output{color:var(--ink);font-weight:700}
         <figcaption><b>Median characters per task, 20 tasks per family and level.</b> Every family's top level clears the 130K line that hole H8 set (the old tasks were 30-45K, which fit in the root's own window). At level 5, about 20 sub-calls of ~20K characters cover the text.</figcaption>
       </figure>
       <figure class="fig">
-        <div class="fighead"><h4>The mix: decided vs drawn</h4><span class="chip built">Built and tested</span></div>
+        <div class="fighead"><h4>The mix: decided vs drawn</h4><span class="chip built">Built and tested on a dry run</span></div>
         <div class="mixrow"><div class="k">Decided (7c)<br>share of tasks</div><div class="stack100" id="mixDecided"></div></div>
-        <div class="mixrow"><div class="k">Drawn every step<br>8 tasks</div><div class="stack100" id="mixDrawn"></div></div>
-        <div class="note warn" style="margin-top:16px"><b class="lab">Worth knowing</b>A step draws 8 tasks, and <code>tasks.allocate</code> rounds the shares the same way every time: 4 aggregation, 2 callgraph, 1 needle, 1 repo_loc. So needle actually gets 12.5% instead of 20% and callgraph 25% instead of 20%; code as a whole gets 37.5% instead of 40%. The code is right to the letter; this is a consequence of 8 tasks a step, flagged here, not changed.</div>
-        <figcaption><b>Verified by running the code:</b> <code>allocate(8, production_mix())</code> returns <code>{aggregation: 4, callgraph: 2, needle: 1, repo_loc: 1}</code>.</figcaption>
+        <div class="mixrow"><div class="k">Drawn per 5 steps<br>40 tasks</div><div class="stack100" id="mixDrawn"></div></div>
+        <div class="mixrow" style="align-items:start"><div class="k">Steps 1-10<br>8 tasks each</div><div class="stepgrid" id="mixSteps" role="img" aria-label="The tasks drawn in each of the first 10 steps, coloured by family."></div></div>
+        <div class="note ok" style="margin-top:16px"><b class="lab">Fixed on 12 Oct</b>At 8 tasks a step, the old <code>tasks.allocate</code> rounded the same way every step: 4 aggregation, 2 callgraph, 1 needle, 1 repo_loc. A whole run would have trained 50/25/12.5/12.5, with needle at 12.5% instead of 20%. Now each step takes its slice of one run-long sequence, in which every task goes to the family furthest behind its share. Every family stays within one task of its share at every step, and the mix is exact every 5 steps. A step's split depends only on its number, so a resume or a rollback redraws the same split. Repo localization draws no task about one step in five; the controller only counts steps that drew a family.</div>
+        <figcaption><b>Verified by running the code:</b> <code>tasks.allocate_step(8, production_mix(), step)</code> gives the columns above. A 60-step production dry run drew 216/96/96/72 of 480 tasks, exactly 45/20/20/15, at $0. Not yet seen on a live run.</figcaption>
       </figure>
     </div>
   </div>
@@ -962,14 +967,14 @@ label.ctl output{color:var(--ink);font-weight:700}
       <div class="fighead"><h4>Watch it work</h4><span class="chip illus">Simulated</span></div>
       <div class="row" style="margin-bottom:10px">
         <div class="tabs" id="ctlFam" role="tablist" aria-label="Family to simulate">
-          <button class="tab" role="tab" aria-selected="true" data-n="16">aggregation · 16 eps/step</button>
-          <button class="tab" role="tab" aria-selected="false" data-n="4">needle · 4 eps/step</button>
+          <button class="tab" role="tab" aria-selected="true" data-f="0">aggregation · 3-4 tasks a step</button>
+          <button class="tab" role="tab" aria-selected="false" data-f="2">needle · 1-2 tasks a step</button>
         </div>
         <label class="ctl" style="min-width:200px;flex:1">Learning speed <output id="ctlSpeedOut">medium</output><input type="range" id="ctlSpeed" min="1" max="3" value="2"></label>
         <button class="btn" id="ctlReseed" type="button">New random run</button>
       </div>
       <div id="ctlChart"></div>
-      <figcaption><b>A made-up skill curve run through the real rules</b> (window 3 steps, ≥8 episodes, up above 70%, down below 20%). Dots are each step's exact pass rate; the stepped line is the level. With 8 tasks drawn 4/2/1/1, needle and repo localization get 4 episodes a step, so their 3-step window holds only 12 episodes and one episode moves the rate by 8 points. During the second seed the controller is frozen at level 1 and only records what it would have done.</figcaption>
+      <figcaption><b>A made-up skill curve run through the real rules</b> (window 3 steps, ≥8 episodes, up above 70%, down below 20%). Dots are each step's exact pass rate; the stepped line is the level. Each family's tasks per step follow the real split: needle draws 1 or 2 tasks (4-8 episodes) a step, so its 3-step window holds only 16-20 episodes and one episode moves the rate by 5-6 points. During the second seed the controller is frozen at level 1 and only records what it would have done.</figcaption>
     </figure>
   </div>
 </section>
@@ -1075,7 +1080,7 @@ label.ctl output{color:var(--ink);font-weight:700}
   <div class="col">
     <h3>Inside one step</h3>
     <ol class="flow">
-      <li><b>Draw and roll out.</b> 8 tasks at each family's current level, fresh seeds, 4 rollouts each from checkpoint <i>n−1</i>: 32 episodes at once. Each is logged as a transcript.</li>
+      <li><b>Draw and roll out.</b> 8 tasks, split so the run keeps the 45/20/20/15 mix, each at its family's current level, fresh seeds, 4 rollouts each from checkpoint <i>n−1</i>: 32 episodes at once. Each is logged as a transcript.</li>
       <li><b>Filter.</b> Infra episodes out; then groups left with fewer than 2 episodes, and groups whose rewards are all equal, are dropped. The controller updates, and 4 rollouts are re-scored by the base model for KL.</li>
       <li><b>Commit spend, then train.</b> The step's inference cost is recorded first, then the surviving groups train into checkpoint <i>n</i>. Fewer than 2 trainable groups skips the update, and checkpoint <i>n</i> equals <i>n−1</i>.</li>
       <li><b>Log.</b> The step's metrics go to <code>results/&lt;run&gt;.json</code> and W&amp;B: pass rates, levels, reward parts, detector hits by rule, entropy, KL, clip fraction, grad norm, sub-calls, turns, tokens, cost and timing.</li>
@@ -1188,7 +1193,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 <section class="ch" id="dashboard">
   <div class="col">
     <div class="chhead"><span class="chnum">13 · WATCHING IT</span><h2>A live dashboard friends can open</h2></div>
-    <p><span class="chip built">Built and dry-run tested</span> <span class="chip prog">Not committed yet</span></p>
+    <p><span class="chip built">Built and dry-run tested</span></p>
     <p style="margin-top:10px">Step 9 is one shareable page, modelled on MiMo-V2.6's public RL page. A Claude session on Rishi's PC republishes it after every training step (9a), Rishi invites friends from its Share menu (9b), and it shows sampled training transcripts (9c). Every chart shares one step axis, so hovering one puts a crosshair on that step in all of them. One link serves every run, so friends invited now will see the second seed and production. <a href="https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3">The dashboard</a> is private until Rishi shares it, and today it shows a dry run, badged as one.</p>
   </div>
   <div class="wide">
@@ -1353,7 +1358,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <tr><td><a href="https://arxiv.org/html/2512.24601v3">RLM paper</a> · <a href="https://arxiv.org/abs/2601.20802">SDPO</a> · <a href="https://arxiv.org/abs/2604.03128">RLSD</a></td><td>Background</td></tr>
       </tbody>
     </table>
-    <p class="foot">Built 11 Oct 2026 from the committed state of steps 1-8 (commit <code>f3cc82a</code>) and step 9's results file, which was not yet committed at the time of writing. The call-graph replay ran our generator, observation builder, reward and detectors locally with scripted moves; no model was called and no W&amp;B credit was used. The aggregation episode, the controller simulation and the expected-shape charts are illustrations and are labelled as such.</p>
+    <p class="foot">Built 11-12 Oct 2026 from the committed state of steps 1-9 (step 9 is commit <code>aed0766</code>) and the mix fix (<code>2ce8f87</code>). The call-graph replay ran our generator, observation builder, reward and detectors locally with scripted moves; no model was called and no W&amp;B credit was used. The aggregation episode, the controller simulation and the expected-shape charts are illustrations and are labelled as such.</p>
   </div>
 </section>
 
@@ -1698,7 +1703,7 @@ const AGG = [
     ["Training loop and monitoring", "built", "scripts/train.py: evals every 10 steps, five stop rules, the LR fallback, entropy / KL / clip / grad-norm logging, spending ceilings, a stop switch and resume from any kept checkpoint. 214 tests on fakes; a 42-step dry run in 34 s.", "PC · $0", "#loop"],
     ["Data", "built", "Aggregation 45%, code generators 40%, repo localization 15%. Five levels per family up to ~400K characters. A 64-task selection set, a 170-task held-out test, a 100-prompt capability check, and a manifest pinning every file. Cyber dropped (7c).", "PC + design · $0 · holes H7, H8", "#data"],
     ["Red-team", "built", "copied_answer was zeroing 13 of 104 honest wins; fixed to 1 of 104 (documented). reward_check.py crashed on 4 of 6 families; rewritten. Every isolation test green. 246 tests, 245 pass.", "Claude agent · $0 · re-checks H1-H4, H11", "#cheating"],
-    ["Live dashboard", "prog", "A shareable page a Claude session republishes after every step: 13 panels of per-step charts, cost against the pot, stop-rule status, notices and sampled training transcripts. A paced 14-step dry run got a new version ~9 s after each step. 14 new tests pass. Waiting for Rishi's OK to commit; matching the cost panel to W&B billing waits for step 10.", "PC + Claude · $0 on W&B", "#dashboard"],
+    ["Live dashboard", "built", "A shareable page a Claude session republishes after every step: 13 panels of per-step charts, cost against the pot, stop-rule status, notices and sampled training transcripts. A paced 14-step dry run got a new version ~9 s after each step. 14 new tests pass. Matching the cost panel to W&B billing waits for step 10. The same thread also fixed the per-step mix rounding.", "PC + Claude · $0 on W&B", "#dashboard"],
     ["Second seed (the smoke test)", "plan", "The 20-step GRPO run again on environment v2, plus a 100-episode held-out eval: ~740 episodes. It checks 0.70 reproduces, catches plumbing bugs cheaply, picks production's learning rate, and is the dashboard's first live run.", "Spend · ~$12 · hole H12", "#run"],
     ["Baselines", "plan", "The base model as an RLM, and reading the context directly, on the 64-task selection set: ~130 episodes. Every stop rule and claim compares against these.", "Spend · ~$5", "#run"],
     ["Production run", "plan", "GRPO at 32 episodes a step until a stop rule fires or the $150 ceiling: ~80-180 steps, ~120 a fair middle. Selection set and capability check every 10 steps (~$25 in all).", "Spend · ≤$150 + ~$25", "#run"],
@@ -1817,6 +1822,18 @@ $("#sysPrompt").textContent = REPLAY.system;
   $("#evAll").addEventListener("click", () => { shown = msgs.length; update(); });
   setKind("honest");
 })();
+/* ------------------------------------------------------------------ allocate_step: same rule as rlm_rl/tasks/__init__.py */
+function allocateStep(n, mix, step) {
+  const total = mix.reduce((a, w) => a + w, 0), share = mix.map(w => w / total), soFar = mix.map(() => 0), out = mix.map(() => 0);
+  for (let k = 0; k < step * n; k++) {
+    let best = 0;
+    for (let f = 1; f < mix.length; f++) if ((k + 1) * share[f] - soFar[f] > (k + 1) * share[best] - soFar[best]) best = f;
+    soFar[best]++;
+    if (k >= (step - 1) * n) out[best]++;
+  }
+  return out;
+}
+
 
 /* ------------------------------------------------------------------ history */
 hbars($("#hThree"), [
@@ -1928,7 +1945,13 @@ hbars($("#hBySub"), [
   $("#sizeChart").appendChild(s);
 
   const mixD = [["aggregation", 45, "--f1"], ["callgraph", 20, "--f2"], ["needle", 20, "--f3"], ["repo", 15, "--f4"]];
-  const mixA = [["aggregation 4", 50, "--f1"], ["callgraph 2", 25, "--f2"], ["needle 1", 12.5, "--f3"], ["repo 1", 12.5, "--f4"]];
+  const mixA = [["aggregation 18", 45, "--f1"], ["callgraph 8", 20, "--f2"], ["needle 8", 20, "--f3"], ["repo 6", 15, "--f4"]];
+  const FAM = ["aggregation", "callgraph", "needle", "repo_loc"], FC = ["--f1", "--f2", "--f3", "--f4"];
+  $("#mixSteps").innerHTML = Array.from({ length: 10 }, (_, i) => {
+    const c = allocateStep(8, [0.45, 0.2, 0.2, 0.15], i + 1);
+    const tip = `step ${i + 1}: ` + c.map((v, f) => `${v} ${FAM[f]}`).join(", ");
+    return `<div class="sc" data-tip="${tip}">` + c.map((v, f) => `<i style="background:var(${FC[f]})"></i>`.repeat(v)).join("") + `<span>${i + 1}</span></div>`;
+  }).join("");
   const stack = (el, d) => { el.innerHTML = d.map(([n, v, c]) => `<div style="flex:${v};background:var(${c})" data-tip="${esc(n)}: ${v}%">${v >= 15 ? v + "%" : v + ""}</div>`).join(""); };
   stack($("#mixDecided"), mixD); stack($("#mixDrawn"), mixA);
 
@@ -1989,16 +2012,18 @@ hbars($("#caBars"), [
 
 /* ------------------------------------------------------------------ controller simulator */
 (function () {
-  let n = 16, speed = 2, seed = 7;
+  let fam = 0, speed = 2, seed = 7;
   const rng = s => () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
   function simulate() {
-    const rand = rng(seed * 7919 + n * 31 + speed), steps = 60, out = [], levelAt = [];
+    const rand = rng(seed * 7919 + fam * 31 + speed), steps = 60, out = [], levelAt = [];
     let level = 1, win = [];
     const rate = [0.035, 0.06, 0.09][speed - 1];
     for (let t = 1; t <= steps; t++) {
       const skill = rate * t, p = 1 / (1 + Math.exp(-3.2 * (skill - (level - 1) * 0.55 - 0.15)));
+      const n = 4 * allocateStep(8, [0.45, 0.2, 0.2, 0.15], t)[fam];
+      if (!n) { levelAt.push(level); continue; }
       let pass = 0; for (let k = 0; k < n; k++) if (rand() < p) pass++;
-      out.push({ t, level, r: pass / n }); win.push([n, pass]); if (win.length > 3) win.shift();
+      out.push({ t, level, n, r: pass / n }); win.push([n, pass]); if (win.length > 3) win.shift();
       const eps = win.reduce((a, w) => a + w[0], 0), ps = win.reduce((a, w) => a + w[1], 0);
       let move = 0;
       if (win.length >= 3 && eps >= 8) { const pr = ps / eps; if (pr > 0.7 && level < 5) move = 1; else if (pr < 0.2 && level > 1) move = -1; else if (pr > 0.7 && !out.some(o => o.sat)) out[out.length - 1].sat = true; }
@@ -2015,7 +2040,7 @@ hbars($("#caBars"), [
       s.appendChild(svgEl("text", { x: L - 6, y: y1(v) + 4, "text-anchor": "end", style: "fill:var(--muted);font-size:11px" }, Math.round(v * 100) + "%")); });
     s.appendChild(svgEl("text", { x: W - R, y: y1(0.7) - 5, "text-anchor": "end", style: "fill:var(--ok);font-size:11px" }, "move up above 70%"));
     s.appendChild(svgEl("text", { x: W - R, y: y1(0.2) + 14, "text-anchor": "end", style: "fill:var(--bad);font-size:11px" }, "move down below 20%"));
-    d.forEach(p => { const c = svgEl("circle", { cx: x(p.t), cy: y1(p.r), r: 4, style: "fill:var(--root);opacity:.85" }); c.setAttribute("data-tip", `step ${p.t}: level ${p.level}, ${Math.round(p.r * 100)}% exact passes${p.move ? (p.move > 0 ? " → moves up" : " → moves down") : ""}`); s.appendChild(c); });
+    d.forEach(p => { const c = svgEl("circle", { cx: x(p.t), cy: y1(p.r), r: 4, style: "fill:var(--root);opacity:.85" }); c.setAttribute("data-tip", `step ${p.t}: level ${p.level}, ${Math.round(p.r * 100)}% exact passes of ${p.n}${p.move ? (p.move > 0 ? " → moves up" : " → moves down") : ""}`); s.appendChild(c); });
     for (let l = 1; l <= 5; l++) { s.appendChild(svgEl("line", { x1: L, x2: W - R, y1: y2(l), y2: y2(l), style: "stroke:var(--line2)" })); s.appendChild(svgEl("text", { x: L - 6, y: y2(l) + 4, "text-anchor": "end", style: "fill:var(--muted);font-size:11px" }, "L" + l)); }
     let path = `M${x(1)},${y2(d[0].level)}`, lvl = d[0].level;
     d.forEach((p, i) => { const after = p.level + (p.move || 0); if (p.move) { path += ` H${x(p.t) + 4} V${y2(after)}`; } lvl = after; });
@@ -2028,7 +2053,7 @@ hbars($("#caBars"), [
       s.appendChild(svgEl("text", { x: x(sat.t) - 6, y: T1 + 12, "text-anchor": "end", style: "fill:var(--sub);font-size:11px" }, `step ${sat.t}: saturated at level 5 (rule 4 needs every family)`)); }
     const box = $("#ctlChart"); box.innerHTML = ""; box.appendChild(s);
   }
-  $$("#ctlFam .tab").forEach(b => b.addEventListener("click", () => { n = +b.dataset.n; $$("#ctlFam .tab").forEach(x => x.setAttribute("aria-selected", x === b ? "true" : "false")); draw(); }));
+  $$("#ctlFam .tab").forEach(b => b.addEventListener("click", () => { fam = +b.dataset.f; $$("#ctlFam .tab").forEach(x => x.setAttribute("aria-selected", x === b ? "true" : "false")); draw(); }));
   $("#ctlSpeed").addEventListener("input", e => { speed = +e.target.value; $("#ctlSpeedOut").textContent = ["slow", "medium", "fast"][speed - 1]; draw(); });
   $("#ctlReseed").addEventListener("click", () => { seed = (seed * 31 + 17) % 1000; draw(); });
   draw();
