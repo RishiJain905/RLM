@@ -113,10 +113,40 @@ def allocate(n: int, mix: dict[str, float]) -> dict[str, int]:
     return counts
 
 
-def draw(n: int, mix: dict[str, float], levels: dict[str, int]) -> list:
-    """One step's tasks: n tasks split across families by `mix`, each at its family's current level, fresh seeds."""
+def allocate_step(n: int, mix: dict[str, float], step: int) -> dict[str, int]:
+    """Training step `step`'s (1-based) n tasks, as its slice of one run-long sequence that tracks `mix`.
+
+    `allocate(8, ...)` rounds the same way every step, so at 8 tasks the production mix 45/20/20/15
+    would always draw 4/2/1/1: 50/25/12.5/12.5 over the run. Here task k of the run goes to the family
+    furthest behind its share of the first k+1 tasks (ties to the first listed). Every family then
+    stays within one task of its share at every step, and the run's mix is exact whenever the shares
+    divide evenly (every 5 steps at 8 tasks: 18/8/8/6 of 40). It depends only on the step number, so a
+    resume or a rollback that redoes a step draws the same families for it.
+    """
+    if n < 0 or step < 1 or not mix or any(w < 0 for w in mix.values()) or sum(mix.values()) <= 0:
+        raise ValueError("need n >= 0, step >= 1 and non-negative weights that sum to more than 0")
+    total = sum(mix.values())
+    families = list(mix)
+    share = {f: mix[f] / total for f in families}
+    so_far = dict.fromkeys(families, 0)
+    out = dict.fromkeys(families, 0)
+    for k in range(step * n):
+        family = max(families, key=lambda f: ((k + 1) * share[f] - so_far[f], -families.index(f)))
+        so_far[family] += 1
+        if k >= (step - 1) * n:
+            out[family] += 1
+    return out
+
+
+def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None = None) -> list:
+    """One step's tasks: n tasks split across families by `mix`, each at its family's current level, fresh seeds.
+
+    With `step` (the training loop always passes it), the split carries its rounding across steps
+    (`allocate_step`); without it, every call rounds the same way (`allocate`).
+    """
     out = []
-    for family, count in allocate(n, mix).items():
+    counts = allocate(n, mix) if step is None else allocate_step(n, mix, step)
+    for family, count in counts.items():
         out.extend(make_task(family, levels[family]) for _ in range(count))
     secrets.SystemRandom().shuffle(out)
     return out

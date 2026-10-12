@@ -270,3 +270,32 @@ For the planning thread, which owns both files.
 .venv/Scripts/python.exe scripts/train.py start --kind production --run dash-live1 --lr 2e-5 --dry-run --latency 6 --stop-after 14   # a paced dry run
 .venv/Scripts/python.exe -m unittest tests.test_dashboard -v                                  # the 14 tests
 ```
+
+## 12. Follow-up: the 8-task rounding (2026-10-11)
+
+**Found by the overview thread; fixed here at Rishi's request.** At 8 tasks a step, `tasks.allocate(8, production_mix())` rounded the same way every step: 4 aggregation, 2 call graph, 1 needle and 1 repo localization. Over a run that is 50/25/12.5/12.5 instead of the decided 45/20/20/15, so the needle family got 12.5% instead of 20%, and code 37.5% instead of 40%.
+
+**The fix.** `tasks.allocate_step(n, mix, step)` treats the run's tasks as one sequence: task k goes to the family furthest behind its share of the first k+1 tasks, with ties going to the first family listed.
+- Every family stays within one task of its share at every step.
+- The mix is exact every 5 steps: 40 tasks split 18/8/8/6.
+- A step's split depends only on its number. A resume, or a rollback that redoes a step, draws the same families for it, with no seed to keep.
+- `tasks.draw()` uses it when given the step, and the training loop always passes it. `allocate()` stays for callers without a step, such as `data_check.py`.
+- A family can get no task in a step: in every 5 steps, repo localization gets 0 tasks once, 1 task twice and 2 tasks twice. The controller only counts steps that drew a family, so its 3-step window is unaffected.
+- The decided shares and the training data are unchanged. The second seed's 1:1 ticket mix still draws 4/4 every step.
+
+**Realised mix, 60-step production dry run** (fakes, $0; the oracle's slope was lowered so the run doesn't saturate before step 60):
+
+| Family | Decided | Old rounding | Tasks over 60 steps | Realised |
+|---|---|---|---|---|
+| `aggregation` | 45% | 50% (4 a step) | 216 of 480 | **45.0%** |
+| `callgraph` | 20% | 25% (2) | 96 | **20.0%** |
+| `needle` | 20% | 12.5% (1) | 96 | **20.0%** |
+| `repo_loc` | 15% | 12.5% (1) | 72 | **15.0%** |
+
+Every step's draw matched `allocate_step` for that step. The first five steps drew 4/2/1/1, 3/1/2/2, 4/2/2/0, 4/1/1/2 and 3/2/2/1.
+
+**Tests.** `tests/test_tickets.py` gains 2:
+- over 200 steps, every family stays within one task of its share, the split is exact every 5 steps, a repeated step draws the same split, and the 1:1 and zero-weight cases hold
+- `draw(..., step=)` uses that step's split
+
+**For the planning thread:** spec §6's "Each step" line can add that the 8 tasks are split by carried rounding, so the run matches the domain mix.

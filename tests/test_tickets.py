@@ -6,6 +6,7 @@
 import re
 import statistics
 import unittest
+from unittest import mock
 
 from rlm_rl import reward, tasks
 from rlm_rl.tasks import tickets
@@ -110,6 +111,34 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(sum(tasks.allocate(7, {"a": 1, "b": 1, "c": 1}).values()), 7)
         with self.assertRaises(ValueError):
             tasks.allocate(8, {"a": 0})
+
+    def test_allocate_step_carries_the_rounding_across_steps(self):
+        mix = tasks.production_mix()
+        self.assertEqual(tasks.allocate(8, mix), {"aggregation": 4, "callgraph": 2, "needle": 1, "repo_loc": 1})
+        total, done = dict.fromkeys(mix, 0), 0
+        for step in range(1, 201):
+            got = tasks.allocate_step(8, mix, step)
+            self.assertEqual(sum(got.values()), 8)
+            self.assertEqual(got, tasks.allocate_step(8, mix, step))  # a resume redoing the step draws the same
+            done += 8
+            for family, count in got.items():
+                total[family] += count
+                self.assertLess(abs(total[family] - done * mix[family]), 1, (step, family))  # never a task off its share
+            if step % 5 == 0:  # 40 tasks split exactly 18/8/8/6
+                self.assertEqual({f: round(done * mix[f]) for f in mix}, total, step)
+        self.assertEqual(tasks.allocate_step(8, {"tickets_all": 1, "tickets_customer": 1}, 7),
+                         {"tickets_all": 4, "tickets_customer": 4})
+        self.assertEqual(tasks.allocate_step(8, {"a": 1, "b": 0}, 3), {"a": 8, "b": 0})
+        with self.assertRaises(ValueError):
+            tasks.allocate_step(8, mix, 0)
+
+    def test_draw_with_a_step_uses_the_carried_split(self):
+        mix = tasks.production_mix()
+        seen = []
+        with mock.patch.object(tasks, "make_task", lambda family, level: seen.append(family) or family):
+            tasks.draw(8, mix, dict.fromkeys(mix, 1), step=2)  # production tasks need the data root; counts don't
+        self.assertEqual({f: seen.count(f) for f in mix}, tasks.allocate_step(8, mix, 2))
+        self.assertNotEqual(tasks.allocate_step(8, mix, 2), tasks.allocate(8, mix))
 
     def test_draw_uses_each_familys_level_and_fresh_seeds(self):
         drawn = tasks.draw(8, {"tickets_all": 1, "tickets_customer": 1}, {"tickets_all": 2, "tickets_customer": 1})

@@ -41,8 +41,8 @@ class Oracle:
             self.gold[bridge.first_user_message(t.question, t.context)] = (t.answer, t.level)
         return tasks
 
-    def draw(self, n: int, mix: dict, levels: dict) -> list:
-        return self.record(rtasks.draw(n, mix, levels))
+    def draw(self, n: int, mix: dict, levels: dict, step: int | None = None) -> list:
+        return self.record(rtasks.draw(n, mix, levels, step))
 
     def eval_set(self, name: str) -> tuple[list, int]:
         tasks, samples = evals.eval_set(name)

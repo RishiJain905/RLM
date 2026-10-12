@@ -374,7 +374,7 @@ class TrainingRun:
         started, t0 = time.time(), time.monotonic()
         self.client.reset_stats()  # the step's request stats leave out the evals before it
         self._live(n, "rollouts")
-        batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels())
+        batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels(), n)
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
                                   sandbox_factory=self.sandbox_factory, **self.sandbox_kwargs)
         t_rollouts = time.monotonic() - t0
