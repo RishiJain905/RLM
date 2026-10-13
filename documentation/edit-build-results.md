@@ -4,15 +4,21 @@
 >
 > **Decisions applied:** every recommended option in code-editing-plan §15 (Rishi, 2026-10-12), the coordinator's language and source picks (plan §4.1), and Rishi's licence call (2026-10-12, 22:53 UTC): **JavaScript, TypeScript, Rust and Java train only on tasks we generate**; their SWE-smith rows are eval-only.
 >
-> **No W&B credit was used.** Every episode here ran against `tests/fake_model.py`. The `.env` file was never opened. **Nothing has been committed or pushed**: Rishi decides that.
+> **No W&B credit was used.** Every episode here ran against `tests/fake_model.py`. The `.env` file was never opened. Everything is committed and pushed to `claude/project-thread-9nnh3n` (Rishi's go-ahead, 2026-10-13); §7 has this round's final state.
 >
 > Anything marked *(mine)* is my choice, not the spec's. Anything marked *(inferred)* hasn't been measured.
 
-*This file is being written during the build; the numbers below are filled in as each stage finishes.*
+*Written during the build and completed on 2026-10-13, when the first round of edit_real data was frozen (§7).*
 
 ## Summary
 
-(Filled in at the end.)
+Step 9.5 built the code-editing environments: the edit sandbox and grader with the REPL coding tools (E2), the synthetic `edit_synth` family (E3), the `edit_real` data pipeline over SWE-smith, our own generated tasks and SWE-rebench real PRs (E4), and the reward, detectors, metrics, mix and evals for edit episodes (E5). The first round of `edit_real` data was frozen on 2026-10-13 so the step finished that day (Rishi): Python, Go and JavaScript.
+
+- **The index:** 157 tasks: training 107 (Python 86, Go 16 including 2 real PRs, JavaScript 5), selection 10, test 40 (8 of them feature tasks). Every task passed validation in the grader (the base fails its tests, the gold change passes them three times running, the visible tests still build without the hidden ones) and was timed under load (§7).
+- **Checks:** a real-sandbox production dry run passed (evals, one trained step, a clean stop, no infra), and the full suite stands at 399 passed, 1 skipped, after fixing a container leak the Docker tests found (§7).
+- **Bugs validation caught on the way:** canary results counted as task tests (§5), dropped Go tests from a too-short check timeout and from hidden helper files, Rust test modules removed from under their `mod` lines, Java and TypeScript repositories whose tests never ran (wrong runner, missing dependencies, read-only caches), SWE-smith TypeScript patches the parser couldn't read (§4.2, §6).
+- **Known gaps (§7):** Go training under its 60 target; 8 feature tasks in the test split, not 15; Rust, TypeScript and Java left for a later round (their data and fixes are on D:); JsonPath parked; the training pool smaller than production's draws.
+- **The drive (§5a):** D: as it is is correct for production, since a slow drive costs time and never reward; expect about 30-35 minutes per training step on average. Recommendations are in place only.
 
 ---
 
@@ -197,9 +203,42 @@ A slow drive may cost time but must never turn a good answer into a 0 or pause t
 
 Tests: `tests/test_slow_drive.py` (17).
 
-**Measurements under load** (`build_edit_data.py measure --jobs 30`): *(filled in when the data build finishes)*.
+**Measurements under load** (`build_edit_data.py measure --per-repo 2 --jobs 15`, 2026-10-13 evening: 44 sample tasks, 2 per repository, 15 at once, the drive otherwise quiet):
 
-**The D: drive itself** *(Rishi asked for this before the red-team write-up)*: whether the drive should be optimized in place for the training run (write caching, scan exclusions, which Rishi makes himself, and WSL memory), with the measured numbers. In place only: no switching drives, no wiping data (Rishi, 2026-10-13), so no Docker clean-up; if the numbers say clean-up would really help, it is listed on its own as needing his explicit OK. Recommendations only; no drive setting is changed without Rishi. *(Filled in after the measurements.)*
+| | Python (18) | Go (18) | JavaScript (8) |
+|---|---|---|---|
+| Episode container up, repository copied in (median / max) | 174 / 326 s | 147 / 272 s | 189 / 292 s |
+| The gold change's test command, run in the episode (median / max) | 145 / 490 s | 865 / 1379 s | 240 / 1770 s |
+| Grader container, start to report (median / max) | 258 / 477 s | 1184 / 2051 s | 422 / 677 s |
+| Solo reruns (a grader run that hit its cap) | 0 | 12 | 0 |
+| Tasks in the index with a raised cell limit (largest) | 61 of 105 (990 s) | 35 of 35 (2760 s) | 14 of 17 (3570 s) |
+| Grader cap in the index (median / largest) | 600 / 1907 s | 2215 / 8206 s | 600 / 2709 s |
+
+`measure`'s own start figure subtracts a copy timed separately, so a few rows read negative: container up plus copy is the honest number. One grader waited up to 1.9 hours for a slot behind Go's solo reruns, which run with the drive to themselves. No infra errors. The real-sandbox dry run (`dry-edit-final3`, fake model): 32 episodes in its step, 0 infra, 0 grader reruns; the step took 273 s (rollouts 235 s) with an instant model.
+
+*Per production step on D: as it is* (8 tasks x 4 rollouts; the mix gives edit_real 25%, about 2 tasks or 8 episodes, edit_synth 15%, read families 60%): a step ends with its slowest episode. An edit_real episode is about container up (~3 min) + the model's turns (~5-10 min with W&B inference, *inferred*) + its own test runs (say two: Python ~5 min, JavaScript ~8, Go ~30) + grading (Python ~4, JavaScript ~7, Go ~20). So about 20-25 minutes for a step whose edit_real tasks are Python or JavaScript, and about an hour when one is Go (15% of the training pool, so about 28% of steps). **Average about 30-35 minutes per step** *(inferred from 15 tasks at once; production runs up to 32 episodes at once, though read episodes barely touch the drive)*, against a median 290 s for the 20-step read-only run. About 75 steps would take about 40 hours, plus selection evals every 10 steps (64 tasks, 10 of them edit_real: about an hour each).
+
+**The D: drive itself** (Rishi asked for this before the red-team write-up; read-only review, 2026-10-13, no setting changed):
+
+*Current state:*
+- Seagate One Touch HDD, 4 TB, on **USB 3 with UAS** (the UASPStor driver, under an AMD USB 3.10 controller's USB 3.0 root hub): the link is not the bottleneck.
+- **Write caching on the device is already enabled** (UserWriteCacheSetting = 1); "turn off Windows write-cache buffer flushing" is not set, the safe setting for a USB drive.
+- Under the build's load: 100% busy, about 90 operations a second, 216 ms each at a queue depth of 5, 7.8 MB/s: a hard disk's random-IO ceiling. The internal WD_BLACK SN850X NVMe sat 99.9% idle.
+- The Docker Desktop data disk (`D:\Docker-Image\DockerDesktopWSL\DockerDesktopWSL\disk\docker_data.vhdx`, 152 GB) and the Ubuntu distro (`D:\WSL\Ubuntu`, per `.wslconfig`) are both on D:, so images, containers and WSL's repository copies and grader folders all share it.
+- `.wslconfig`: memory=24GB of the machine's 31 GB, processors=14, swap=8GB; Docker Desktop runs in the same WSL2 VM and shares them. Another distro (EXL3-Runtime) was running in that VM.
+- Free space: D: 196 GB, C: 122 GB, F: 73 GB.
+- Defender real-time protection is on. Its exclusions can't be read without administrator rights, so whether the .vhdx files and `D:\RLM-data` are excluded is unknown.
+
+*Recommendations, in place, each one Rishi's to make (none is needed for correct training):*
+1. **Defender exclusions** (as administrator: Windows Security, Virus & threat protection, Manage settings, Exclusions, Add an exclusion, Folder): `D:\Docker-Image`, `D:\WSL` and `D:\RLM-data`. Real-time scanning adds work to files Docker and WSL write constantly, on a drive with no IO to spare. Expected: fewer stalls on container starts and layer writes, perhaps 10-30% on IO-heavy steps *(inferred)*.
+2. **Keep the drive and the VM to the run:** stop other WSL distros during a run (`wsl --terminate EXL3-Runtime`), other projects' jobs on D: and any image builds. The numbers above came from a quiet drive; every competing read or write stretches every container start.
+3. **Moderate parallelism** (configuration, not a drive setting): the grader's cross-process limit (`RLM_GRADER_SLOTS`, 5 in validation) can cap graders in training too. On this drive more containers at once did not mean more throughput; past about 8-10 it meant timeouts.
+4. **WSL memory:** leave 24 GB on a 31 GB machine. More page cache would make repeated container starts from the same images faster, but Windows needs the rest; revisit only with more RAM.
+- Already right, no change: the USB 3 / UAS link, device write caching on.
+- Not recommended: turning off write-cache buffer flushing (faster flushes, but a power cut or an unplug could corrupt the 152 GB Docker disk).
+- Clean-up, only with Rishi's explicit OK and of little use for speed: BuildKit's build cache and superseded derived images (older TypeScript and JsonPath derives, the JsonPath warm image) would free space, not IO. D: has 196 GB free, so it isn't needed now.
+
+*Verdict:* **D: as it is is good enough for production.** Every limit the drive can stretch (container start, grader cap, cell limit) was set from measurements under load, a timeout is retried before it counts, and an infra error is never a zero: the slow drive costs time, never reward. The cost is about 30-35 minutes per training step on average, against about 5 for read-only steps.
 
 ## 5b. Security notes for the red team (as built)
 
@@ -259,6 +298,7 @@ The eval splits are filled from all three languages: selection 10 of 13 passing,
 - **Rust, TypeScript and Java are not in this round.** Their candidates, texts, images and partial results stay on `D:\RLM-data\edit` for a later round. TypeScript's runner problems are fixed (react-hook-form passes with real tests); Rust works but its builds are slow on the drive; Java's images are derived with their own build wrappers.
 - **JsonPath is parked**: its Gradle tests still report nothing on the warmed image, cause not yet found.
 - **rxjs, foam and formik have no tasks** (see §4.2).
+- **The edit_real training pool (107 tasks) is smaller than production's draws.** About 75 steps x 2 edit_real tasks per step is about 150 draws, and retirement (a task whose group came back all-0 twice or all-1 once) takes tasks out of the pool for good. Levels of the 107: level 1: 46, level 2: 48, level 3: 13, none at 4 or 5 (above level 3 a draw takes the nearest level). If every task retires, `editreal.make_task` raises `ValueError("no edit_real task left to draw")`, nothing catches it, and the step stops. Step 12 decides: more tasks from the later round (Rust, TypeScript, Java, the Go top-up), or a fallback such as bringing back the oldest retired tasks or moving edit_real's share to edit_synth. No fallback was built (Rishi: finish 9.5 only).
 
 **Checks run at the end of this round (2026-10-13 evening):**
 - `measure` timed 40 of 44 sample tasks (2 per repository) 15 at a time in episode containers, the gold change written through the REPL and graded in a fresh grader container; `index` took each task's grader cap and cell limit from those timings.
