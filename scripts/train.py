@@ -75,7 +75,7 @@ async def run_live(args, cfg) -> dict:
 async def run_dry(args, cfg) -> dict:
     from tests.dryrun import DryRun
 
-    async with DryRun(results_dir(args), seed=args.seed, persist=True) as dry:
+    async with DryRun(results_dir(args), seed=args.seed, persist=True, real_edit=args.real_edit) as dry:
         if args.latency:  # slows the fake server to a live run's pace, e.g. for the dashboard (plan step 9)
             dry.server.latency = (args.latency * 0.5, args.latency * 1.5)
         run = dry.training_run(args.run, cfg=cfg, prune=not args.no_prune, stop_after=args.stop_after)
@@ -151,6 +151,8 @@ def main() -> int:
         p.add_argument("--seed", type=int, default=0, help="dry run only: the fake policy's seed")
         p.add_argument("--latency", type=float, default=0.0,
                        help="dry run only: mean seconds the fake server takes per request, to pace the run")
+        p.add_argument("--real-edit", action="store_true",
+                       help="dry run only: edit episodes in the real edit sandbox and grader (Docker), not the in-process fakes")
         if name == "start":
             p.add_argument("--kind", choices=config.RUN_KINDS, required=True)
             p.add_argument("--max-steps", type=int, help="override the run kind's step limit")

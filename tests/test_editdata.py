@@ -1,0 +1,256 @@
+"""The edit_real data builder's pure parts (plan step E4): licences, derived images, feature removal, mutations, leaks."""
+
+import random
+import unittest
+
+from rlm_rl import editdata, editfeatures, grader
+from rlm_rl.tasks import editreal
+
+PY = '''"""mod"""
+
+
+def public_one(xs, n=2):
+    """Return the first n even numbers of xs, doubled."""
+    out = []
+    for x in xs:
+        if x % 2 == 0:
+            out.append(x * 2)
+    return out[:n]
+
+
+def _private(x):
+    return x + 1
+    return x
+    return x
+
+
+class Thing:
+    def method_two(self, a, b):
+        total = a + b
+        if total > 10:
+            total -= 10
+        return total
+'''
+
+GO = '''package demo
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Join joins parts with sep, skipping empty ones.
+func Join(parts []string, sep string) string {
+	keep := []string{}
+	for _, p := range parts {
+		if p != "" {
+			keep = append(keep, p)
+		}
+	}
+	return strings.Join(keep, sep)
+}
+
+func Show(x int) string {
+	return fmt.Sprint(x)
+}
+'''
+
+RUST = '''pub fn clamp_add(a: i32, b: i32) -> i32 {
+    let s = a + b;
+    if s > 100 {
+        return 100;
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn it_works() {
+        let x = clamp_add(1, 2);
+        assert_eq!(x, 3);
+        assert!(x < 4);
+    }
+}
+'''
+
+JAVA = '''package a;
+
+public class Util {
+    /** Counts the vowels. */
+    public static int countVowels(String s) {
+        int n = 0;
+        for (char c : s.toCharArray()) {
+            if ("aeiou".indexOf(c) >= 0) {
+                n++;
+            }
+        }
+        return n;
+    }
+}
+'''
+
+TS = '''export function sumPositive(xs: number[]): number {
+  let total = 0;
+  for (const x of xs) {
+    if (x > 0) {
+      total += x;
+    }
+  }
+  return total;
+}
+'''
+
+
+class LicenceTest(unittest.TestCase):
+    def test_classify(self):
+        mit = "Permission is hereby granted, free of charge, to any person obtaining a copy"
+        apache = "Apache License\nVersion 2.0, January 2004"
+        bsd3 = ("Redistribution and use in source and binary forms, with or without modification ... Neither the name "
+                "of the copyright holder")
+        cases = {"MIT": {"LICENSE": mit}, "Apache-2.0": {"LICENSE": apache}, "BSD-3-Clause": {"LICENSE": bsd3},
+                 "BSD-2-Clause": {"LICENSE": "Redistribution and use in source and binary forms, with or without"},
+                 "MIT OR Apache-2.0": {"LICENSE-MIT": mit, "LICENSE-APACHE": apache},
+                 "GPL": {"COPYING": "GNU GENERAL PUBLIC LICENSE Version 3"},
+                 "LGPL": {"LICENSE": "GNU LESSER GENERAL PUBLIC LICENSE"},
+                 "MPL-2.0": {"LICENSE": "Mozilla Public License Version 2.0"},
+                 "unknown": {"LICENSE": "All rights reserved."}}
+        for want, texts in cases.items():
+            self.assertEqual(editdata.classify_licence(texts), want, want)
+        for licence in ("MIT", "Apache-2.0", "BSD-3-Clause", "MIT OR Apache-2.0", "ISC"):
+            self.assertTrue(editdata.permissive(licence), licence)
+        for licence in ("GPL", "LGPL", "MPL-2.0", "AGPL-3.0", "unknown", "source-available"):
+            self.assertFalse(editdata.permissive(licence), licence)
+
+    def test_repo_key(self):
+        self.assertEqual(editdata.repo_key("swebench/swesmith.x86_64.go-chi_1776_chi.23c395f8"), "go-chi__chi.23c395f8")
+        self.assertEqual(editdata.repo_key("swebench/swesmith.x86_64.pdfminer_1776_pdfminer.six.1a8bd2f7:latest"),
+                         "pdfminer__pdfminer.six.1a8bd2f7")
+
+
+class DeriveTest(unittest.TestCase):
+    def test_the_derived_image_drops_the_checkout_and_stays_offline(self):
+        for language in editdata.LANGS:
+            text = editdata.derive_dockerfile("src:img", language, 1000, 1000, path="/opt/env/bin:/usr/bin")
+            self.assertIn("rm -rf /testbed", text)
+            self.assertIn("ln -s /work/repo /testbed", text)
+            self.assertIn("chown -R 1000:1000", text)
+            self.assertIn('LABEL rlm.edit.uid="1000"', text)
+            self.assertIn(f'LABEL rlm.edit.language="{language}"', text)
+            self.assertIn('ENV HOME="/scratch"', text)
+            self.assertIn("/opt/env/bin", text)
+        go = editdata.derive_dockerfile("src:img", "go", 1000, 1000)
+        for flag in ('GOFLAGS="-mod=mod"', 'GOPROXY="off"', 'GOCACHE="/opt/rlm-cache/go-build"'):
+            self.assertIn(flag, go)
+        rust = editdata.derive_dockerfile("s", "rust", 1, 1)
+        self.assertIn('CARGO_NET_OFFLINE="true"', rust)
+        self.assertLess(rust.index("mv /testbed/target /opt/rlm-cache/target"), rust.index("rm -rf /testbed"))
+        self.assertIn('LABEL rlm.edit.writable="/opt/rlm-cache"', go)
+
+    def test_a_real_pr_image_keeps_its_go_cache_readable_and_moves_unwritable_caches(self):
+        text = editdata.derive_dockerfile("rb:img", "go", 1000, 1000, repo_dir="/kin-openapi",
+                                          go={"gomodcache": "/root/go/pkg/mod", "gocache": "/root/.cache/go-build"},
+                                          extra_env={"XDG_CACHE_HOME": "/scratch/.cache/xdg_cache_home"})
+        self.assertIn("rm -rf /kin-openapi", text)
+        self.assertIn("ln -s /work/repo /kin-openapi", text)
+        self.assertIn("chmod o+rx /root /root/go /root/go/pkg /root/go/pkg/mod", text)  # folders only: no copy-up
+        self.assertIn('mv "/root/.cache/go-build" /opt/rlm-cache/go-build', text)
+        self.assertIn('ENV GOMODCACHE="/root/go/pkg/mod"', text)
+        self.assertIn('ENV XDG_CACHE_HOME="/scratch/.cache/xdg_cache_home"', text)
+        self.assertNotIn("chown -R 1000:1000 /root", text)
+
+
+class FeatureTest(unittest.TestCase):
+    def test_python_functions_and_stub(self):
+        fns = {f.qualname: f for f in editfeatures.python_functions("m.py", PY)}
+        self.assertEqual(set(fns), {"public_one", "Thing.method_two"})
+        stubbed = editfeatures.stub(PY, fns["public_one"], "python")
+        self.assertIn('"""Return the first n even numbers of xs, doubled."""\n    raise NotImplementedError\n', stubbed)
+        self.assertNotIn("out.append", stubbed)
+        compile(stubbed, "m.py", "exec")
+        self.assertEqual(fns["public_one"].doc, "Return the first n even numbers of xs, doubled.")
+
+    def test_go_stub_drops_imports_it_leaves_unused(self):
+        fns = {f.name: f for f in editfeatures.brace_functions("d.go", GO, "go")}
+        self.assertEqual(set(fns), {"Join"})  # Show's body is one line: too short
+        stubbed = editfeatures.stub(GO, fns["Join"], "go")
+        self.assertIn('\tpanic("not implemented")\n}', stubbed)
+        self.assertNotIn('"strings"', stubbed)
+        self.assertIn('"fmt"', stubbed)
+        self.assertIn("// Join joins parts", fns["Join"].doc)
+
+    def test_rust_java_typescript(self):
+        rust = editfeatures.brace_functions("src/lib.rs", RUST, "rust")
+        self.assertEqual([f.name for f in rust], ["clamp_add"])  # the test module's functions are left alone
+        self.assertIn("unimplemented!()", editfeatures.stub(RUST, rust[0], "rust"))
+        java = editfeatures.brace_functions("src/main/java/a/Util.java", JAVA, "java")
+        self.assertEqual([f.name for f in java], ["countVowels"])
+        self.assertIn('throw new UnsupportedOperationException("not implemented");', editfeatures.stub(JAVA, java[0], "java"))
+        ts = editfeatures.brace_functions("src/sum.ts", TS, "typescript")
+        self.assertEqual([f.name for f in ts], ["sumPositive"])
+        stubbed = editfeatures.stub(TS, ts[0], "typescript")
+        self.assertIn('throw new Error("not implemented");', stubbed)
+        self.assertTrue(stubbed.rstrip().endswith("}"))
+
+    def test_brace_scanner_skips_strings_and_comments(self):
+        text = 'func F() {\n\ts := "}{"\n\t// } comment\n\tr := `}`\n\tc := \'}\'\n\treturn\n}\nafter'
+        end = editfeatures._scan_braces(text, text.index("{"), "go")
+        self.assertEqual(text[end:], "\nafter")
+
+    def test_mutations_change_one_line(self):
+        fn = editfeatures.brace_functions("src/sum.ts", TS, "typescript")[0]
+        muts = editfeatures.mutations(TS, fn, "typescript", random.Random(1), limit=5)
+        self.assertTrue(muts)
+        for text, kind, line in muts:
+            diff = [i for i, (a, b) in enumerate(zip(TS.split("\n"), text.split("\n"))) if a != b]
+            self.assertEqual(diff, [line])
+            self.assertTrue(fn.body_start <= line < fn.body_end)
+
+
+class LeakAndLevelTest(unittest.TestCase):
+    def test_leaks(self):
+        gold = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-    return a\n"
+                "+    return sorted(items, key=lambda item: item.priority)\n")
+        self.assertEqual(editdata.leaks("Sorting is wrong.", gold, ["tests/test_x.py::test_sorts_by_priority"]), [])
+        self.assertTrue(editdata.leaks("Use return sorted(items, key=lambda item: item.priority) here", gold, []))
+        self.assertTrue(editdata.leaks("test_sorts_by_priority fails", gold, ["tests/test_x.py::test_sorts_by_priority"]))
+
+    def test_levels(self):
+        self.assertEqual(editreal.level_of(1, 8), 1)
+        self.assertEqual(editreal.level_of(1, 30), 2)
+        self.assertEqual(editreal.level_of(2, 30), 3)
+        self.assertEqual(editreal.level_of(4, 60), 4)
+        self.assertEqual(editreal.level_of(3, 150), 5)
+
+    def test_patch_size(self):
+        patch = ("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,2 +1,2 @@\n-x\n+y\n z\n"
+                 "diff --git a/b.bin b/b.bin\nindex 1..2 100644\nBinary files a/b.bin and b/b.bin differ\n")
+        self.assertEqual(editdata.patch_size(patch), (1, 2))
+
+
+class EvalSplitTest(unittest.TestCase):
+    def test_balance_spreads_languages_and_keeps_enough_features(self):
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "build_edit_data", Path(__file__).resolve().parents[1] / "scripts" / "build_edit_data.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        records = [{"id": f"{lang}-{kind}-{i}", "language": lang, "kind": kind}
+                   for lang, n_bug, n_feat in (("python", 20, 3), ("go", 10, 8), ("rust", 4, 2), ("java", 2, 6))
+                   for kind, n in (("bug", n_bug), ("feature", n_feat)) for i in range(n)]
+        picked = build.balance(records, 40, 15)
+        self.assertEqual(len(picked), 40)
+        self.assertEqual(len({r["id"] for r in picked}), 40)
+        self.assertGreaterEqual(sum(r["kind"] == "feature" for r in picked), 15)
+        per_lang = {lang: sum(r["language"] == lang for r in picked) for lang in ("python", "go", "rust", "java")}
+        self.assertEqual(per_lang["rust"], 6)  # a small language gives everything it has
+        self.assertEqual(build.balance(records, 40, 15), picked)  # fixed for a given set
+        self.assertEqual(len(build.balance(records[:5], 10, 3)), 5)
+
+
+if __name__ == "__main__":
+    unittest.main()

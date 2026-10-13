@@ -25,7 +25,7 @@ import random
 import statistics
 from typing import Any
 
-from . import bridge, detectors
+from . import bridge, detectors, editmetrics
 from .client import ModelClient, RequestFailed, Usage
 from .env import Episode, StepFilter
 
@@ -206,8 +206,10 @@ def step_metrics(groups: list[list[Episode]], step_filter: StepFilter, *, contro
         for key, value in ep.usage.__dict__.items():
             setattr(usage, key, getattr(usage, key) + value)
     train = {ours: _round((train_metrics or {}).get(theirs)) for theirs, ours in TRAIN_METRIC_KEYS.items()}
+    edit = editmetrics.step_block(eps)  # spec §12.9; absent when the step drew no edit task
 
     return {
+        **({"edit": edit} if edit is not None else {}),
         "pass": {"rate": _round(correct / n if n else None), "rate_with_infra": _round(correct / n_all if n_all else None),
                  "histogram": pass_histogram(groups), "groups": len(groups),
                  "trainable_groups": len(step_filter.groups), "all_zero_groups": step_filter.dropped_all_zero,

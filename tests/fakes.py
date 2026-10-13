@@ -73,8 +73,9 @@ class FakeSandbox:
     """
 
     def __init__(self, context: str, complete, *, run_id: str = "adhoc", kill_after_cells: int | None = None,
-                 max_subcalls: int = bridge.MAX_SUBCALLS):
+                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None):
         self.context = context
+        self.messages = messages or bridge.cell_messages(bridge.PROMPT_VERSION)
         self.bridge = FakeBridge(complete, max_subcalls)
         self.events: list[dict] = []
         self.cells = self.timeouts = self.crashes = self.restarts = 0
@@ -99,7 +100,7 @@ class FakeSandbox:
             self.timeouts += 1
             self.restarts += 1
             self._namespace = {}
-            return CellResult("", 0, bridge.CELL_TIMEOUT_ERROR, restarted=True, crash="timeout")
+            return CellResult("", 0, self.messages.timeout, restarted=True, crash="timeout")
         loop = asyncio.get_running_loop()
         out = io.StringIO()
         state = {"submitted": False, "answer": None}
@@ -229,3 +230,210 @@ class FakeBackend:
 
     async def close(self) -> None:
         await self._openai.close()
+
+
+# ----------------------------------------------------------------------------- the edit families (spec §12)
+
+import ast
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+_EXEC_CALLS = {"run", "call", "check_call", "check_output", "Popen", "system", "getoutput", "getstatusoutput"}
+_READ_CALLS = {"open", "listdir", "walk", "scandir", "glob", "rglob", "read_text", "iterdir", "exists", "isfile"}
+
+
+def code_events(code: str) -> list[dict]:
+    """What the real edit sandbox's audit hook would log for a cell, read from its code: each program it starts (with
+    the literal arguments) and whether it reads /work/repo."""
+    events, read = [], False
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return events
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name in _EXEC_CALLS and node.args:
+            try:
+                value = ast.literal_eval(node.args[0])
+            except (ValueError, SyntaxError):
+                value = ["<computed>"]
+            argv = value if isinstance(value, list) else str(value).split()
+            events.append({"kind": "exec", "event": "subprocess.Popen", "detail": " ".join(map(str, argv)),
+                           "argv": [str(a) for a in argv], "blocked": False})
+        if name in _READ_CALLS:
+            read = True
+    if read:
+        events.insert(0, {"kind": "repo_read", "event": "open", "detail": "/work/repo", "blocked": False})
+    return events
+
+
+def private_tools(root: Path, on_call):
+    """A copy of rlm_rl/repl_tools.py with its own settings, pointed at `root`: in-process episodes run at once, and
+    the module keeps its settings in globals, as it can in the real REPL (one per container)."""
+    import importlib.util
+
+    from rlm_rl import editbox
+
+    spec = importlib.util.spec_from_file_location(f"repl_tools_{secrets.token_hex(6)}", editbox.TOOLS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.configure(root=str(root), on_call=on_call)
+    return module
+
+
+class FakeEditSandbox(FakeSandbox):
+    """An in-process edit sandbox (Linux): the task's repository in a temporary folder, its diff taken the real way
+    (editbox.diff), and each cell's changes and program runs recorded as the real one does. Cells see /work/repo as
+    that folder and have the coding tools (repl_tools.py), whose calls are logged as the real REPL logs them. It
+    isolates nothing; the real edit sandbox is tested in test_editbox.py."""
+
+    def __init__(self, context: str, complete, *, task, run_id: str = "adhoc", max_subcalls: int = 30,
+                 messages=None, cache: Path | None = None, kill_after_cells: int | None = None, limits=None):
+        super().__init__(context, complete, run_id=run_id, kill_after_cells=kill_after_cells,
+                         max_subcalls=max_subcalls, messages=messages or bridge.cell_messages(edit=True,
+                                                                                               limits=bridge.EDIT_LIMITS))
+        self.task = task
+        self.limits = limits  # a task's own cell limit (spec §12.3); the fake has no clock to enforce it
+        self.cache = cache
+        self.root = Path(tempfile.mkdtemp(prefix="rlm-fake-edit-"))
+        self.repo_dir = self.root / "repo"
+        self.ws_dir = None
+        self.edit_image = None
+        self.docker = "docker"
+        self.runtime = self.bundle = None
+        self._fp = None
+        self._cell_io = dict.fromkeys(("tool_writes", "raw_writes", "tool_execs", "raw_execs"), 0)
+
+    async def __aenter__(self):
+        from rlm_rl import editbox
+
+        self.ws_dir = await asyncio.to_thread(self.task.workspace.ensure, self.cache)
+        shutil.copytree(self.ws_dir / "tree", self.repo_dir, symlinks=True)
+        shutil.copytree(self.ws_dir / "git", self.repo_dir / ".git", symlinks=True)
+        self._fp = editbox.fingerprint(self.repo_dir)
+        self._tools = private_tools(self.repo_dir, self._tool_call)
+        self._namespace.update(self._tools.namespace())
+        return self
+
+    def _tool_call(self, tool: str, ok: bool, seconds: float, target: str) -> None:
+        """What the real REPL logs for a tool call: the call, and the program shell() starts."""
+        self.events.append({"kind": "tool", "event": tool, "detail": repr(target), "blocked": False, "ok": ok,
+                            "seconds": seconds, "cell": self.cells})
+        if tool == "shell":
+            self._cell_io["tool_execs"] += 1
+            self.events.append({"kind": "exec", "event": "subprocess.Popen", "detail": f"sh -c {target}",
+                                "argv": ["sh", "-c", target], "blocked": False, "tool": True, "cell": self.cells})
+        elif tool in ("edit_file", "write_file") and ok:
+            self._cell_io["tool_writes"] += 1
+
+    async def __aexit__(self, *exc):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    async def run_cell(self, code: str) -> CellResult:
+        from rlm_rl import editbox
+
+        raw = code_events(code)
+        for event in raw:
+            self.events.append({**event, "cell": self.cells + 1, **({"tool": False} if event["kind"] == "exec" else {})})
+        self._cell_io = dict.fromkeys(self._cell_io, 0)
+        result = await super().run_cell(code.replace(bridge.EDIT_REPO_PATH, str(self.repo_dir)))
+        if result.restarted:  # a restarted REPL imports the tools again
+            self._namespace.update(self._tools.namespace())
+        now = editbox.fingerprint(self.repo_dir)
+        result.repo_changed, self._fp = now != self._fp, now
+        io_counts = dict(self._cell_io, raw_execs=sum(e["kind"] == "exec" for e in raw))
+        if result.repo_changed and not io_counts["tool_writes"]:
+            io_counts["raw_writes"] = 1  # plain open() made the change: the fake can't count each write
+        if any(io_counts.values()):
+            self.events.append({"kind": "io", "event": "cell", "detail": "''", "blocked": False, **io_counts,
+                                "cell": self.cells})
+        return result
+
+    async def diff(self) -> str:
+        from rlm_rl import editbox
+
+        scratch = Path(tempfile.mkdtemp(prefix="rlm-fake-diff-"))
+        try:
+            return editbox.diff(self.ws_dir, self.repo_dir, scratch)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+async def local_grade(task, ep, box, run_id):
+    """The grader without a container, for dry runs and tests (Linux). edit_synth's tests really run, with this
+    machine's Python and the grader's own diff checks, canaries and report parser; a task whose runner needs its
+    image (edit_real) is resolved when the patched files equal the gold patch's."""
+    from rlm_rl import grader
+
+    spec = grader.TestSpec.from_dict(task.grading["tests"])
+    checked = grader.check_diff(ep.diff or "", spec.language, box.ws_dir / "tree")
+    result = grader.GradeResult(applied=True, empty=checked.empty, resolved=False, f2p_total=len(spec.f2p),
+                                p2p_total=len(spec.p2p), hacks=list(checked.hacks), audit=list(checked.audit),
+                                stripped=checked.stripped, diff_lines=checked.diff_lines,
+                                files_changed=checked.files_changed, oversize=checked.oversize)
+    if checked.empty:
+        return result
+    started = time.monotonic()
+    root = Path(tempfile.mkdtemp(prefix="rlm-fake-grade-"))
+    try:
+        canary = grader.RUNNER_CLASSES[spec.runner].canary(spec) if spec.runner == "unittest" else \
+            grader.Canary({}, "", "", [])
+        applied, why = await asyncio.to_thread(grader.prepare, box.ws_dir, checked, spec, canary, root / "repo", root)
+        if not applied:
+            result.applied = False
+            return result
+        if spec.runner == "unittest":
+            report = root / "report.json"
+            driver = Path(grader.__file__).with_name("grader_driver.py")
+            proc = await asyncio.create_subprocess_exec(sys.executable, "-I", "-B", str(driver), "unittest", "--report",
+                                                        str(report), "--top", ".", *spec.scope, *canary.scope,
+                                                        cwd=root / "repo", stdout=asyncio.subprocess.PIPE,
+                                                        stderr=asyncio.subprocess.PIPE)
+            await asyncio.wait_for(proc.communicate(), spec.timeout_s)
+            fake_report = "/fake/report.json"
+            text = report.read_text(encoding="utf-8") if report.exists() else None
+            driver_out = {"commands": [{"exit": proc.returncode}],
+                          "reports": [{"path": fake_report, "found": text is not None, "text": text}]}
+            results, build_failed, malformed = grader.RUNNER_CLASSES["unittest"].parse(spec, driver_out, fake_report)
+            verdict = malformed or grader.canary_verdict(results, canary, driver_out["commands"], False, build_failed)
+            if verdict:
+                result.hacks.append({"rule": "grader_tamper", "detail": verdict})
+            result.results = {k: v for k, v in results.items() if k in set(spec.f2p) | set(spec.p2p)}
+            result.f2p_passed, result.p2p_failed, result.resolved = grader.score(results, spec)
+        else:
+            gold = await asyncio.to_thread(gold_files, task, box.ws_dir)
+            same = all((root / "repo" / p).is_file() and (root / "repo" / p).read_text(encoding="utf-8") == t
+                       for p, t in gold.items())
+            result.resolved = same
+            result.f2p_passed = len(spec.f2p) if same else 0
+            result.p2p_failed = 0 if same else len(spec.p2p) // 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    result.seconds = round(time.monotonic() - started, 3)
+    return result
+
+
+def gold_files(task, ws_dir: Path | None = None) -> dict:
+    """{path: text} of every file the task's gold change writes."""
+    if task.grading.get("gold_files") is not None:
+        return dict(task.grading["gold_files"])
+    from rlm_rl import editbox, grader
+
+    ws_dir = ws_dir or task.workspace.ensure()
+    root = Path(tempfile.mkdtemp(prefix="rlm-gold-"))
+    try:
+        subprocess.run(["cp", "-a", str(ws_dir / "tree"), str(root / "repo")], check=True)
+        checked = grader.check_diff(task.grading["gold_patch"], task.grading["language"], ws_dir / "tree")
+        ok, why = grader._safe_apply(root / "repo", task.grading["gold_patch"], root)
+        if not ok:
+            raise RuntimeError(f"gold patch doesn't apply: {why}")
+        return {fp.path: (root / "repo" / fp.path).read_text(encoding="utf-8") for fp in grader.parse_patch(
+            task.grading["gold_patch"]) if (root / "repo" / fp.path).is_file()}
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

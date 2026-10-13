@@ -70,8 +70,9 @@ def seed_roots(results: Path) -> list[Path]:
     return [ROOT / "private" / "seeds", results / "private" / "seeds"]
 
 
-def deep_items(state: dict) -> tuple[set[tuple[str, str]], list[str], list[str]]:
-    """Every question of the eval sets this run uses, the held-out test and the capability prompts.
+def deep_items(state: dict) -> tuple[set[tuple[str, str]], list[str], list[str], set[str], set[str]]:
+    """Every question of the eval sets this run uses, the held-out tests and the capability prompts,
+    and the edit eval tasks' ids and repositories.
 
     This builds the sets from their private seeds through rlm_rl, which takes a minute and needs the
     data on D:, so it's for a one-off check, not every build.
@@ -79,11 +80,21 @@ def deep_items(state: dict) -> tuple[set[tuple[str, str]], list[str], list[str]]
     from rlm_rl import capability, evals  # noqa: WPS433 (heavy imports kept out of every build)
 
     cfg = state.get("config") or {}
-    items, prompts, notes = set(), [], []
-    for name in [n for n in (cfg.get("selection"), cfg.get("final_eval"), "heldout-test-v1") if n]:
+    items, prompts, notes, task_ids, repos = set(), [], [], set(), set()
+    for name in dict.fromkeys(n for n in (cfg.get("selection"), cfg.get("final_eval"), "heldout-test-v1",
+                                          "heldout-test-v2") if n):
         try:
             tasks, _ = evals.eval_set(name)
-            keys = [dashboard.item_key(t.question, "\n".join(t.context.splitlines()[:3])) for t in tasks]
+            keys = []
+            for t in tasks:
+                if t.family in dashboard.EDIT_FAMILIES:  # keyed by the task text, as eval_items does
+                    q = dashboard.scrub(t.question)[:150]
+                    keys.append((q, "") if len(q) >= 20 else None)
+                    task_ids.add(t.task_id)
+                    if isinstance((t.grading or {}).get("repo"), str):
+                        repos.add(t.grading["repo"])
+                else:
+                    keys.append(dashboard.item_key(t.question, "\n".join(t.context.splitlines()[:3])))
             items |= {k for k in keys if k}
             notes.append(f"{name}: {len(tasks)} tasks, {sum(1 for k in keys if k)} keyed")
         except Exception as exc:  # missing data or seeds: say so, don't pretend it was checked
@@ -95,7 +106,7 @@ def deep_items(state: dict) -> tuple[set[tuple[str, str]], list[str], list[str]]
             notes.append(f"capability set: {len(loaded)} prompts")
         except Exception as exc:
             notes.append(f"capability set: not checked ({type(exc).__name__})")
-    return items, prompts, notes
+    return items, prompts, notes, task_ids, repos
 
 
 def build(run: str, results: Path, *, dry: bool, pot: dict | None = None, out_dir: Path = OUT_DIR) -> dict:
@@ -109,7 +120,9 @@ def build(run: str, results: Path, *, dry: bool, pot: dict | None = None, out_di
     data = dashboard.page_data(state, run_dir=run_dir, samples=samples, dry_run=dry, pot=pot)
     page = dashboard.render(data)
     items, _ = dashboard.eval_items(run_dir)
-    result = dashboard.check(page, seeds=dashboard.private_seeds(seed_roots(results)), items=items)
+    task_ids, repos = dashboard.eval_names(run_dir)
+    result = dashboard.check(page, seeds=dashboard.private_seeds(seed_roots(results)), items=items,
+                             task_ids=task_ids, repos=repos)
     result.update(run=run, step=(state.get("steps") or [{}])[-1].get("step", 0), status=state.get("status"),
                   signature=dashboard.signature(state), heartbeat_age_s=dashboard.heartbeat_age(state))
     if result["ok"]:
@@ -125,7 +138,8 @@ def summary_line(kind: str, r: dict) -> str:
             f"notices={sig.get('notices')} size={r.get('bytes', 0) // 1024}KB")
     if r.get("ok"):
         c = r.get("checked") or {}
-        return f"{head} page={r.get('page')} check=passed (seeds {c.get('seeds')}, eval tasks {c.get('eval_tasks')})"
+        return (f"{head} page={r.get('page')} check=passed (seeds {c.get('seeds')}, eval tasks {c.get('eval_tasks')}, "
+                f"edit task ids {c.get('task_ids')}, repos {c.get('repos')})")
     return f"{head} check=FAILED {json.dumps(r.get('findings'))} (nothing was written; the last good page stands)"
 
 
@@ -141,15 +155,18 @@ def cmd_check(args) -> int:
     page = Path(args.page).read_text(encoding="utf-8")
     results = results_dir(args)
     seeds = dashboard.private_seeds(seed_roots(results))
-    items, prompts, notes = set(), [], []
+    items, prompts, notes, task_ids, repos = set(), [], [], set(), set()
     if args.run:
         items, unkeyed = dashboard.eval_items(results / args.run)
+        task_ids, repos = dashboard.eval_names(results / args.run)
         notes += sorted(unkeyed)
         if args.deep:
-            extra, prompts, more = deep_items(dashboard.read_state(results / f"{args.run}.json"))
+            extra, prompts, more, more_ids, more_repos = deep_items(dashboard.read_state(results / f"{args.run}.json"))
             items |= extra
+            task_ids |= more_ids
+            repos |= more_repos
             notes += more
-    r = dashboard.check(page, seeds=seeds, items=items, prompts=prompts)
+    r = dashboard.check(page, seeds=seeds, items=items, prompts=prompts, task_ids=task_ids, repos=repos)
     print(json.dumps({"ok": r["ok"], "findings": r["findings"], "bytes": r["bytes"], "checked": r["checked"],
                       "deep": notes}, indent=1))
     return 0 if r["ok"] else 3
@@ -237,7 +254,7 @@ def main() -> int:
     p.add_argument("--stale-after", type=float, default=dashboard.STALE_AFTER_S,
                    help="seconds without a state write before a running run counts as stalled")
     p.add_argument("--timeout", type=float, help="give up after this many seconds")
-    p = sub.add_parser("check", help="scan a built page for keys, seeds and eval items")
+    p = sub.add_parser("check", help="scan a built page for keys, seeds, eval items and edit eval task ids")
     p.add_argument("page")
     p.add_argument("--run", help="also check against this run's eval transcripts")
     p.add_argument("--deep", action="store_true", help="also build the eval sets from their seeds and check every question")

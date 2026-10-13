@@ -11,7 +11,39 @@ from pathlib import Path
 from rlm_rl import bridge
 from rlm_rl.bridge import EpisodeBridge, InfraError, SubcallError
 
-# Spec §2.1, copied from the approved spec page. A change here is a change to what the model was trained on.
+# Spec §12.2 (prompt v2), copied from the spec. A change here is a change to what the model is trained on.
+SPEC_SYSTEM_PROMPT_V2 = """You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
+
+Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
+
+Available in the REPL:
+- `context`: the task input (str)
+- `llm(prompt: str) -> str`: ask a language model; it can read about 20,000 characters per call
+- `llm_batch(prompts: list[str]) -> list[str]`: ask several prompts in parallel; each prompt counts as one sub-call
+- `submit(answer)`: give your final answer and end the episode
+
+The REPL has only the Python standard library.
+
+Your turn and sub-call limits are given with the task. Look at the structure of the input before processing it, decompose the work, use code for exact filtering and arithmetic, and use sub-calls for judgments that need reading comprehension. Call `submit()` once you are confident.
+
+For coding tasks, the REPL starts in the repository and also has these tools. They return values; print what you need to see.
+- `read_file(path, start=1, n=40) -> str`: numbered lines of a file
+- `find_files(pattern, path=".") -> list[str]`: files matching a glob such as "src/**/*.py"
+- `grep(pattern, path=".", glob=None, ignore_case=False, files_only=False) -> list[str]`: regex matches as "path:line: text"
+- `edit_file(path, old, new, replace_all=False) -> str`: replace exact text that occurs once (or every time with replace_all=True); raises otherwise
+- `write_file(path, text) -> str`: create or overwrite a file
+- `shell(cmd, timeout=120)`: run a shell command; the result has `.code` and `.out` and prints as the exit code and the end of the output
+- `diff() -> str`: your changes so far, as they will be graded
+
+Explore with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and `llm` to draft or review a change. Run the relevant build or tests with `shell` before you submit. Your changes to the repository are what gets graded, by tests you cannot see, so do not change existing tests or test configuration. There is no network."""
+
+SPEC_EDIT_FIRST_V2 = """Task: {task}
+
+The repository is at /work/repo ({language}, {n_files} files). `context` holds this task and the repository's file list with sizes. Run its tests with: {test_hint}
+
+When your change is ready, call submit() with a one-line summary. You have at most {max_turns} turns and {max_subcalls} sub-calls, and each cell may run for {cell_timeout_s} seconds."""
+
+# Spec §2.1 (prompt v1), which the second seed still runs on (decision E-g).
 SPEC_SYSTEM_PROMPT = """You are a Recursive Language Model. You answer a question about a long text that you cannot see directly. The text is stored in a persistent Python REPL as the string variable `context`.
 
 Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
@@ -29,37 +61,83 @@ You have at most 12 turns and 30 sub-calls in total. Look at the structure of `c
 
 class PromptTextTest(unittest.TestCase):
     def test_system_prompt_matches_spec(self):
-        self.assertEqual(bridge.SYSTEM_PROMPT, SPEC_SYSTEM_PROMPT)
+        self.assertEqual(bridge.PROMPT_VERSION, "v2")
+        self.assertEqual(bridge.SYSTEM_PROMPT, SPEC_SYSTEM_PROMPT_V2)
+        self.assertEqual(bridge.SYSTEM_PROMPT_V1, SPEC_SYSTEM_PROMPT)
+        self.assertEqual(bridge.system_prompt("v1"), SPEC_SYSTEM_PROMPT)
+        self.assertEqual(bridge.EDIT_FIRST_USER_TEMPLATE, SPEC_EDIT_FIRST_V2)
 
     def test_prompt_quotes_the_pinned_limits(self):
-        self.assertIn(f"at most {bridge.MAX_TURNS} turns and {bridge.MAX_SUBCALLS} sub-calls", bridge.SYSTEM_PROMPT)
+        v1 = bridge.SYSTEM_PROMPT_V1
+        self.assertIn(f"at most {bridge.MAX_TURNS} turns and {bridge.MAX_SUBCALLS} sub-calls", v1)
         self.assertIn(f"truncated to {bridge.OUTPUT_MAX_CHARS} characters", bridge.SYSTEM_PROMPT)
+        self.assertNotIn("at most 12 turns", bridge.SYSTEM_PROMPT)  # v2 gives the limits with each task
         self.assertIn(f"{bridge.CELL_TIMEOUT_S} seconds", bridge.CELL_TIMEOUT_ERROR)
         self.assertEqual(bridge.budget_exhausted_message(), "sub-call budget exhausted (30 total)")
 
+    def test_limits_per_family(self):
+        """Spec §12.3."""
+        read, edit = bridge.limits("aggregation"), bridge.limits("edit_real")
+        self.assertEqual((read.max_turns, read.max_subcalls, read.root_max_tokens, read.cell_timeout_s, read.cpus,
+                          read.memory_mb, read.pids, read.grader_timeout_s), (12, 30, 3072, 120, 1.0, 512, 64, None))
+        self.assertEqual((edit.max_turns, edit.max_subcalls, edit.root_max_tokens, edit.cell_timeout_s, edit.cpus,
+                          edit.memory_mb, edit.pids, edit.grader_timeout_s), (20, 30, 4096, 300, 2.0, 4096, 256, 600))
+        for family in ("edit_synth", "edit_synth_heldout", "edit_real_select", "edit_real_test"):
+            self.assertIs(bridge.limits(family), bridge.EDIT_LIMITS)
+        self.assertEqual(read.output_max_chars, edit.output_max_chars)
+
+    def test_cell_messages_quote_the_limit(self):
+        """Spec §12.2: the timeout message quotes the cell limit as a value; edit episodes add one sentence."""
+        read = bridge.cell_messages("v2", bridge.READ_LIMITS)
+        edit = bridge.cell_messages("v2", bridge.EDIT_LIMITS, edit=True)
+        self.assertIn("after 120 seconds of compute", read.timeout)
+        self.assertIn("after 300 seconds of compute", edit.timeout)
+        self.assertTrue(edit.timeout.endswith(" Your files in /work/repo are unchanged."))
+        self.assertTrue(edit.crash.format(reason="exit code 1").endswith("Your files in /work/repo are unchanged."))
+        self.assertNotIn("/work/repo", read.timeout + read.crash)
+        self.assertEqual(bridge.cell_messages("v1"), bridge.CellMessages(bridge.CELL_TIMEOUT_ERROR, bridge.CELL_CRASH_ERROR))
+
     def test_every_api_name_is_in_the_prompt(self):
         self.assertEqual(bridge.API_NAMES, ("context", "llm", "llm_batch", "submit"))
-        for name in bridge.API_NAMES:
-            self.assertIn(f"`{name}", bridge.SYSTEM_PROMPT)
-        self.assertNotIn("llm_query", bridge.SYSTEM_PROMPT)
+        for prompt in (bridge.SYSTEM_PROMPT, bridge.SYSTEM_PROMPT_V1):
+            for name in bridge.API_NAMES:
+                self.assertIn(f"`{name}", prompt)
+            self.assertNotIn("llm_query", prompt)
 
     def test_hash_covers_all_three_texts(self):
+        import hashlib
+
         self.assertEqual(len(bridge.PROMPT_HASH), 64)
-        for key in bridge.PROMPT_TEXTS:
-            changed = dict(bridge.PROMPT_TEXTS, **{key: bridge.PROMPT_TEXTS[key] + " "})
-            import hashlib
-            self.assertNotEqual(hashlib.sha256(json.dumps(changed, sort_keys=True).encode()).hexdigest(), bridge.PROMPT_HASH)
+        self.assertEqual(bridge.PROMPT_HASH, bridge.PROMPT_HASHES["v2"])
+        self.assertNotEqual(bridge.PROMPT_HASHES["v1"], bridge.PROMPT_HASHES["v2"])
+        for version, texts in bridge.PROMPTS.items():
+            for key in texts:
+                changed = dict(texts, **{key: texts[key] + " "})
+                self.assertNotEqual(hashlib.sha256(json.dumps(changed, sort_keys=True).encode()).hexdigest(),
+                                    bridge.PROMPT_HASHES[version])
 
     def test_first_user_message(self):
         context = "a,b\nline 2\nline 3\nline 4"
-        self.assertEqual(
-            bridge.first_user_message("How many?", context),
-            f"Question: How many?\n\n`context` holds {len(context):,} characters in 4 lines. The first 3 lines are:\n"
-            "a,b\nline 2\nline 3")
+        head = (f"Question: How many?\n\n`context` holds {len(context):,} characters in 4 lines. The first 3 lines are:\n"
+                "a,b\nline 2\nline 3")
+        self.assertEqual(bridge.first_user_message("How many?", context, "v1"), head)
+        self.assertEqual(bridge.first_user_message("How many?", context),
+                         head + "\n\nYou have at most 12 turns and 30 sub-calls.")
         self.assertIn("12,345 characters", bridge.first_user_message("q", "x" * 12_345))
         messages = bridge.initial_messages("q", context)
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertIs(messages[0]["content"], bridge.SYSTEM_PROMPT)
+        self.assertIs(bridge.initial_messages("q", context, "v1")[0]["content"], bridge.SYSTEM_PROMPT_V1)
+
+    def test_edit_first_message(self):
+        messages = bridge.initial_messages("Fix the parser.", "ignored", edit={"language": "go", "n_files": 41,
+                                                                                "test_hint": "go test ./..."},
+                                           limits=bridge.EDIT_LIMITS)
+        self.assertEqual(messages[1]["content"], SPEC_EDIT_FIRST_V2.format(
+            task="Fix the parser.", language="go", n_files=41, test_hint="go test ./...", max_turns=20,
+            max_subcalls=30, cell_timeout_s=300))
+        with self.assertRaises(ValueError):
+            bridge.initial_messages("t", "c", "v1", edit={"language": "go", "n_files": 1, "test_hint": "x"})
 
     def test_observation(self):
         self.assertEqual(bridge.observation("", 0, None, 5, 30), "REPL output: (nothing printed)\n(5 turns left, 30 sub-calls left)")

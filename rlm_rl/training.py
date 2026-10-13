@@ -135,6 +135,7 @@ class TrainingRun:
         self.say = log
         self.state: dict = {}
         self.ctl: DifficultyController | None = None
+        self.retirement = rtasks.Retirement()  # edit_real tasks that keep coming back all-0 or all-1 (spec §12.7)
         self.client: ModelClient | None = None
         self.pause: InfraPause | None = None
         self.stop_requested: str | None = None  # set by the operator (Ctrl-C) while running
@@ -152,6 +153,7 @@ class TrainingRun:
         if self.cfg.run != self.run:
             raise ValueError("the config is for another run")
         self.ctl = DifficultyController(rtasks.max_levels(self.cfg.mix), frozen=self.cfg.frozen_controller)
+        self.retirement = rtasks.Retirement()
         self.state = self._new_state()
         self._load_capability()
         await self._open()
@@ -169,6 +171,7 @@ class TrainingRun:
             raise ValueError(f"unknown state format {self.state.get('format')}")
         self.cfg = RunConfig.from_dict(self.state["config"])
         self.ctl = DifficultyController.from_state(self.state["controller"])
+        self.retirement = rtasks.Retirement(self.state.get("retirement"))
         self._load_capability()
         await self._open()
         self._settle_interrupted()
@@ -213,7 +216,7 @@ class TrainingRun:
             "checkpoints": {"0": {"branch": 0, "backend_step": 0}},
             "lr": {"current": cfg.learning_rate, "start": cfg.learning_rate, "floor": rconfig.LR_FLOOR,
                    "rule": cfg.lr_rule, "fallback_used": False, "fallback": None},
-            "controller": self.ctl.state_dict(),
+            "controller": self.ctl.state_dict(), "retirement": self.retirement.state_dict(),
             "steps": [], "evals": [], "best": None, "kept": [0], "pruned": [],
             "spend": {"train_usd": 0.0, "kl_usd": 0.0, "eval_usd": 0.0, "interrupted_usd": 0.0, "total_usd": 0.0,
                       "training_gpu_usd_est": 0.0, "ceilings": dict(cfg.ceilings)},
@@ -374,16 +377,20 @@ class TrainingRun:
         started, t0 = time.time(), time.monotonic()
         self.client.reset_stats()  # the step's request stats leave out the evals before it
         self._live(n, "rollouts")
-        batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels(), n)
+        retired = self.retirement.ids()
+        batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels(), n, **({"exclude": retired} if retired else {}))
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
-                                  sandbox_factory=self.sandbox_factory, **self.sandbox_kwargs)
+                                  sandbox_factory=self.sandbox_factory, prompt_version=cfg.prompt_version,
+                                  **self.sandbox_kwargs)
         t_rollouts = time.monotonic() - t0
         TranscriptLog(path).extend([episode_record(ep, split="train", run=cfg.run, step=n, sample=sample,
                                                    key=f"train/step{n}/{ep.task_id}/{sample}")
                                     for group in groups for sample, ep in enumerate(group)])
         step_filter = filter_step(groups)
         controller_before = self.ctl.state_dict()
+        retirement_before = self.retirement.state_dict()
         moves = self.ctl.update(n, [ep for group in groups for ep in group])
+        newly_retired = self.retirement.update(n, groups)
         clean = monitor.scored(groups)
         self._check_template(clean)
         self._live(n, "kl")
@@ -402,6 +409,11 @@ class TrainingRun:
         st["spend"]["kl_usd"] = round(st["spend"]["kl_usd"] + kl["cost_usd"], 6)
         row["cost"] = {"step_usd": round(cost, 6), "kl_usd": kl["cost_usd"], "spent_train_usd": st["spend"]["train_usd"]}
         st["controller"] = self.ctl.state_dict()
+        st["retirement"] = self.retirement.state_dict()
+        row["retired"] = {"new": len(newly_retired), "total": len(self.retirement.retired)}
+        if newly_retired:
+            self._notice("retired", f"step {n}: {len(newly_retired)} edit_real task(s) retired (all-0 twice or all-1 once); "
+                                     f"{len(self.retirement.retired)} retired so far")
         for mv in moves:
             self._notice("level", f"{mv.family} {'would move' if not mv.applied else 'moved'} {mv.direction} "
                                   f"from level {mv.from_level} to {mv.to_level} (pass rate {mv.pass_rate:.0%} over "
@@ -418,7 +430,7 @@ class TrainingRun:
         else:
             train_groups = self._trajectory_groups(step_filter.groups)
             latest_before = await self.backend.latest_step(self._branch)
-            self._write_pending(n, row, train_groups, latest_before, controller_before)
+            self._write_pending(n, row, train_groups, latest_before, controller_before, retirement_before)
             self._live(n, "training")
             t2 = time.monotonic()
             backend_step, train_metrics = await self.backend.train(self._branch, train_groups, **cfg.train_args(lr))
@@ -463,7 +475,8 @@ class TrainingRun:
                                            if ep.infra_error is None],
                                           exceptions=[InfraError(ep.infra_error) for ep in group if ep.infra_error])
                       for group in groups]
-        metrics = {**monitor.flat({k: row[k] for k in ("pass", "reward", "policy", "shape", "infra", "cost", "time")}),
+        metrics = {**monitor.flat({k: row[k] for k in ("pass", "reward", "policy", "shape", "infra", "cost", "time", "edit")
+                                   if k in row}),
                    **{k: v for k, v in (row.get("train_metrics") or {}).items() if isinstance(v, (int, float))},
                    "rlm/lr": row["lr"], "rlm/spend/total_usd": self.state["spend"]["total_usd"]}
         try:
@@ -473,7 +486,8 @@ class TrainingRun:
 
     # ------------------------------------------------------------------ pending training
 
-    def _write_pending(self, n: int, row: dict, train_groups: list, latest_before: int, controller_before: dict) -> None:
+    def _write_pending(self, n: int, row: dict, train_groups: list, latest_before: int, controller_before: dict,
+                       retirement_before: dict | None = None) -> None:
         folder = self.run_dir / "pending"
         folder.mkdir(parents=True, exist_ok=True)
         batch = folder / f"step{n:04d}.pkl"
@@ -484,7 +498,8 @@ class TrainingRun:
             self._notice("pending", f"the step {n} batch couldn't be saved for a retrain: {exc!r}")
         self.state["pending"] = {"step": n, "branch": self.state["branch"], "row": row, "latest_before": latest_before,
                                  "batch": None if batch is None else str(batch.relative_to(self.run_dir)),
-                                 "controller_before": controller_before, "sent_at": time.time()}
+                                 "controller_before": controller_before, "retirement_before": retirement_before,
+                                 "sent_at": time.time()}
         self._save()
 
     async def _settle_pending(self, *, retrain: bool, discard: bool) -> None:
@@ -508,6 +523,8 @@ class TrainingRun:
         elif discard:
             self.ctl = DifficultyController.from_state(pending["controller_before"])
             self.state["controller"] = self.ctl.state_dict()
+            self.retirement = rtasks.Retirement(pending.get("retirement_before"))
+            self.state["retirement"] = self.retirement.state_dict()
             self.state["pending"] = None
             shutil.rmtree(self.run_dir / "pending", ignore_errors=True)
             self._notice("pending", f"step {n} was discarded and will be redone (its ${row['cost']['step_usd']:.3f} "
@@ -564,7 +581,8 @@ class TrainingRun:
                 self._live(c, "eval")
                 result = await run_eval(tasks, name=name, step=c, run_dir=self.run_dir, run=self.run, client=self.client,
                                         root_model=model, samples=samples, art_model=self.backend.art_model(self._branch),
-                                        sandbox_factory=self.sandbox_factory, **self.sandbox_kwargs)
+                                        sandbox_factory=self.sandbox_factory, prompt_version=self.cfg.prompt_version,
+                                        **self.sandbox_kwargs)
                 entry = {"checkpoint": c, "name": name, "summary": result.summary, "ran": result.ran}
             entry.update(branch=self.state["branch"], model=model, at=time.time(), cost_usd=round(self._commit_spend("eval"), 6))
             self.state["evals"].append(entry)
@@ -658,6 +676,7 @@ class TrainingRun:
                                 spend=self.state["spend"], template=self.state["template_fingerprint"], git=self._git)
         snapshot = {"checkpoint": c, "branch": ckpt["branch"], "backend_step": ckpt["backend_step"],
                     "model": self._model_for(c), "lr": dict(self.state["lr"]), "controller": self.ctl.state_dict(),
+                    "retirement": self.retirement.state_dict(),
                     "saved_at": time.time(), "config": pinned}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(snapshot, indent=1, default=str), encoding="utf-8")
@@ -728,11 +747,14 @@ class TrainingRun:
         st["audits"] = {k: v for k, v in st["audits"].items() if int(k) <= target}
         if snapshot is not None:
             self.ctl = DifficultyController.from_state(snapshot["controller"])
+            self.retirement = rtasks.Retirement(snapshot.get("retirement"))
             lr = snapshot["lr"]["current"]
         else:
             self.ctl = DifficultyController(rtasks.max_levels(self.cfg.mix), frozen=self.cfg.frozen_controller)
+            self.retirement = rtasks.Retirement()
             lr = self.cfg.learning_rate
         st["controller"] = self.ctl.state_dict()
+        st["retirement"] = self.retirement.state_dict()
         st["lr"]["current"] = new_lr if new_lr is not None else lr
         st["branch"] = new
         st["branches"].append({"branch": new, "model": name, "at": time.time(), "reason": reason,

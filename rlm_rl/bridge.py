@@ -1,8 +1,13 @@
 """Bridge API v1: the one contract between the root model, the REPL sandbox and the host.
 
 The training environment and the Part 2 harness both import this module (spec §1-2, H10).
-It pins what the model can call in the REPL, the prompt text and its hash, the sub-call
-rules and the wire protocol, and it serves one episode's sub-calls over a Unix socket.
+It pins what the model can call in the REPL, the prompt text and its hash, the episode
+limits per family (spec §12.3), the sub-call rules and the wire protocol, and it serves one
+episode's sub-calls over a Unix socket.
+
+Prompt v2 (spec §12.2) is the prompt for every family: one system prompt, with each task's
+limits in its first message. Prompt v1 (spec §2) is kept only for the second seed, which
+replicates the 20-step run on it (decision E-g); every run records which version it used.
 
 The REPL side of the protocol lives in repl_worker.py, which runs inside the sandbox and
 can't import this module. tests/test_contract.py checks that the two agree.
@@ -11,6 +16,7 @@ can't import this module. tests/test_contract.py checks that the two agree.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 import os
@@ -19,20 +25,59 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 API_VERSION = "v1"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
+PROMPT_VERSIONS = ("v1", "v2")
 
 # What the model sees in the REPL (spec §1.1), and the only requests the socket accepts (§1.4).
 # `submit` never crosses the bridge: its value comes back with the cell result.
 API_NAMES = ("context", "llm", "llm_batch", "submit")
 WIRE_OPS = ("llm", "llm_batch")
 
-# Episode limits (spec §4). The system prompt quotes several of them.
+# Episode limits for the read families (spec §4). Edit families use EDIT_LIMITS (spec §12.3); `limits(family)`
+# picks. Prompt v1's system prompt quotes the read limits; prompt v2 puts them in each first message.
 MAX_TURNS = 12
 MAX_SUBCALLS = 30
 ROOT_MAX_TOKENS = 3072
 OUTPUT_MAX_CHARS = 2000
 TRACEBACK_LINES = 6
 CELL_TIMEOUT_S = 120
+
+EDIT_PREFIX = "edit_"  # edit_real, edit_synth and their eval-only splits (spec §12)
+EDIT_REPO_PATH = "/work/repo"
+
+
+@dataclass(frozen=True)
+class Limits:
+    """One family's episode limits (spec §4, §12.3). Each episode records the limits it ran under."""
+
+    max_turns: int
+    max_subcalls: int
+    root_max_tokens: int
+    output_max_chars: int
+    cell_timeout_s: int  # compute only: time blocked on the bridge doesn't count
+    cpus: float
+    memory_mb: int
+    pids: int
+    grader_timeout_s: int | None  # edit families only
+
+    def as_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+READ_LIMITS = Limits(max_turns=MAX_TURNS, max_subcalls=MAX_SUBCALLS, root_max_tokens=ROOT_MAX_TOKENS,
+                     output_max_chars=OUTPUT_MAX_CHARS, cell_timeout_s=CELL_TIMEOUT_S, cpus=1.0, memory_mb=512,
+                     pids=64, grader_timeout_s=None)
+EDIT_LIMITS = Limits(max_turns=20, max_subcalls=30, root_max_tokens=4096, output_max_chars=OUTPUT_MAX_CHARS,
+                     cell_timeout_s=300, cpus=2.0, memory_mb=4096, pids=256, grader_timeout_s=600)
+
+
+def is_edit(family: str) -> bool:
+    return str(family).startswith(EDIT_PREFIX)
+
+
+def limits(family: str) -> Limits:
+    """The limits an episode of this family runs under (spec §12.3)."""
+    return EDIT_LIMITS if is_edit(family) else READ_LIMITS
 
 # Sub-calls (spec §1.2).
 SUBCALL_MAX_CHARS = 24_000
@@ -45,9 +90,71 @@ SUBCALL_ENABLE_THINKING = False
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
 SUBMIT_MAX_BYTES = 100_000
 
-# ----------------------------------------------------------------------------- prompt text v1
+# ----------------------------------------------------------------------------- prompt text v2 (spec §12.2)
 
-SYSTEM_PROMPT = """You are a Recursive Language Model. You answer a question about a long text that you cannot see directly. The text is stored in a persistent Python REPL as the string variable `context`.
+SYSTEM_PROMPT = """You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
+
+Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
+
+Available in the REPL:
+- `context`: the task input (str)
+- `llm(prompt: str) -> str`: ask a language model; it can read about 20,000 characters per call
+- `llm_batch(prompts: list[str]) -> list[str]`: ask several prompts in parallel; each prompt counts as one sub-call
+- `submit(answer)`: give your final answer and end the episode
+
+The REPL has only the Python standard library.
+
+Your turn and sub-call limits are given with the task. Look at the structure of the input before processing it, decompose the work, use code for exact filtering and arithmetic, and use sub-calls for judgments that need reading comprehension. Call `submit()` once you are confident.
+
+For coding tasks, the REPL starts in the repository and also has these tools. They return values; print what you need to see.
+- `read_file(path, start=1, n=40) -> str`: numbered lines of a file
+- `find_files(pattern, path=".") -> list[str]`: files matching a glob such as "src/**/*.py"
+- `grep(pattern, path=".", glob=None, ignore_case=False, files_only=False) -> list[str]`: regex matches as "path:line: text"
+- `edit_file(path, old, new, replace_all=False) -> str`: replace exact text that occurs once (or every time with replace_all=True); raises otherwise
+- `write_file(path, text) -> str`: create or overwrite a file
+- `shell(cmd, timeout=120)`: run a shell command; the result has `.code` and `.out` and prints as the exit code and the end of the output
+- `diff() -> str`: your changes so far, as they will be graded
+
+Explore with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and `llm` to draft or review a change. Run the relevant build or tests with `shell` before you submit. Your changes to the repository are what gets graded, by tests you cannot see, so do not change existing tests or test configuration. There is no network."""
+
+FIRST_USER_TEMPLATE = """Question: {question}
+
+`context` holds {n_chars:,} characters in {n_lines} lines. The first 3 lines are:
+{first_3_lines}
+
+You have at most {max_turns} turns and {max_subcalls} sub-calls."""
+
+EDIT_FIRST_USER_TEMPLATE = """Task: {task}
+
+The repository is at /work/repo ({language}, {n_files} files). `context` holds this task and the repository's file list with sizes. Run its tests with: {test_hint}
+
+When your change is ready, call submit() with a one-line summary. You have at most {max_turns} turns and {max_subcalls} sub-calls, and each cell may run for {cell_timeout_s} seconds."""
+
+# Observation after each turn (spec §2.3), assembled by `observation()`. The same in v1 and v2.
+OBS_OUTPUT = "REPL output:\n{stdout}"
+OBS_NOTHING_PRINTED = "REPL output: (nothing printed)"
+OBS_TRUNCATED = "\n[... {n} more characters truncated]"
+OBS_ERROR = "Error:\n{error}"
+OBS_COUNTERS = "({turns_left} turns left, {subcalls_left} sub-calls left)"
+OBS_LAST_TURN = "Your next turn is the last one: it must call submit() with your best answer."
+NO_CODE_BLOCK_ERROR = "No ```python code block found. Reply with exactly one ```python block."
+
+# What the model is told after a timeout or crash (spec §4, §12.2): v2 quotes the cell limit as a value, and edit
+# episodes add one sentence.
+CELL_TIMEOUT_TEMPLATE = (
+    "The cell timed out after {cell_timeout_s} seconds of compute. The REPL was restarted and all variables were "
+    "lost; `context` and your sub-call budget are unchanged."
+)
+CELL_CRASH_TEMPLATE = (
+    "The REPL crashed ({{reason}}). It was restarted and all variables were lost; "
+    "`context` and your sub-call budget are unchanged."
+)
+EDIT_FILES_UNCHANGED = " Your files in /work/repo are unchanged."
+CELL_NOT_RUN = " This cell was not run."
+
+# ----------------------------------------------------------------------------- prompt text v1 (spec §2), second seed only
+
+SYSTEM_PROMPT_V1 = """You are a Recursive Language Model. You answer a question about a long text that you cannot see directly. The text is stored in a persistent Python REPL as the string variable `context`.
 
 Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
 
@@ -61,21 +168,11 @@ Only the Python standard library is available.
 
 You have at most 12 turns and 30 sub-calls in total. Look at the structure of `context` before processing it, decompose the work, use code for exact filtering and arithmetic, and use sub-calls for judgments that need reading comprehension. Call `submit()` once you are confident."""
 
-FIRST_USER_TEMPLATE = """Question: {question}
+FIRST_USER_TEMPLATE_V1 = """Question: {question}
 
 `context` holds {n_chars:,} characters in {n_lines} lines. The first 3 lines are:
 {first_3_lines}"""
 
-# Observation after each turn (spec §2.3), assembled by `observation()`.
-OBS_OUTPUT = "REPL output:\n{stdout}"
-OBS_NOTHING_PRINTED = "REPL output: (nothing printed)"
-OBS_TRUNCATED = "\n[... {n} more characters truncated]"
-OBS_ERROR = "Error:\n{error}"
-OBS_COUNTERS = "({turns_left} turns left, {subcalls_left} sub-calls left)"
-OBS_LAST_TURN = "Your next turn is the last one: it must call submit() with your best answer."
-NO_CODE_BLOCK_ERROR = "No ```python code block found. Reply with exactly one ```python block."
-
-# What the model is told after a timeout or crash (spec §4). New in step 3; not yet quoted in the spec.
 CELL_TIMEOUT_ERROR = (
     "The cell timed out after 120 seconds of compute. The REPL was restarted and all variables were lost; "
     "`context` and your sub-call budget are unchanged."
@@ -85,25 +182,80 @@ CELL_CRASH_ERROR = (
     "`context` and your sub-call budget are unchanged."
 )
 
-PROMPT_TEXTS = {
-    "system": SYSTEM_PROMPT,
-    "first_user": FIRST_USER_TEMPLATE,
-    "observation": "\n".join([OBS_OUTPUT, OBS_NOTHING_PRINTED, OBS_TRUNCATED, OBS_ERROR, OBS_COUNTERS, OBS_LAST_TURN,
-                              NO_CODE_BLOCK_ERROR, CELL_TIMEOUT_ERROR, CELL_CRASH_ERROR]),
+_OBSERVATION = [OBS_OUTPUT, OBS_NOTHING_PRINTED, OBS_TRUNCATED, OBS_ERROR, OBS_COUNTERS, OBS_LAST_TURN,
+                NO_CODE_BLOCK_ERROR]
+PROMPTS = {
+    "v1": {"system": SYSTEM_PROMPT_V1, "first_user": FIRST_USER_TEMPLATE_V1,
+           "observation": "\n".join(_OBSERVATION + [CELL_TIMEOUT_ERROR, CELL_CRASH_ERROR])},
+    "v2": {"system": SYSTEM_PROMPT, "first_user": FIRST_USER_TEMPLATE + "\n\n" + EDIT_FIRST_USER_TEMPLATE,
+           "observation": "\n".join(_OBSERVATION + [CELL_TIMEOUT_TEMPLATE, CELL_CRASH_TEMPLATE, EDIT_FILES_UNCHANGED,
+                                                    CELL_NOT_RUN])},
 }
-PROMPT_HASH = hashlib.sha256(json.dumps(PROMPT_TEXTS, sort_keys=True).encode()).hexdigest()
+PROMPT_HASHES = {v: hashlib.sha256(json.dumps(texts, sort_keys=True).encode()).hexdigest() for v, texts in PROMPTS.items()}
+PROMPT_TEXTS = PROMPTS[PROMPT_VERSION]
+PROMPT_HASH = PROMPT_HASHES[PROMPT_VERSION]
 
 
-def first_user_message(question: str, context: str) -> str:
+def _check_version(version: str) -> None:
+    if version not in PROMPT_VERSIONS:
+        raise ValueError(f"unknown prompt version {version!r}")
+
+
+def system_prompt(version: str = PROMPT_VERSION) -> str:
+    _check_version(version)
+    return PROMPTS[version]["system"]
+
+
+def first_user_message(question: str, context: str, version: str = PROMPT_VERSION,
+                       limits: Limits = READ_LIMITS) -> str:
+    """A read family's first message (v1: spec §2.2; v2: the same plus one limits line)."""
+    _check_version(version)
     lines = context.splitlines()
-    return FIRST_USER_TEMPLATE.format(question=question, n_chars=len(context), n_lines=len(lines),
-                                      first_3_lines="\n".join(lines[:3]))
+    fields = dict(question=question, n_chars=len(context), n_lines=len(lines), first_3_lines="\n".join(lines[:3]))
+    if version == "v1":
+        return FIRST_USER_TEMPLATE_V1.format(**fields)
+    return FIRST_USER_TEMPLATE.format(**fields, max_turns=limits.max_turns, max_subcalls=limits.max_subcalls)
 
 
-def initial_messages(question: str, context: str) -> list[dict]:
-    """The system prompt and first user message every episode starts from."""
-    return [{"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": first_user_message(question, context)}]
+def edit_first_message(task: str, *, language: str, n_files: int, test_hint: str, limits: Limits = EDIT_LIMITS) -> str:
+    """An edit family's first message (spec §12.2). `test_hint` runs the visible tests, never a hidden test's name."""
+    return EDIT_FIRST_USER_TEMPLATE.format(task=task, language=language, n_files=n_files, test_hint=test_hint,
+                                           max_turns=limits.max_turns, max_subcalls=limits.max_subcalls,
+                                           cell_timeout_s=limits.cell_timeout_s)
+
+
+def initial_messages(question: str, context: str, version: str = PROMPT_VERSION, limits: Limits = READ_LIMITS,
+                     edit: dict | None = None) -> list[dict]:
+    """The system prompt and first user message every episode starts from.
+
+    `edit` makes it an edit episode's first message: {"language", "n_files", "test_hint"}, with `question` the task.
+    """
+    if edit is not None:
+        if version == "v1":
+            raise ValueError("edit tasks need prompt v2 (spec §12.2)")
+        first = edit_first_message(question, language=edit["language"], n_files=edit["n_files"],
+                                   test_hint=edit["test_hint"], limits=limits)
+    else:
+        first = first_user_message(question, context, version, limits)
+    return [{"role": "system", "content": system_prompt(version)}, {"role": "user", "content": first}]
+
+
+@dataclass(frozen=True)
+class CellMessages:
+    """What the sandbox tells the model after a timeout or a crash. `crash` has a {reason} field."""
+
+    timeout: str
+    crash: str
+    not_run: str = CELL_NOT_RUN
+
+
+def cell_messages(version: str = PROMPT_VERSION, limits: Limits = READ_LIMITS, edit: bool = False) -> CellMessages:
+    _check_version(version)
+    if version == "v1":
+        return CellMessages(CELL_TIMEOUT_ERROR, CELL_CRASH_ERROR)
+    tail = EDIT_FILES_UNCHANGED if edit else ""
+    return CellMessages(CELL_TIMEOUT_TEMPLATE.format(cell_timeout_s=limits.cell_timeout_s) + tail,
+                        CELL_CRASH_TEMPLATE.format() + tail)
 
 
 def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int) -> str:

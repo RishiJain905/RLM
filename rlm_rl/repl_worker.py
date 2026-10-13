@@ -19,6 +19,24 @@ container:
   logs each one to stderr as `@@rlm-audit {json}`, for the escape_attempt detector (spec §7).
 The container itself (--network none, read-only root, no host files, empty environment) is
 the real boundary. The hook is a tripwire and gives the model readable errors.
+
+Edit mode (`--edit`, spec §12.4) is for the edit families. The REPL runs on our own Python,
+mounted read-only at /opt/rlm/python, inside the repository's image, with the repository at
+/work/repo. It differs from read mode in four ways:
+- Landlock lets every file in the container be read and every program be run, so the image's
+  own toolchain and test runner work through subprocess. Writes stay limited to /work/repo,
+  /scratch, /tmp and the image's cache folders given with `--writable`.
+- The audit hook still blocks network sockets, ctypes and writes elsewhere, but lets programs
+  run and signals be sent. It logs, without blocking, each program started (`exec`, with its
+  arguments), the first read of /work/repo in each cell (`repo_read`) and writes to it
+  (`repo_write`), which the host turns into the edit metrics (spec §12.9). A blocked network
+  attempt is logged as `network`; the host counts it as `network_try` (spec §12.6).
+- During a cell, file descriptors 1 and 2 point at a pipe that feeds the cell's output, so
+  what a program the model runs prints reaches the model. The audit log moves to a private
+  descriptor.
+- The REPL starts in /work/repo, with the seven coding tools of repl_tools.py (mounted next to
+  this file) in its namespace. Each tool call is logged as `tool`, and writes and programs are
+  marked as made by a tool or not, for the edit metrics (`raw_io_share`, spec §12.9).
 """
 
 import contextlib
@@ -30,6 +48,7 @@ import signal
 import socket
 import sys
 import threading
+import time
 import traceback
 
 # Must match rlm_rl/bridge.py; tests/test_contract.py checks.
@@ -46,6 +65,9 @@ CONTEXT_PATH = "/episode/context.txt"
 SOCKET_PATH = "/episode/bridge.sock"
 SCRATCH_DIR = "/scratch"
 WORKER_DIR = "/opt/rlm"
+EDIT_REPO = "/work/repo"
+EDIT_TMP = "/tmp"
+REPO_WRITES_LOGGED = 20  # repo_write events per cell; enough to order edits and test runs
 
 AUDIT_PREFIX = "@@rlm-audit "
 TAMPER_EXIT_CODE = 86  # stderr was closed or redirected, so blocked attempts could no longer be logged
@@ -64,9 +86,33 @@ _state = {"submitted": False, "answer": None}
 
 # ----------------------------------------------------------------------------- bridge client
 
+# Time spent waiting on the bridge, counted once however many threads wait: the host's cell limit counts compute
+# only, so the coding tools' time_left leaves it out too.
+_waiting = {"calls": 0, "since": 0.0, "total": 0.0}
+_waiting_lock = threading.Lock()
+
+
+def _bridge_seconds() -> float:
+    with _waiting_lock:
+        return _waiting["total"] + (time.monotonic() - _waiting["since"] if _waiting["calls"] else 0.0)
+
 
 def _bridge(op: str, prompts: list) -> list:
     """One request over the episode's Unix socket. A fresh connection per call, so threads can call in parallel."""
+    with _waiting_lock:
+        if not _waiting["calls"]:
+            _waiting["since"] = time.monotonic()
+        _waiting["calls"] += 1
+    try:
+        return _bridge_call(op, prompts)
+    finally:
+        with _waiting_lock:
+            _waiting["calls"] -= 1
+            if not _waiting["calls"]:
+                _waiting["total"] += time.monotonic() - _waiting["since"]
+
+
+def _bridge_call(op: str, prompts: list) -> list:
     request = (json.dumps({"op": op, "prompts": prompts}) + "\n").encode()
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
@@ -149,6 +195,8 @@ FS = {name: 1 << i for i, name in enumerate(_FS_RIGHTS)}
 _READ_TREE = FS["READ_FILE"] | FS["READ_DIR"]
 _WRITE_TREE = (_READ_TREE | FS["WRITE_FILE"] | FS["REMOVE_DIR"] | FS["REMOVE_FILE"] | FS["MAKE_DIR"]
                | FS["MAKE_REG"] | FS["REFER"] | FS["TRUNCATE"])
+# Edit mode: build tools make symlinks, sockets and fifos, and run what they build (spec §12.4).
+_EDIT_WRITE_TREE = _WRITE_TREE | FS["MAKE_SYM"] | FS["MAKE_SOCK"] | FS["MAKE_FIFO"] | FS["EXECUTE"]
 
 # Path -> rights. Anything not listed (/proc, /sys, /dev, /tmp, /var, /run, /home, /root, /mnt) is denied,
 # and no path gets EXECUTE, so execve fails everywhere.
@@ -164,9 +212,21 @@ LANDLOCK_RULES = {
 }
 
 
-def apply_landlock() -> int:
-    """Restrict this process and every child to LANDLOCK_RULES. Returns the Landlock ABI applied, or 0 if the kernel has none."""
+def edit_landlock_rules(writable) -> dict:
+    """Edit mode: read and run anything in the container, write only under `writable` (spec §12.4)."""
+    rules = {"/": _READ_TREE | FS["EXECUTE"],
+             "/dev/null": FS["READ_FILE"] | FS["WRITE_FILE"] | FS["TRUNCATE"]}  # a file: no directory rights
+    for path in writable:
+        rules[path] = _EDIT_WRITE_TREE
+    return rules
+
+
+def apply_landlock(rules: dict | None = None) -> int:
+    """Restrict this process and every child to `rules` (LANDLOCK_RULES by default). Returns the Landlock ABI applied,
+    or 0 if the kernel has none."""
     import ctypes
+
+    rules = LANDLOCK_RULES if rules is None else rules
 
     libc = ctypes.CDLL(None, use_errno=True)
     libc.syscall.restype = ctypes.c_long
@@ -200,7 +260,7 @@ def apply_landlock() -> int:
     attr = RulesetAttr(handled)
     ruleset = call(create_ruleset, ctypes.byref(attr), ctypes.sizeof(attr), 0)
     try:
-        for path, rights in LANDLOCK_RULES.items():
+        for path, rights in rules.items():
             try:
                 fd = os.open(path, os.O_PATH | os.O_CLOEXEC)
             except FileNotFoundError:
@@ -228,18 +288,24 @@ WRITE_FILES = frozenset({"/dev/null"})
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
 
 _stderr_id = None
+_audit_fd = 2  # edit mode moves the audit log to a private descriptor (fds 1 and 2 feed the cell output)
+# Per-cell markers, reset by run_cell. `io` counts /work/repo writes and programs started, by a tool or not.
+_edit = {"on": False, "repo_read": False, "repo_writes": 0, "last_popen": None,
+         "io": {"tool_writes": 0, "raw_writes": 0, "tool_execs": 0, "raw_execs": 0}}
+_tools = None  # edit mode: the repl_tools module
+_cell = {"timeout": None, "start": 0.0, "bridge_at_start": 0.0}
 
 
-def _log(kind: str, event: str, detail, blocked: bool = True) -> None:
-    """Write one audit line to stderr. If stderr was tampered with, the REPL exits instead (TAMPER_EXIT_CODE)."""
+def _log(kind: str, event: str, detail, blocked: bool = True, **extra) -> None:
+    """Write one audit line to the audit descriptor. If it was tampered with, the REPL exits instead (TAMPER_EXIT_CODE)."""
     try:
-        st = os.fstat(2)
+        st = os.fstat(_audit_fd)
         if (st.st_dev, st.st_ino) != _stderr_id:
             os._exit(TAMPER_EXIT_CODE)
         data = (AUDIT_PREFIX + json.dumps({"kind": kind, "event": event, "detail": repr(detail)[:300],
-                                           "blocked": blocked}) + "\n").encode()
+                                           "blocked": blocked, **extra}) + "\n").encode()
         while data:
-            data = data[os.write(2, data):]
+            data = data[os.write(_audit_fd, data):]
     except Exception:
         os._exit(TAMPER_EXIT_CODE)
 
@@ -385,18 +451,144 @@ _HANDLERS = {
 }
 
 
+# ----------------------------------------------------------------------------- edit mode (spec §12.4)
+
+
+def _argv(value) -> list:
+    """A program's arguments as short strings, for the exec log."""
+    if isinstance(value, (str, bytes, os.PathLike)):
+        value = [value]
+    try:
+        items = list(value)[:40]
+    except TypeError:
+        items = [value]
+    out = []
+    for a in items:
+        try:
+            out.append((os.fsdecode(a) if isinstance(a, (str, bytes, os.PathLike)) else str(a))[:200])
+        except Exception:
+            out.append("?")
+    return out
+
+
+def _by_tool() -> bool:
+    """Whether a coding tool (repl_tools) is running on this thread right now."""
+    return _tools is not None and _tools.active()
+
+
+def _edit_exec(event: str, index: int):
+    """Log a program start with its arguments; never block it (the image's toolchain runs through subprocess)."""
+    def handler(args):
+        args = tuple(args)
+        value = args[index] if len(args) > index and args[index] is not None else (args[0] if args else "")
+        argv = _argv(value)
+        if event == "subprocess.Popen":
+            _edit["last_popen"] = argv
+        elif event == "os.posix_spawn" and argv == _edit["last_popen"]:
+            _edit["last_popen"] = None  # subprocess.Popen starting it through posix_spawn: already logged
+            return
+        tool = _by_tool()
+        _edit["io"]["tool_execs" if tool else "raw_execs"] += 1
+        _log("exec", event, " ".join(argv)[:300], blocked=False, argv=argv, tool=tool)
+    return handler
+
+
+def _in_repo(path) -> bool:
+    return isinstance(path, str) and _under(path, (EDIT_REPO,))
+
+
+def _note_repo_read(event: str, path) -> None:
+    p = _abspath(path)
+    if _in_repo(p) and not _edit["repo_read"]:
+        _edit["repo_read"] = True
+        _log("repo_read", event, p, blocked=False)
+
+
+def _note_write(event: str, path) -> None:
+    """Writes outside the writable folders are blocked as in read mode; writes to /work/repo are logged."""
+    _check_write(event, path)
+    p = _abspath(path)
+    if not _in_repo(p):
+        return
+    tool = _by_tool()
+    _edit["io"]["tool_writes" if tool else "raw_writes"] += 1
+    if _edit["repo_writes"] < REPO_WRITES_LOGGED:
+        _edit["repo_writes"] += 1
+        _log("repo_write", event, p, blocked=False, tool=tool)
+
+
+def _edit_on_open(args) -> None:
+    path, mode, flags = (tuple(args) + (None, None, None))[:3]
+    writing = isinstance(flags, int) and flags & _WRITE_FLAGS
+    if isinstance(mode, str) and any(c in mode for c in "wax+"):
+        writing = True
+    if writing:
+        _note_write("open", path)
+    else:
+        _note_repo_read("open", path)
+
+
+def _edit_reader(event):
+    return lambda args: _note_repo_read(event, args[0] if args else None)
+
+
+def _edit_writer(event, index=0):
+    return lambda args: _note_write(event, args[index] if len(args) > index else None)
+
+
+def _allow(args) -> None:
+    return None
+
+
+_EDIT_HANDLERS = {
+    **_HANDLERS,
+    "open": _edit_on_open,
+    "os.listdir": _edit_reader("os.listdir"),
+    "os.scandir": _edit_reader("os.scandir"),
+    "os.listxattr": _edit_reader("os.listxattr"),
+    "os.getxattr": _edit_reader("os.getxattr"),
+    "os.mkdir": _edit_writer("os.mkdir"),
+    "os.remove": _edit_writer("os.remove"),
+    "os.rmdir": _edit_writer("os.rmdir"),
+    "os.rename": lambda args: (_note_write("os.rename", args[0]), _note_write("os.rename", args[1])),
+    "os.truncate": _edit_writer("os.truncate"),
+    "os.chmod": _edit_writer("os.chmod"),
+    "os.chown": _edit_writer("os.chown"),
+    "os.utime": _edit_writer("os.utime"),
+    "os.setxattr": _edit_writer("os.setxattr"),
+    "os.removexattr": _edit_writer("os.removexattr"),
+    "os.link": _edit_writer("os.link", 1),
+    "os.symlink": _edit_writer("os.symlink", 1),
+    "subprocess.Popen": _edit_exec("subprocess.Popen", 1),
+    "os.system": _edit_exec("os.system", 0),
+    "os.exec": _edit_exec("os.exec", 1),
+    "os.posix_spawn": _edit_exec("os.posix_spawn", 1),
+    "os.spawn": _edit_exec("os.spawn", 2),
+    "os.fork": _allow,
+    "os.forkpty": _allow,
+    "os.kill": _allow,
+    "os.killpg": _allow,
+    "signal.pthread_kill": _allow,
+    "resource.setrlimit": _allow,
+    "resource.prlimit": _allow,
+}
+
+_handlers = _HANDLERS
+
+
 def _audit_hook(event: str, args) -> None:
-    handler = _HANDLERS.get(event)
+    handler = _handlers.get(event)
     if handler is not None:
         handler(args)
     elif event.startswith("ctypes."):
         _block("ctypes", event, args, shown=event)
 
 
-def install_audit_hook() -> None:
-    global _stderr_id
-    st = os.fstat(2)
+def install_audit_hook(edit: bool = False) -> None:
+    global _stderr_id, _handlers
+    st = os.fstat(_audit_fd)
     _stderr_id = (st.st_dev, st.st_ino)
+    _handlers = _EDIT_HANDLERS if edit else _HANDLERS
     sys.meta_path.insert(0, _ImportWatch)
     sys.addaudithook(_audit_hook)
 
@@ -409,6 +601,7 @@ class _Capped(io.TextIOBase):
 
     def __init__(self, cap: int):
         self.cap, self.total, self._parts, self._kept = cap, 0, [], 0
+        self._lock = threading.Lock()  # edit mode: the fd pump writes from another thread
 
     @property
     def encoding(self):
@@ -420,15 +613,64 @@ class _Capped(io.TextIOBase):
     def write(self, s):
         if not isinstance(s, str):
             raise TypeError(f"write() argument must be str, not {type(s).__name__}")
-        self.total += len(s)
-        if self._kept < self.cap:
-            piece = s[: self.cap - self._kept]
-            self._parts.append(piece)
-            self._kept += len(piece)
+        with self._lock:
+            self.total += len(s)
+            if self._kept < self.cap:
+                piece = s[: self.cap - self._kept]
+                self._parts.append(piece)
+                self._kept += len(piece)
         return len(s)
 
     def getvalue(self) -> str:
-        return "".join(self._parts)
+        with self._lock:
+            return "".join(self._parts)
+
+
+class _FdCapture:
+    """Edit mode: during a cell, fds 1 and 2 are a pipe whose output goes to the cell's stdout, so programs the model
+    runs without capturing their output still show it. A program left running in the background keeps the pipe
+    open; its later output is dropped, since the cell is over."""
+
+    DRAIN_S = 0.5
+
+    def __init__(self, sink: "_Capped"):
+        self._sink = sink
+        read_fd, write_fd = os.pipe()
+        self._read_fd = read_fd
+        os.dup2(write_fd, 1)
+        os.dup2(write_fd, 2)
+        os.close(write_fd)
+        self._thread = threading.Thread(target=self._pump, name="rlm-fd-capture", daemon=True)
+        self._thread.start()
+
+    def _pump(self) -> None:
+        import codecs
+
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        try:
+            while True:
+                data = os.read(self._read_fd, 65536)
+                if not data:
+                    break
+                text = decoder.decode(data)
+                sink = self._sink
+                if sink is not None and text:
+                    sink.write(text)
+        except OSError:
+            pass
+        finally:
+            try:
+                os.close(self._read_fd)
+            except OSError:
+                pass
+
+    def stop(self) -> None:
+        devnull = os.open("/dev/null", os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+        self._thread.join(self.DRAIN_S)  # every writer that exited has closed its end; a background one may not have
+        self._sink = None
 
 
 def _format_error(exc: BaseException) -> str:
@@ -440,15 +682,37 @@ def _format_error(exc: BaseException) -> str:
     return text
 
 
+def cell_seconds_left() -> float:
+    """Compute seconds left in the running cell (time waiting on the bridge doesn't count, as on the host)."""
+    if not _cell["timeout"]:
+        return float("inf")
+    used = time.monotonic() - _cell["start"] - (_bridge_seconds() - _cell["bridge_at_start"])
+    return _cell["timeout"] - used
+
+
+def _log_tool_call(tool: str, ok: bool, seconds: float, target: str) -> None:
+    """repl_tools' on_call: one `tool` event per call, for the edit metrics (spec §12.9)."""
+    _log("tool", tool, target, blocked=False, ok=bool(ok), seconds=seconds)
+
+
 def run_cell(code: str, namespace: dict) -> dict:
     _state["submitted"], _state["answer"] = False, None
+    _edit["repo_read"], _edit["repo_writes"], _edit["last_popen"] = False, 0, None
+    _edit["io"] = dict.fromkeys(_edit["io"], 0)
+    _cell["start"], _cell["bridge_at_start"] = time.monotonic(), _bridge_seconds()
     out, err = _Capped(OUTPUT_MAX_CHARS), _Capped(STDERR_KEEP_CHARS)
+    capture = _FdCapture(out) if _edit["on"] else None
     error = None
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             exec(compile(code, "<repl>", "exec"), namespace)
     except BaseException as exc:
         error = _format_error(exc)
+    finally:
+        if capture is not None:
+            capture.stop()
+    if _edit["on"] and any(_edit["io"].values()):  # exact counts; the repo_write events stop at REPO_WRITES_LOGGED
+        _log("io", "cell", "", blocked=False, **_edit["io"])
     return {
         "stdout": out.getvalue(),
         "stdout_chars": out.total,
@@ -466,8 +730,45 @@ def _send(fd: int, message: dict) -> None:
         data = data[os.write(fd, data):]
 
 
-def repl_main() -> None:
+def parse_mode(argv: list) -> tuple[bool, tuple]:
+    """`--edit [--writable /a:/b]` -> (True, writable folders); no arguments -> read mode."""
+    edit, writable = "--edit" in argv, ()
+    if "--writable" in argv:
+        i = argv.index("--writable")
+        writable = tuple(p for p in (argv[i + 1] if i + 1 < len(argv) else "").split(":") if p.startswith("/"))
+    if edit:
+        writable = tuple(dict.fromkeys((EDIT_REPO, SCRATCH_DIR, EDIT_TMP) + writable))
+    return edit, writable
+
+
+def _option(argv: list, name: str) -> str | None:
+    """The value after `name` in argv (`--base <sha>`, `--cell-timeout <seconds>`), or None."""
+    if name in argv:
+        i = argv.index(name)
+        return argv[i + 1] if i + 1 < len(argv) else None
+    return None
+
+
+def load_tools(base: str | None, cell_timeout: float | None):
+    """Edit mode: import the coding tools mounted next to this file, before lockdown, and point them at the
+    repository. Returns the module."""
+    global _tools
+    sys.path.insert(0, WORKER_DIR)
+    try:
+        import repl_tools
+    finally:
+        sys.path.remove(WORKER_DIR)
+    _cell["timeout"] = cell_timeout
+    repl_tools.configure(root=EDIT_REPO, base=base, time_left=cell_seconds_left, on_call=_log_tool_call)
+    _tools = repl_tools
+    return repl_tools
+
+
+def repl_main(argv: list | None = None) -> None:
     """The REPL process: lock down, then run cells until the host closes stdin."""
+    global _audit_fd, WRITE_PREFIXES
+    argv = sys.argv[1:] if argv is None else argv
+    edit, writable = parse_mode(argv)
     # The protocol moves to private descriptors. Model code that reads stdin gets EOF, and raw writes
     # to fd 1 land in the container log instead of corrupting a result.
     proto_in = os.fdopen(os.dup(0), "rb")
@@ -475,20 +776,38 @@ def repl_main() -> None:
     devnull = os.open("/dev/null", os.O_RDWR)
     os.dup2(devnull, 0)
     os.close(devnull)
-    os.dup2(2, 1)
+    if edit:
+        # The audit log moves to a private descriptor that programs the model runs don't inherit; fds 1 and 2 then
+        # feed each cell's output (_FdCapture) and point at /dev/null between cells.
+        _audit_fd = os.dup(2)
+        devnull = os.open("/dev/null", os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+        WRITE_PREFIXES = writable
+        _edit["on"] = True
+        os.umask(0o022)
+    else:
+        os.dup2(2, 1)
     sys.stdin = io.StringIO()
 
     with open(CONTEXT_PATH, encoding="utf-8", newline="") as f:  # keep line endings exactly as the host wrote them
         namespace = make_namespace(f.read())
+    if edit:
+        os.chdir(EDIT_REPO)
+        timeout = _option(argv, "--cell-timeout")
+        tools = load_tools(_option(argv, "--base"), float(timeout) if timeout else None)
+        namespace.update(tools.namespace())
     try:
-        landlock, landlock_error = apply_landlock(), None
+        landlock, landlock_error = apply_landlock(edit_landlock_rules(writable) if edit else None), None
     except OSError as exc:
         landlock, landlock_error = 0, str(exc)
     for name in [m for m in sys.modules if m == "_ctypes" or m == "ctypes" or m.startswith("ctypes.")]:
         del sys.modules[name]
-    install_audit_hook()
+    install_audit_hook(edit)
     _send(proto_out, {"ready": True, "landlock": landlock, "landlock_error": landlock_error,
-                      "python": sys.version.split()[0]})
+                      "python": sys.version.split()[0], "edit": edit,
+                      "tools": _tools.TOOLS_VERSION if _tools is not None else None})
 
     for line in proto_in:
         try:

@@ -27,14 +27,19 @@ GENERATORS = {
     "aggregation": "aggregation", "aggregation_heldout": "aggregation",
     "callgraph": "synthcode", "needle": "synthcode", "callgraph_heldout": "synthcode", "needle_heldout": "synthcode",
     "repo_loc": "repoloc", "repo_loc_select": "repoloc", "repo_loc_test": "repoloc",
+    "edit_synth": "editsynth", "edit_synth_heldout": "editsynth",  # spec §12.7
+    "edit_real": "editreal", "edit_real_select": "editreal", "edit_real_test": "editreal",
 }
 EVAL_ONLY_SUFFIXES = ("_heldout", "_select", "_test")
 
 # The production domain mix, and the training families that fill each domain. Decision 7a (Rishi, 2026-10-11) was
-# 35% cyber, 30% aggregation, 20% code, 15% repo. Decision 7c (Rishi, 2026-10-11) dropped cyber and split its 35%
-# between the code generators (+20) and aggregation (+15).
-DOMAIN_MIX = {"aggregation": 0.45, "code": 0.40, "repo": 0.15}
-DOMAIN_FAMILIES = {"aggregation": ("aggregation",), "code": ("callgraph", "needle"), "repo": ("repo_loc",)}
+# 35% cyber, 30% aggregation, 20% code, 15% repo; decision 7c (2026-10-11) dropped cyber for 45/40/15. Spec v2 §12.7
+# (decision E-a, Rishi 2026-10-12) gives editing 40%: aggregation 25%, code reading 20%, repo localization 15%.
+DOMAIN_MIX = {"aggregation": 0.25, "code": 0.20, "repo": 0.15, "editing": 0.40}
+DOMAIN_FAMILIES = {"aggregation": ("aggregation",), "code": ("callgraph", "needle"), "repo": ("repo_loc",),
+                   "editing": ("edit_real", "edit_synth")}
+# Families whose share of their domain isn't an even split (spec §12.7: editing's 25/15).
+FAMILY_SHARES = {"edit_real": 0.25, "edit_synth": 0.15}
 
 
 def new_seed() -> int:
@@ -69,9 +74,14 @@ def versions(families) -> dict[str, str]:
     return {family: generator(family).GENERATOR_VERSION for family in families}
 
 
-def make_task(family: str, level: int, seed: int | None = None, task_id: str | None = None):
-    """One task at a level, from a fresh seed unless one is given (eval seed lists)."""
-    return generator(family).make_task(new_seed() if seed is None else seed, family, level, task_id)
+def make_task(family: str, level: int, seed: int | None = None, task_id: str | None = None, exclude=None):
+    """One task at a level, from a fresh seed unless one is given (eval seed lists). `exclude` names retired tasks of
+    a fixed pool (edit_real, spec §12.7)."""
+    gen = generator(family)
+    seed = new_seed() if seed is None else seed
+    if exclude and family in RETIRABLE:
+        return gen.make_task(seed, family, level, task_id, exclude=exclude)
+    return gen.make_task(seed, family, level, task_id)
 
 
 def eval_only(family: str) -> bool:
@@ -80,24 +90,38 @@ def eval_only(family: str) -> bool:
 
 def training_sources(family: str) -> tuple[str, ...]:
     """The data sources a family reads (rlm_rl/data.py SOURCES). Purely synthetic families read none."""
-    return tuple(getattr(generator(family), "TRAIN_SOURCES", ()))
+    gen = generator(family)
+    if callable(getattr(gen, "training_sources", None)):
+        return tuple(gen.training_sources())
+    return tuple(getattr(gen, "TRAIN_SOURCES", ()))
 
 
 def production_mix() -> dict[str, float]:
-    """The domain mix as family weights: each domain's share split evenly over its families."""
+    """The domain mix as family weights: each domain's share split evenly over its families, except where
+    FAMILY_SHARES sets a family's share directly (editing's 25/15, spec §12.7). The order is DOMAIN_FAMILIES'."""
     total = sum(DOMAIN_MIX.values())
-    return {f: w / total / len(DOMAIN_FAMILIES[d]) for d, w in DOMAIN_MIX.items() for f in DOMAIN_FAMILIES[d]}
+    mix = {}
+    for domain, share in DOMAIN_MIX.items():
+        families = DOMAIN_FAMILIES[domain]
+        direct = {f: FAMILY_SHARES[f] for f in families if f in FAMILY_SHARES}
+        rest = [f for f in families if f not in direct]
+        left = share - sum(direct.values())
+        for f in families:
+            mix[f] = (direct[f] if f in direct else left / len(rest)) / total
+    return mix
 
 
 def check_mix(mix: dict[str, float]) -> None:
     """Refuse a training mix with an eval-only family (H7) or a family reading a source the licence bar keeps
-    out of training (7b)."""
+    out of training (7b). edit_real also needs every training repository's own licence to be permissive."""
     from .. import data
 
     for family in mix:
         if eval_only(family):
             raise ValueError(f"{family} is eval-only (H7) and can't be in a training mix")
         data.check_training_sources(family, list(training_sources(family)))
+        if callable(getattr(generator(family), "check_licences", None)):
+            generator(family).check_licences()
 
 
 def allocate(n: int, mix: dict[str, float]) -> dict[str, int]:
@@ -138,18 +162,67 @@ def allocate_step(n: int, mix: dict[str, float], step: int) -> dict[str, int]:
     return out
 
 
-def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None = None) -> list:
+def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None = None, exclude=None) -> list:
     """One step's tasks: n tasks split across families by `mix`, each at its family's current level, fresh seeds.
 
     With `step` (the training loop always passes it), the split carries its rounding across steps
-    (`allocate_step`); without it, every call rounds the same way (`allocate`).
+    (`allocate_step`); without it, every call rounds the same way (`allocate`). `exclude` holds retired
+    task ids (spec §12.7); a fixed pool also never repeats a task within one step.
     """
     out = []
     counts = allocate(n, mix) if step is None else allocate_step(n, mix, step)
     for family, count in counts.items():
-        out.extend(make_task(family, levels[family]) for _ in range(count))
+        taken = set(exclude or ())
+        for _ in range(count):
+            task = make_task(family, levels[family], exclude=taken if family in RETIRABLE else None)
+            if family in RETIRABLE:
+                taken.add(task.task_id)
+            out.append(task)
     secrets.SystemRandom().shuffle(out)
     return out
+
+
+# ----------------------------------------------------------------------------- task retirement (spec §12.7)
+
+RETIRABLE = ("edit_real",)  # fixed pools whose tasks come back; synthetic families never repeat a task
+RETIRE_ALL_ZERO = 2  # a task whose group came back all-0 this many times isn't drawn again
+RETIRE_ALL_ONE = 1  # nor one whose group came back all-1 once
+
+
+class Retirement:
+    """Which tasks of a fixed pool keep coming back all-0 or all-1, so they stop wasting groups. Saved with every
+    checkpoint, so a resume or rollback keeps it."""
+
+    def __init__(self, state: dict | None = None):
+        state = state or {}
+        self.counts: dict[str, dict] = {k: dict(v) for k, v in (state.get("counts") or {}).items()}
+        self.retired: dict[str, dict] = {k: dict(v) for k, v in (state.get("retired") or {}).items()}
+
+    def update(self, step: int, groups: list) -> list[str]:
+        """Record one step's groups. Returns the task ids retired by it."""
+        newly = []
+        for group in groups:
+            clean = [ep for ep in group if ep.infra_error is None]
+            if len(clean) < 2 or clean[0].family not in RETIRABLE:
+                continue
+            rewards = {ep.reward for ep in clean}
+            if len(rewards) != 1 or rewards.pop() not in (0.0, 1.0):
+                continue
+            task_id, value = clean[0].task_id, clean[0].reward
+            row = self.counts.setdefault(task_id, {"zero": 0, "one": 0})
+            row["one" if value == 1.0 else "zero"] += 1
+            if task_id not in self.retired and (row["zero"] >= RETIRE_ALL_ZERO or row["one"] >= RETIRE_ALL_ONE):
+                self.retired[task_id] = {"step": step, "why": "all-1" if row["one"] >= RETIRE_ALL_ONE else "all-0",
+                                         "family": clean[0].family}
+                newly.append(task_id)
+        return newly
+
+    def ids(self) -> set[str]:
+        return set(self.retired)
+
+    def state_dict(self) -> dict:
+        return {"counts": self.counts, "retired": self.retired,
+                "rule": {"all_zero": RETIRE_ALL_ZERO, "all_one": RETIRE_ALL_ONE, "families": list(RETIRABLE)}}
 
 
 def private_seed_list(name: str, n: int) -> list[int]:

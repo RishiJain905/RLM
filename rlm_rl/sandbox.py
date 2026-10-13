@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import dataclasses
 import hashlib
 import io
 import json
@@ -53,6 +54,7 @@ TAMPER_EXIT_CODE = 86
 
 RESULT_LINE_LIMIT = 4 * 1024 * 1024
 MAX_EVENTS = 1000
+START_ATTEMPTS = 2  # container launches before a sandbox that won't start is an infra error
 LOG_LINES = 200
 
 DOCKERFILE = """\
@@ -61,7 +63,7 @@ RUN rm -rf /usr/local/lib/python3.12/site-packages/pip /usr/local/lib/python3.12
            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 /usr/local/lib/python3.12/ensurepip/_bundled \\
  && groupadd --gid {uid} sandbox \\
  && useradd --uid {uid} --gid {uid} --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin sandbox \\
- && mkdir -p /opt/rlm /episode /scratch
+ && mkdir -p /opt/rlm /episode /scratch /work/repo
 COPY repl_worker.py /opt/rlm/repl_worker.py
 USER {uid}:{uid}
 WORKDIR /scratch
@@ -78,7 +80,7 @@ class SandboxLimits:
     scratch_mb: int = 64
     cell_timeout_s: float = bridge.CELL_TIMEOUT_S  # compute only: time blocked on the bridge doesn't count
     cell_wall_cap_s: float = 1800.0  # a cell stuck this long on sub-calls is an infra failure
-    startup_timeout_s: float = 60.0
+    startup_timeout_s: float = 300.0  # generous: creating a container on the USB data drive can take minutes under load
     require_landlock: bool = True
 
 
@@ -93,6 +95,7 @@ class CellResult:
     stderr: str = ""
     restarted: bool = False
     crash: str | None = None  # "timeout", or why the REPL crashed
+    repo_changed: bool | None = None  # edit episodes: the cell changed a file in /work/repo
     compute_s: float = 0.0
     blocked_s: float = 0.0
     wall_s: float = 0.0
@@ -201,11 +204,14 @@ class Sandbox:
 
     def __init__(self, context: str, complete: Complete, *, limits: SandboxLimits = SandboxLimits(),
                  image: str | None = None, run_id: str = "adhoc", docker: str = "docker", root: Path | None = None,
-                 max_subcalls: int = bridge.MAX_SUBCALLS):
+                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None):
         self.limits = limits
         self.image = image or image_tag()
         self.run_id = run_id
         self.docker = docker
+        # what the model is told after a timeout or a crash (spec §4, §12.2)
+        self.messages = messages or bridge.cell_messages(limits=dataclasses.replace(
+            bridge.READ_LIMITS, cell_timeout_s=int(limits.cell_timeout_s)))
         self.episode_id = secrets.token_hex(8)
         self.dir = _private_root(root or default_root()) / f"ep-{self.episode_id}"
         self.bridge = EpisodeBridge(str(self.dir / "bridge.sock"), complete, max_subcalls)
@@ -216,6 +222,7 @@ class Sandbox:
         self.timeouts = 0
         self.crashes = 0
         self.restarts = 0
+        self.start_retries = 0  # launches that didn't come up in time and were tried again
         self.landlock_abi: int | None = None
         self.python_version: str | None = None
         self._context = context
@@ -313,7 +320,7 @@ class Sandbox:
             self.timeouts += 1
             await self._kill()
             await self._restart()
-            return CellResult("", 0, bridge.CELL_TIMEOUT_ERROR, restarted=True, crash="timeout", **timing)
+            return CellResult("", 0, self.messages.timeout, restarted=True, crash="timeout", **timing)
         if reply is None or "repl_died" in reply:
             return await self._recover(reply, during_cell=True, timing=timing)
 
@@ -323,7 +330,7 @@ class Sandbox:
             self.crashes += 1
             await self._kill()
             await self._restart()
-            return CellResult("", 0, bridge.CELL_CRASH_ERROR.format(reason="it returned an unreadable result"),
+            return CellResult("", 0, self.messages.crash.format(reason="it returned an unreadable result"),
                               restarted=True, crash="unreadable result", **timing)
         result.compute_s, result.blocked_s, result.wall_s = timing["compute_s"], timing["blocked_s"], timing["wall_s"]
         return result
@@ -388,9 +395,9 @@ class Sandbox:
         self.crashes += 1
         await self._kill()
         await self._restart()
-        error = bridge.CELL_CRASH_ERROR.format(reason=reason)
+        error = self.messages.crash.format(reason=reason)
         if not during_cell:
-            error += " This cell was not run."
+            error += self.messages.not_run
         return CellResult("", 0, error, restarted=True, crash=reason, **(timing or {}))
 
     def _repl_death_reason(self, died) -> str:
@@ -445,23 +452,27 @@ class Sandbox:
     # ------------------------------------------------------------------ docker
 
     async def _launch(self) -> None:
-        name = f"rlm-ep-{self.episode_id}-{len(self._names)}"
-        self._names.append(name)
-        args = run_args(self.docker, name, self.image, self.dir, self.limits, self.run_id)
-        self._proc = await asyncio.create_subprocess_exec(
-            *args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, env=docker_cli_env(), limit=RESULT_LINE_LIMIT)
-        self._messages = asyncio.Queue()
-        self._pumps = [asyncio.create_task(self._pump_stdout(self._proc.stdout, self._messages)),
-                       asyncio.create_task(self._pump_stderr(self._proc.stderr))]
-        try:
-            ready = await asyncio.wait_for(self._messages.get(), self.limits.startup_timeout_s)
-        except asyncio.TimeoutError:
-            ready = None
-        if not ready or ready.get("ready") is not True:
+        for attempt in range(START_ATTEMPTS):  # a container that doesn't come up is tried again before it's infra
+            name = f"rlm-ep-{self.episode_id}-{len(self._names)}"
+            self._names.append(name)
+            args = self._run_args(name)
+            self._proc = await asyncio.create_subprocess_exec(
+                *args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE, env=docker_cli_env(), limit=RESULT_LINE_LIMIT)
+            self._messages = asyncio.Queue()
+            self._pumps = [asyncio.create_task(self._pump_stdout(self._proc.stdout, self._messages)),
+                           asyncio.create_task(self._pump_stderr(self._proc.stderr))]
+            try:
+                ready = await asyncio.wait_for(self._messages.get(), self.limits.startup_timeout_s)
+            except asyncio.TimeoutError:
+                ready = None
+            if ready and ready.get("ready") is True:
+                break
             await self._kill()
-            detail = " | ".join(list(self.log)[-5:]) or "no output"
-            raise InfraError(f"sandbox failed to start: {detail}")
+            if attempt + 1 == START_ATTEMPTS:
+                detail = " | ".join(list(self.log)[-5:]) or "no output"
+                raise InfraError(f"sandbox failed to start ({START_ATTEMPTS} attempts): {detail}")
+            self.start_retries += 1
         self.landlock_abi = int(ready.get("landlock") or 0)
         self.python_version = ready.get("python")
         if self.limits.require_landlock and self.landlock_abi < 1:
@@ -508,7 +519,12 @@ class Sandbox:
             else:
                 self.log.append(text[:500])
 
+    def _run_args(self, name: str) -> list[str]:
+        """The `docker run` command for this episode's next container. The edit sandbox overrides it."""
+        return run_args(self.docker, name, self.image, self.dir, self.limits, self.run_id)
+
     def _add_event(self, event: dict) -> None:
+        event["cell"] = self.cells  # the cell running when it arrived (the host's count, not the REPL's)
         if len(self.events) < MAX_EVENTS:
             self.events.append(event)
         else:

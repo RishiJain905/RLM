@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import bridge, client, controller, detectors, reward, tasks
+from . import bridge, client, controller, detectors, repl_tools, reward, tasks
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -42,14 +42,17 @@ TRAIN_ARGS = {"loss_fn": "cispo", "epsilon": 1.0, "epsilon_high": 4.0, "scale_re
 
 TICKET_MIX = {"tickets_all": 0.5, "tickets_customer": 0.5}  # the second seed's mix
 
-# Production's eval sets and data (plan step 7). The capability path is relative to the data root (rlm_rl/data.py).
-PRODUCTION_SELECTION = "selection-v1"
+# Production's eval sets and data (plan step 7, spec v2 §12.10). The capability path is relative to the data root
+# (rlm_rl/data.py).
+PRODUCTION_SELECTION = "selection-v2"
 CAPABILITY_SET = "data:derived/capability/capability-v1.jsonl"
 DATASET_MANIFEST = REPO / "manifests" / "dataset-manifest.json"
+EDIT_MANIFEST = "edit/manifest.json"  # the edit task data's manifest, on the data drive (scripts/build_edit_data.py)
 
-# Inference ceilings, $ (plan step 10a). Each is a hard stop: the run never starts a step or an eval it can't afford.
+# Inference ceilings, $ (plan step 10a, spec v2 §12.11). Each is a hard stop: the run never starts a step or an eval it
+# can't afford.
 SECOND_SEED_CEILINGS = {"train": 14.0, "eval": 3.0}  # ~$12 planned: ~$10 of steps and ~$1.6 of eval *(mine)*
-PRODUCTION_CEILINGS = {"train": 150.0, "eval": 25.0}  # the $25 reserve is never spent without Rishi (12a)
+PRODUCTION_CEILINGS = {"train": 157.0, "eval": 30.0}  # spec §12.11; the ~$10 reserve is never spent without Rishi (12a)
 
 TRAINING_GPU_USD_PER_STEP = 0.16  # the 20-step run's measured rate (research §7.1); an estimate for the dashboard
 
@@ -78,6 +81,7 @@ class RunConfig:
     kl_samples: int = 4  # rollouts re-scored under the base model each step (spec §5.3)
     first_step_estimate_usd: float = 1.0  # used by the budget check until a step has been measured
     eval_episode_estimate_usd: float = 0.03  # before any step has been measured (research §7.2: ~$0.016 at level 1)
+    prompt_version: str = bridge.PROMPT_VERSION  # spec §12.2: v2; the second seed replicates the 20-step run on v1
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -86,6 +90,10 @@ class RunConfig:
             raise ValueError("lr_rule must be 'fixed' or 'fallback'")
         if not self.run or any(c in self.run for c in "/\\. ") or self.run != self.run.strip():
             raise ValueError(f"bad run name {self.run!r}")
+        if self.prompt_version not in bridge.PROMPT_VERSIONS:
+            raise ValueError(f"unknown prompt version {self.prompt_version!r}")
+        if self.prompt_version == "v1" and any(bridge.is_edit(f) for f in self.mix):
+            raise ValueError("edit families need prompt v2 (spec §12.2)")
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -108,7 +116,8 @@ class RunConfig:
 def second_seed(run: str = "second-seed-v1") -> RunConfig:
     """Plan step 10: the 20-step GRPO run repeated on environment v2, plus the 100-episode held-out eval."""
     return RunConfig(run=run, kind="second_seed", learning_rate=LR_SECOND_SEED, lr_rule="fixed", frozen_controller=True,
-                     max_steps=20, final_eval="heldout-seed1", ceilings=dict(SECOND_SEED_CEILINGS))
+                     max_steps=20, final_eval="heldout-seed1", ceilings=dict(SECOND_SEED_CEILINGS),
+                     prompt_version="v1")  # decision E-g: it replicates the 20-step run, on prompt v1
 
 
 def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunConfig:
@@ -183,7 +192,16 @@ def manifest(cfg: RunConfig) -> dict:
         dataset = hashlib.sha256(DATASET_MANIFEST.read_bytes()).hexdigest()
     except OSError:
         dataset = None
+    edit = None
+    if any(bridge.is_edit(f) for f in cfg.mix):
+        try:
+            from . import data as rdata
+
+            edit = hashlib.sha256(rdata.path(EDIT_MANIFEST).read_bytes()).hexdigest()
+        except (OSError, FileNotFoundError):
+            edit = None
     data = {"generators": tasks.versions(cfg.mix), "mix": cfg.mix, "dataset_manifest_sha256": dataset,
+            "edit_manifest_sha256": edit,
             "evals": {"selection": cfg.selection, "final": cfg.final_eval, "capability": cfg.capability_set}}
     return {**data, "sha256": hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()}
 
@@ -197,8 +215,10 @@ def pinned(cfg: RunConfig, *, lr: dict, controller_state: dict, spend: dict, tem
         "base_model": cfg.base_model,
         "chat_template_sha256": chat_template_sha256(cfg.base_model),
         "template_fingerprint": template,
-        "bridge": {"api_version": bridge.API_VERSION, "prompt_version": bridge.PROMPT_VERSION,
-                   "prompt_hash": bridge.PROMPT_HASH},
+        "bridge": {"api_version": bridge.API_VERSION, "prompt_version": cfg.prompt_version,
+                   "prompt_hash": bridge.PROMPT_HASHES[cfg.prompt_version],
+                   "tools_version": repl_tools.TOOLS_VERSION},  # the edit REPL's coding tools (spec §12.1)
+        "edit_limits": bridge.EDIT_LIMITS.as_dict(),
         "limits": {"max_turns": bridge.MAX_TURNS, "max_subcalls": bridge.MAX_SUBCALLS,
                    "root_max_tokens": bridge.ROOT_MAX_TOKENS, "output_max_chars": bridge.OUTPUT_MAX_CHARS,
                    "traceback_lines": bridge.TRACEBACK_LINES, "cell_timeout_s": bridge.CELL_TIMEOUT_S,

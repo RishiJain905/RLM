@@ -55,7 +55,8 @@ class Score:
 def settings() -> dict:
     """The pinned reward constants, for the run's config.json (spec §8)."""
     return {"exact_reward": EXACT_REWARD, "near_miss_max": NEAR_MISS_MAX, "near_miss_slope": NEAR_MISS_SLOPE,
-            "decimal_tolerance": DECIMAL_TOLERANCE, "answer_types": list(ANSWER_TYPES)}
+            "decimal_tolerance": DECIMAL_TOLERANCE, "answer_types": list(ANSWER_TYPES),
+            "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec §12.6, decision E-c)"}
 
 
 # ----------------------------------------------------------------------------- parsing
@@ -184,8 +185,35 @@ def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
 
 def score(task: Any, ep: Any) -> Score:
     """The scorer run_episode uses: spec §3 steps 1-3 for a finished episode. Hack zeroing comes after."""
+    if task.grading.get("type") == "edit":
+        return score_edit(task, ep)
     answer = ep.answer if ep.submitted and ep.answer_valid else None
     return score_answer(answer, task.answer, task.grading)
+
+
+def score_edit(task: Any, ep: Any) -> Score:
+    """An edit episode's reward (spec §12.6), before the detectors:
+    1. no submit, an empty diff, or a diff that doesn't apply: 0
+    3. every fail-to-pass and pass-to-pass test passed: 1 (`resolved`, the edit families' headline)
+    4. anything else: 0 (binary, decision E-c)
+    Step 2, a detector, comes after (run_episode); a grader failure never reaches here (infra_error).
+    The components carry spec §12.9's per-episode numbers.
+    """
+    grade = ep.grade or {}
+    empty = not (ep.diff or "").strip()
+    graded = bool(grade.get("graded"))
+    resolved = bool(ep.submitted and not empty and graded and grade.get("applied") and not grade.get("empty")
+                    and grade.get("resolved"))
+    f2p_total = grade.get("f2p_total") or 0
+    components = {
+        "resolved": float(resolved), "exact": float(resolved), "submitted": float(bool(ep.submitted)),
+        "empty_diff": float(empty), "applied": float(bool(grade.get("applied", True))),
+        "f2p_pass": round((grade.get("f2p_passed") or 0) / f2p_total, 4) if graded and f2p_total else (0.0 if graded else None),
+        "p2p_broken": float((grade.get("p2p_failed") or 0) > 0) if graded else None,
+        "build_failed": float(bool(grade.get("build_failed"))),
+        **(getattr(ep, "edit_stats", None) or {}),
+    }
+    return Score(EXACT_REWARD if resolved else 0.0, resolved, components)
 
 
 def blind_score(task: Any) -> Score:

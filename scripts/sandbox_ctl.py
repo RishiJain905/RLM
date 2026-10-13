@@ -3,7 +3,7 @@
 Run inside WSL2 (Ubuntu) from the repo root, with Docker Desktop's WSL integration on and the
 Linux virtual environment from the README:
 
-    .venv-linux/bin/python scripts/sandbox_ctl.py build    # build the sandbox image from the pinned base image
+    .venv-linux/bin/python scripts/sandbox_ctl.py build    # build the sandbox images from the pinned base image
     .venv-linux/bin/python scripts/sandbox_ctl.py check    # run the regression tests in tests/
     .venv-linux/bin/python scripts/sandbox_ctl.py clean    # remove containers and episode directories a crashed run left behind
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rlm_rl import bridge, sandbox  # noqa: E402
+from rlm_rl import bridge, editbox, repl_tools, sandbox  # noqa: E402
 
 
 def main() -> int:
@@ -27,8 +27,11 @@ def main() -> int:
 
     if args.command == "build":
         tag = sandbox.build_image(force=args.force)
-        print(f"image {tag} (base {sandbox.BASE_IMAGE}), bridge API {bridge.API_VERSION}, "
-              f"prompt {bridge.PROMPT_VERSION} {bridge.PROMPT_HASH[:12]}")
+        synth = editbox.build_synth_image(force=args.force)  # edit_synth's image; its build fetches git
+        bundle = editbox.build_python_bundle(force=args.force)  # edit_real's standalone Python
+        print(f"image {tag}, edit_synth image {synth} (base {sandbox.BASE_IMAGE}), Python bundle {bundle.name}, "
+              f"bridge API {bridge.API_VERSION}, prompt {bridge.PROMPT_VERSION} {bridge.PROMPT_HASH[:12]}, "
+              f"tools {repl_tools.TOOLS_VERSION}")
         return 0
     if args.command == "clean":
         print(f"removed {sandbox.cleanup_stale()} containers")

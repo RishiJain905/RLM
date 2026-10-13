@@ -137,6 +137,8 @@ class BlindGuesserTest(unittest.TestCase):
 
     def test_every_family_and_level(self):
         for family in sorted(tasks.GENERATORS):
+            if family.startswith("edit_"):
+                continue  # graded by tests, not an answer: their blind check is in test_editsynth.py and test_grader.py
             if tasks.training_sources(family) and not data.available() or                     family.startswith("repo_loc") and not data.derived("lca", "index-train.jsonl.gz").exists():
                 continue  # needs the step 7 data root (rlm_rl/data.py)
             n = self.N if family.startswith("tickets") else self.N_DATA

@@ -187,7 +187,8 @@ class EscapeAndTimeoutTest(unittest.TestCase):
         infra = make_episode(["submit(1)"], answer=1)
         infra.hacks, infra.infra_error = detectors.check(None, infra), "x"
         self.assertEqual(detectors.counts(eps + [infra]), {"early_submit": 1, "copied_answer": 0,
-                                                            "escape_attempt": 0, "timeout_loop": 0})
+                                                            "escape_attempt": 0, "timeout_loop": 0, "test_tamper": 0,
+                                                            "grader_tamper": 0, "test_aware": 0, "network_try": 0})
 
 
 # ----------------------------------------------------------------------------- through the episode loop
@@ -324,7 +325,7 @@ class DockerDetectorTest(ZeroedBeforeTheGroupMeanTest):
         self.script(loop, loop, loop, "submit(len(context.splitlines()))")
         ep = await self.real(sandbox.SandboxLimits(cell_timeout_s=1))
         self.assertEqual((ep.timeouts, [h["rule"] for h in ep.hacks], ep.reward), (3, ["timeout_loop"], 0.0))
-        self.assertIn(bridge.CELL_TIMEOUT_ERROR, ep.messages[3]["content"])  # the model was told
+        self.assertIn("The cell timed out after 1 seconds of compute.", ep.messages[3]["content"])  # told, with the limit
 
     # These two drive FakeSandbox's markers, which a real container doesn't have.
     test_escape_and_timeouts_through_the_loop = None

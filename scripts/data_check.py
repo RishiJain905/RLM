@@ -152,8 +152,9 @@ def licence_checks() -> dict:
 
 
 def code_only_share(rng: random.Random, n: int) -> dict:
-    """The share of training tasks code alone can solve, drawn by the production mix at each level."""
-    mix = tasks.production_mix()
+    """The share of read training tasks code alone can solve, drawn by the production mix at each level. Edit tasks
+    (spec §12) have no answer to compute, so they are left out."""
+    mix = {f: w for f, w in tasks.production_mix().items() if not f.startswith("edit_")}
     out = {}
     for level in range(1, 6):
         draws = tasks.allocate(n, mix)

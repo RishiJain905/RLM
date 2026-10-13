@@ -114,7 +114,8 @@ class RegistryTest(unittest.TestCase):
 
     def test_allocate_step_carries_the_rounding_across_steps(self):
         mix = tasks.production_mix()
-        self.assertEqual(tasks.allocate(8, mix), {"aggregation": 4, "callgraph": 2, "needle": 1, "repo_loc": 1})
+        self.assertEqual(tasks.allocate(8, mix), {"aggregation": 2, "callgraph": 1, "needle": 1, "repo_loc": 1,
+                                                  "edit_real": 2, "edit_synth": 1})
         total, done = dict.fromkeys(mix, 0), 0
         for step in range(1, 201):
             got = tasks.allocate_step(8, mix, step)
@@ -124,7 +125,7 @@ class RegistryTest(unittest.TestCase):
             for family, count in got.items():
                 total[family] += count
                 self.assertLess(abs(total[family] - done * mix[family]), 1, (step, family))  # never a task off its share
-            if step % 5 == 0:  # 40 tasks split exactly 18/8/8/6
+            if step % 5 == 0:  # 40 tasks split exactly 10/4/4/6/10/6 (spec §12.7)
                 self.assertEqual({f: round(done * mix[f]) for f in mix}, total, step)
         self.assertEqual(tasks.allocate_step(8, {"tickets_all": 1, "tickets_customer": 1}, 7),
                          {"tickets_all": 4, "tickets_customer": 4})
@@ -135,10 +136,10 @@ class RegistryTest(unittest.TestCase):
     def test_draw_with_a_step_uses_the_carried_split(self):
         mix = tasks.production_mix()
         seen = []
-        with mock.patch.object(tasks, "make_task", lambda family, level: seen.append(family) or family):
-            tasks.draw(8, mix, dict.fromkeys(mix, 1), step=2)  # production tasks need the data root; counts don't
-        self.assertEqual({f: seen.count(f) for f in mix}, tasks.allocate_step(8, mix, 2))
-        self.assertNotEqual(tasks.allocate_step(8, mix, 2), tasks.allocate(8, mix))
+        step = next(s for s in range(1, 6) if tasks.allocate_step(8, mix, s) != tasks.allocate(8, mix))
+        with mock.patch.object(tasks, "make_task", lambda family, level, **kw: seen.append(family) or mock.Mock(task_id=f"{family}-{len(seen)}")):
+            tasks.draw(8, mix, dict.fromkeys(mix, 1), step=step)  # production tasks need the data root; counts don't
+        self.assertEqual({f: seen.count(f) for f in mix}, tasks.allocate_step(8, mix, step))
 
     def test_draw_uses_each_familys_level_and_fresh_seeds(self):
         drawn = tasks.draw(8, {"tickets_all": 1, "tickets_customer": 1}, {"tickets_all": 2, "tickets_customer": 1})

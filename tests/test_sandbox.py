@@ -292,7 +292,8 @@ class FailureTest(SandboxCase):
         results, box = await self.cells("x = 1", "while True: pass", "print(x)", "print(len(context))",
                                         limits=SandboxLimits(cell_timeout_s=2))
         self.assertEqual(results[1].crash, "timeout")
-        self.assertEqual(results[1].error, bridge.CELL_TIMEOUT_ERROR)
+        self.assertEqual(results[1].error, box.messages.timeout)
+        self.assertIn("timed out after 2 seconds of compute", results[1].error)  # prompt v2 quotes the limit (spec §12.2)
         self.assertIn("NameError", results[2].error)
         self.assertEqual(results[3].stdout, f"{len(CONTEXT)}\n")
         self.assertEqual((box.timeouts, box.restarts), (1, 1))

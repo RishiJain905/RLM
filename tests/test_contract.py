@@ -5,16 +5,19 @@ protocol constants are checked here. Every module that builds a root prompt must
 rlm_rl.bridge; PROMPT_CONSUMERS lists them, and the test diffs each one's system prompt.
 """
 
+import ast
 import difflib
 import importlib
 import importlib.util
+import inspect
 import math
+import re
 import unittest
 from pathlib import Path
 
 import openai
 
-from rlm_rl import bridge, repl_worker, sandbox
+from rlm_rl import bridge, repl_tools, repl_worker, sandbox
 from tests.fake_model import AsyncCase
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,12 +58,14 @@ class WorkerMatchesBridgeTest(unittest.TestCase):
         self.assertEqual(repl_worker.normalize_answer(math.nan), "nan")
 
     def test_worker_imports_nothing_from_the_project(self):
+        # repl_tools is the one exception: it is mounted next to the worker, and is standard library only itself
+        # (tests/test_repl_tools.py checks).
         source = (ROOT / "rlm_rl" / "repl_worker.py").read_text(encoding="utf-8")
         for line in source.splitlines():
             stripped = line.strip()
             if stripped.startswith(("import ", "from ")):
                 module = stripped.split()[1].split(".")[0]
-                self.assertIn(module, __import__("sys").stdlib_module_names, line)
+                self.assertIn(module, __import__("sys").stdlib_module_names | {"repl_tools"}, line)
 
 
 class OneSystemPromptTest(unittest.TestCase):
@@ -92,6 +97,37 @@ class OneSystemPromptTest(unittest.TestCase):
                 self.assertEqual(getattr(module, "SYSTEM_PROMPT", None), bridge.SYSTEM_PROMPT)
             checked.append(module_name)
         print(f"\n  system prompt diffed for: {', '.join(checked) or 'no consumers yet'}")
+
+
+class ToolsInPromptTest(unittest.TestCase):
+    """Spec §12.1: the coding section of prompt v2 names each tool in repl_tools with its real parameters,
+    defaults and return type, and no other."""
+
+    def _listed(self) -> dict:
+        section = bridge.SYSTEM_PROMPT.split("For coding tasks", 1)[1]
+        return {m.group(1): (m.group(2), m.group(3)) for m in
+                re.finditer(r"^- `(\w+)\(([^)]*)\)(?: -> ([^`]+))?`", section, re.M)}
+
+    def test_each_tool_is_listed_with_its_signature(self):
+        listed = self._listed()
+        self.assertEqual(tuple(listed), repl_tools.TOOL_NAMES)
+        for name, fn in repl_tools.namespace().items():
+            params, returns = listed[name]
+            sig = inspect.signature(fn)
+            shown = [p.strip() for p in params.split(",") if p.strip()]
+            self.assertEqual([p.split("=")[0] for p in shown], list(sig.parameters), name)
+            for p in shown:
+                key, _, default = p.partition("=")
+                expected = sig.parameters[key].default
+                if default:
+                    self.assertEqual(ast.literal_eval(default), expected, f"{name}({key})")
+                else:
+                    self.assertIs(expected, inspect.Parameter.empty, f"{name}({key}) has a default the prompt omits")
+            if returns:
+                self.assertEqual(returns, inspect.formatannotation(sig.return_annotation), name)
+
+    def test_v1_has_no_tools(self):
+        self.assertNotIn("read_file", bridge.system_prompt("v1"))
 
 
 def prompt_diff(sent: str, pinned: str, name: str) -> str:

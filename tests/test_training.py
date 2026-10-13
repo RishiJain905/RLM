@@ -105,7 +105,8 @@ class SecondSeedDryRunTest(LoopCase):
         for c in (0, 5, 10, 15, 20):
             self.assertTrue((run_dir / "checkpoints" / f"step{c:04d}.json").exists(), c)
         pinned = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
-        self.assertEqual(pinned["bridge"]["prompt_hash"], bridge.PROMPT_HASH)
+        self.assertEqual(pinned["bridge"]["prompt_version"], "v1")  # the second seed replicates the 20-step run (E-g)
+        self.assertEqual(pinned["bridge"]["prompt_hash"], bridge.PROMPT_HASHES["v1"])
         self.assertEqual(pinned["train_call"], {"learning_rate": 1e-5, **TRAIN_CALL})
         for key in ("art_version", "base_model", "chat_template_sha256", "template_fingerprint", "limits", "reward",
                     "detectors", "controller", "generators", "manifest", "limiter", "git", "spend"):
@@ -159,10 +160,12 @@ class ProductionStopRuleTest(LoopCase):
         self.assertIn(30, st["kept"])
 
 
-@unittest.skipUnless(data.available() and data.derived("lca", "index-train.jsonl.gz").exists(),
-                     "needs the step 7 data (rlm_rl/data.py)")
+@unittest.skipUnless(data.available() and data.derived("lca", "index-train.jsonl.gz").exists()
+                     and data.path("edit", "index.json").exists() and sys.platform == "linux",
+                     "needs the step 7 data and the edit task index (scripts/build_edit_data.py), on Linux")
 class ProductionMixTest(LoopCase):
-    """Plan step 7: production on its task families (decisions 7a and 7c), its selection set and its manifest."""
+    """Production on its task families (spec v2 §12.7), its selection set (§12.10) and its manifest. Edit episodes run in
+    the in-process edit sandbox with the local grader (tests/fakes.py)."""
 
     async def test_production_runs_on_its_families(self):
         cfg = config.production("mix7a", 2e-5)
@@ -170,7 +173,7 @@ class ProductionMixTest(LoopCase):
         self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
         drawn = {family for row in st["steps"] for family in row["families"] if row["families"][family]["episodes"]}
         self.assertTrue(drawn and drawn <= set(cfg.mix), drawn)
-        selection = [e for e in st["evals"] if e["name"] == "selection-v1"]
+        selection = [e for e in st["evals"] if e["name"] == "selection-v2"]
         self.assertEqual([e["checkpoint"] for e in selection], [0])
         self.assertEqual(selection[0]["summary"]["n"], 64)
         pinned = json.loads((self.results / "mix7a" / "config.json").read_text())

@@ -39,6 +39,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* panels and badges set their own display, which would beat the attribute */
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.45; }
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--c1); outline-offset: 2px; }
@@ -71,6 +72,9 @@ h1 { margin: 0; font-family: var(--font-display); font-stretch: 100%; font-weigh
 /* panels */
 main { display: grid; gap: 18px; padding-block: 18px 40px; }
 section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 14px; min-width: 0; scroll-margin-top: 150px; }
+section.panel > * { min-width: 0; } /* a wide table scrolls inside its .scroll instead of widening the panel */
+#eval-table { display: grid; gap: 8px; }
+#eval-table .scroll + .c-title { margin-top: 10px; }
 .phead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .phead h2 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); letter-spacing: 0; text-wrap: balance; }
 .phead p { margin: 4px 0 0; color: var(--ink-2); font-size: var(--step--1); max-width: 78ch; }
@@ -87,6 +91,7 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .tile .lab { font-size: var(--step--1); color: var(--ink-2); font-weight: 600; }
 .tile .val { font-size: var(--step-3); font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
 .tile .val small { font-size: var(--step-0); font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.tile .val.dense { font-size: var(--step-2); line-height: 1.6; }
 .tile .ctx { font-size: var(--step--1); color: var(--ink-2); }
 .tile svg { width: 100%; height: 30px; display: block; margin-top: 4px; }
 
@@ -196,7 +201,7 @@ footer p { margin: 0; max-width: 92ch; }
     <div class="readout" id="readout"></div>
     <nav class="nav" aria-label="Sections">
       <a href="#overview">Overview</a><a href="#cost">Cost</a><a href="#pass">Pass rates</a><a href="#policy">Policy health</a>
-      <a href="#behaviour">RLM behaviour</a><a href="#reward">Reward and cheating</a><a href="#infra">Infra and timing</a>
+      <a href="#behaviour">RLM behaviour</a><a href="#editing" id="nav-editing" hidden>Editing</a><a href="#reward">Reward and cheating</a><a href="#infra">Infra and timing</a>
       <a href="#evals">Evals</a><a href="#rules">Stop rules</a><a href="#notices">Notices</a><a href="#samples">Transcripts</a><a href="#data">Data</a>
     </nav>
   </div>
@@ -217,7 +222,7 @@ footer p { margin: 0; max-width: 92ch; }
     </section>
 
     <section class="panel" id="pass" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p>Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p id="pass-sub">Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="pass-charts"></div>
       <div class="grid wide" id="pass-extra"></div>
     </section>
@@ -228,18 +233,24 @@ footer p { margin: 0; max-width: 92ch; }
     </section>
 
     <section class="panel" id="behaviour" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">rlm/shape</div><h2>RLM behaviour</h2><p>How the root model uses the REPL: sub-calls against its budget of 30, turns against the cap of 12, and how long its transcripts get.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/shape</div><h2>RLM behaviour</h2><p>How the root model uses the REPL, over every episode: sub-calls against the budget of 30, turns against the cap (12 for read episodes, 20 for edit episodes), and how long its transcripts get. Edit episodes also get 4,096 output tokens a turn and 300 s cells, where read episodes keep 3,072 and 120 s.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="behaviour-charts"></div>
     </section>
 
+    <section class="panel" id="editing" data-comment-target hidden>
+      <div class="phead"><div><div class="eyebrow">rlm/edit · spec §12.9</div><h2>Editing</h2><p>Edit episodes (edit real and edit synth) change a repository, and hidden tests grade the diff: the reward is 1 only when every fail-to-pass and pass-to-pass test passes. They run with 20 turns, 30 sub-calls, 4,096 tokens a turn and 300 s cells. None of the behaviour below is rewarded; it shows whether the gains come the RLM way.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="edit-charts"></div>
+      <div id="edit-langs"></div>
+    </section>
+
     <section class="panel" id="reward" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">rlm/reward</div><h2>Reward and cheating</h2><p>Exact accuracy is the headline. A firing hack detector zeroes the rollout's reward before the group mean, so a hack becomes a negative example.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/reward</div><h2>Reward and cheating</h2><p>Exact accuracy is the read families' headline, and resolved (every hidden test passing) the edit families'. A firing hack detector zeroes the rollout's reward before the group mean, so a hack becomes a negative example. Network try is the one rule that is only logged.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="reward-charts"></div>
       <div id="audits"></div>
     </section>
 
     <section class="panel" id="infra" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">rlm/infra · rlm/time</div><h2>Infra and timing</h2><p>Infra episodes never reach training. Above 1% the run pauses for Rishi.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/infra · rlm/time</div><h2>Infra and timing</h2><p>Infra episodes never reach training; for edit episodes that includes a grader that couldn't start. Above 1% the run pauses for Rishi.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="infra-charts"></div>
     </section>
 
@@ -261,20 +272,20 @@ footer p { margin: 0; max-width: 92ch; }
     </section>
 
     <section class="panel" id="samples" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">Sampled transcripts</div><h2>Training rollouts</h2><p>A win and a failure from each step, plus any rollout a detector flagged. Samples from the newest steps and from every eval checkpoint are kept. Text is cut short; eval transcripts never appear here.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">Sampled transcripts</div><h2>Training rollouts</h2><p>A win and a failure from each step, plus any rollout a detector flagged. Samples from the newest steps and from every eval checkpoint are kept. Text is cut short; eval transcripts never appear here, and neither does an edit task's gold patch or hidden tests.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="chips" id="sample-filter" role="group" aria-label="Filter transcripts"></div>
       <div class="samples" id="sample-list"></div>
     </section>
 
     <section class="panel" id="data" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">Table view</div><h2>The latest steps</h2><p>The numbers behind the charts. Copy every step as CSV to look at them yourself.</p></div><div class="chips"><button class="btn ghost" type="button" id="copy-csv">Copy all steps as CSV</button></div></div>
+      <div class="phead"><div><div class="eyebrow">Table view</div><h2>The latest steps</h2><p>The numbers behind the charts. Copy every step as CSV to look at them yourself; the edit metrics and their per-language counts are the edit.* columns.</p></div><div class="chips"><button class="btn ghost" type="button" id="copy-csv">Copy all steps as CSV</button></div></div>
       <div class="scroll" id="step-table"></div>
       <textarea class="csv" id="csv-box" readonly hidden aria-label="Steps as CSV"></textarea>
     </section>
   </main>
   <footer>
     <p id="foot-src"></p>
-    <p>Never on this page: keys, task seeds, eval seed lists, eval tasks or benchmark items, and checkpoint names. Every build is scanned for them before it is published.</p>
+    <p>Never on this page: keys, task seeds, eval seed lists, eval tasks or benchmark items, checkpoint names, and for edit tasks the gold patch, hidden test names, eval task ids and the selection set's repositories. Every build is scanned for them before it is published.</p>
     <p>Friends watching: flag anything that looks off with a section's Flag button or comment mode. Rishi decides whether to stop, fix or resume the run.</p>
   </footer>
 </div>
@@ -310,6 +321,7 @@ footer p { margin: 0; max-width: 92ch; }
     int: function (v) { return isNum(v) ? Math.round(v).toLocaleString("en-US") : "–"; },
     usd: function (v) { return isNum(v) ? "$" + (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) : "–"; },
     usd3: function (v) { return isNum(v) ? "$" + v.toFixed(3) : "–"; },
+    usd0: function (v) { return isNum(v) ? "$" + Math.round(v) : "–"; },
     secs: function (v) { if (!isNum(v)) return "–"; if (v < 90) return v.toFixed(v < 10 ? 1 : 0) + " s"; if (v < 5400) return (v / 60).toFixed(1) + " min"; return (v / 3600).toFixed(1) + " h"; },
     mins: function (v) { return isNum(v) ? (v / 60).toFixed(v < 600 ? 1 : 0) : "–"; },
     lr: function (v) { if (!isNum(v)) return "–"; if (v === 0) return "0"; return v.toExponential(1).replace(".0e", "e"); },
@@ -321,13 +333,18 @@ footer p { margin: 0; max-width: 92ch; }
 
   var run = D.run, cfg = run.config || {}, steps = D.steps || [], evals = D.evals || [];
   var last = steps.length ? steps[steps.length - 1] : null;
-  var FAMILY_SLOT = { aggregation: 1, callgraph: 2, needle: 3, repo_loc: 4, repo_loc_select: 4, tickets_all: 6, tickets_customer: 7 };
+  var FAMILY_SLOT = { aggregation: 1, callgraph: 2, needle: 3, repo_loc: 4, repo_loc_select: 4, edit_real: 5, edit_synth: 7, edit_synth_heldout: 7, tickets_all: 6, tickets_customer: 7 };
   var fams = Object.keys(cfg.mix || {});
   steps.forEach(function (r) { Object.keys(r.families || {}).forEach(function (f) { if (fams.indexOf(f) < 0) fams.push(f); }); });
   var spare = [5, 8, 7, 6];
   fams.forEach(function (f) { if (!FAMILY_SLOT[f]) FAMILY_SLOT[f] = spare.shift() || 8; });
   function famColor(f) { return "var(--c" + (FAMILY_SLOT[f] || 8) + ")"; }
   function famLabel(f) { return f.replace(/_/g, " "); }
+  // the edit block (spec §12.9): absent on old runs and on steps with no edit episode
+  function ed(r, key) { var e = r && r.edit; return e && e.episodes !== 0 && isNum(e[key]) ? e[key] : null; }
+  var editSteps = steps.filter(function (r) { return r.edit && r.edit.episodes !== 0; });
+  var hasEdit = editSteps.length > 0;
+  var editFams = fams.filter(function (f) { return /^edit_/.test(f); });
 
   // shared step axis: 0 .. the last step seen (at least 10)
   var lastStep = 0;
@@ -623,6 +640,13 @@ footer p { margin: 0; max-width: 92ch; }
   var pass10 = mean(steps.slice(-10).map(function (r) { return get(r, ["pass", "rate"]); }));
   tile("Training pass rate, last step", last ? F.pct(get(last, ["pass", "rate"])) : "–", null,
        "Mean over the last 10 steps " + F.pct(pass10) + (last ? " · trainable groups " + get(last, ["pass", "trainable_groups"]) + " of " + get(last, ["pass", "groups"]) : ""), passPts.slice(-40), "var(--c1)");
+  if (hasEdit) {
+    var lastEd = editSteps[editSteps.length - 1], n10 = 0, c10 = 0;
+    editSteps.slice(-10).forEach(function (r) { var n = ed(r, "episodes"), v = ed(r, "resolved"); if (isNum(n) && isNum(v)) { n10 += n; c10 += v * n; } });
+    tile("Edit tasks resolved, last step", F.pct(ed(lastEd, "resolved")), null,
+         "Over the last 10 steps " + (n10 ? F.pct(c10 / n10) : "–") + " · " + F.int(ed(lastEd, "episodes")) + " edit episodes at step " + lastEd.step,
+         editSteps.filter(function (r) { return isNum(ed(r, "resolved")); }).map(function (r) { return [r.step, r.edit.resolved]; }).slice(-40), "var(--c1)");
+  }
   var selName = cfg.selection || cfg.final_eval;
   var selPts = evals.filter(function (e) { return e.name === selName && isNum(get(e, ["summary", "accuracy"])); });
   var base0 = selPts.filter(function (e) { return e.checkpoint === 0; })[0];
@@ -638,8 +662,16 @@ footer p { margin: 0; max-width: 92ch; }
   tile("Stop rules", fired.length ? fired.length + " fired" : watch.length ? watch.length + " to watch" : rnames.length ? "all clear" : "–", null,
        fired.length ? fired.join(", ") : watch.length ? watch.join(", ") : rnames.length ? rnames.length + " rules checked after step " + (last ? last.step : 0) : "Checked once the first step is done.");
   var ctl = (D.controller || {}).families || {}, levelTxt = Object.keys(ctl).map(function (f) { return famLabel(f) + " L" + ctl[f].level + "/" + ctl[f].max_level; });
-  tile("Difficulty levels", Object.keys(ctl).length ? Object.keys(ctl).map(function (f) { return ctl[f].level; }).join(" · ") : "–", null, levelTxt.join(", ") || "Every family starts at level 1.");
-  $("overview-sub").textContent = (run.kind === "second_seed" ? "The 20-step GRPO replication on the ticket tasks, run on environment v2. Its held-out eval is compared with the first seed's 0.70." : "GRPO at 8 tasks × 4 rollouts a step on aggregation (45%), the code generators (40%) and repo localization (15%), until a stop rule fires or the spend ceiling is reached.") + (D.dry_run ? " This is a dry run of the training loop with a fake model, for testing the page." : "");
+  var lvTile = tile("Difficulty levels", Object.keys(ctl).length ? Object.keys(ctl).map(function (f) { return ctl[f].level; }).join(" · ") : "–", null, levelTxt.join(", ") || "Every family starts at level 1.");
+  if (Object.keys(ctl).length > 4) lvTile.querySelector(".val").className = "val dense";  // six families with the edit ones
+  function mixText() {
+    var mix = cfg.mix || {}, names = Object.keys(mix).filter(function (f) { return isNum(mix[f]) && mix[f] > 0; });
+    if (!names.length) return "aggregation 25%, callgraph 10%, needle 10%, repo loc 15%, edit real 25% and edit synth 15%";
+    var parts = names.map(function (f) { return famLabel(f) + " " + Math.round(mix[f] * 100) + "%"; });
+    return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+  }
+  var mixHasEdit = Object.keys(cfg.mix || {}).some(function (f) { return /^edit_/.test(f); });
+  $("overview-sub").textContent = (run.kind === "second_seed" ? "The 20-step GRPO replication on the ticket tasks, run on environment v2. Its held-out eval is compared with the first seed's 0.70." : "GRPO at " + (cfg.tasks_per_step || 8) + " tasks × " + (cfg.rollouts || 4) + " rollouts a step on " + mixText() + ", until a stop rule fires or the spend ceiling is reached." + (mixHasEdit || hasEdit ? " Edit episodes are graded by hidden tests and run with 20 turns instead of 12." : "")) + (D.dry_run ? " This is a dry run of the training loop with a fake model, for testing the page." : "");
 
   // ------------------------------------------------------------------ cost
   var meters = $("meters");
@@ -659,9 +691,12 @@ footer p { margin: 0; max-width: 92ch; }
   meter("Evals", sp.eval_usd || 0, ceil.eval, evals.length ? evals.length + " evals so far" + (mainEvals.length ? ", the latest " + mainEvals[mainEvals.length - 1].name + " " + F.usd3(mainEvals[mainEvals.length - 1].cost_usd) : "") : "No eval yet.");
   var pot = D.pot || {};
   var potUsed = (pot.inference_usd || 0) - (pot.inference_left_usd || 0) + (sp.total_usd || 0);
+  // spec §12.11: a ceiling above its split can only be paid from the reserve
+  var overSplit = (isNum(ceil.train) && isNum(pot.production_usd) && ceil.train > pot.production_usd) || (isNum(ceil.eval) && isNum(pot.evals_usd) && ceil.eval > pot.evals_usd);
   meter("W&B inference pot used (estimate)", potUsed, pot.inference_usd,
         "About " + F.usd(pot.inference_left_usd) + " was left on " + pot.as_of + ", before this run, so about " + F.usd(Math.max(0, (pot.inference_left_usd || 0) - (sp.total_usd || 0))) + " is left now. " +
-        (isNum(ceil.train) && ceil.train > 150 ? "The train ceiling is above $150, so the $" + pot.reserve_usd + " reserve is in use." : "The $" + (pot.reserve_usd || 25) + " reserve is untouched; spending it is Rishi's call."));
+        "It is split: second seed " + F.usd0(pot.second_seed_usd) + ", baselines " + F.usd0(pot.baselines_usd) + ", production ceiling " + F.usd0(pot.production_usd) + ", evals " + F.usd0(pot.evals_usd) + ", reserve " + F.usd0(pot.reserve_usd) + ". " +
+        (overSplit ? "This run's ceilings are above their split, so the " + F.usd0(pot.reserve_usd) + " reserve is in use." : "The " + F.usd0(pot.reserve_usd) + " reserve is untouched; spending it is Rishi's call."));
   meter("Training GPU pot used (estimate)", (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0), pot.gpu_usd, "This run: " + F.usd(sp.training_gpu_usd_est || 0) + " at ~$0.16 a step. A separate pot, and not a constraint.");
   var cc = $("cost-charts");
   chart(cc, { title: "Cost per step", kind: "bar", fmt: F.usd3, series: [series("rollouts and sub-calls", "var(--c1)", function (r) { return isNum(get(r, ["cost", "step_usd"])) ? r.cost.step_usd - (get(r, ["cost", "kl_usd"]) || 0) : null; }), series("KL re-score", "var(--c2)", function (r) { return get(r, ["cost", "kl_usd"]); })], stacked: true, headline: last ? F.usd3(get(last, ["cost", "step_usd"])) : null });
@@ -681,6 +716,7 @@ footer p { margin: 0; max-width: 92ch; }
                        series("all 1", "var(--c3)", function (r) { return get(r, ["pass", "all_one_groups"]); }), series("other equal", "var(--c4)", function (r) { return get(r, ["pass", "other_equal_groups"]); }),
                        series("too small", "var(--c5)", function (r) { return get(r, ["pass", "small_groups"]); })],
               headline: last ? get(last, ["pass", "trainable_groups"]) + " trainable" : null, note: "All-equal groups give GRPO no signal and are dropped, not refilled." });
+  if (hasEdit || mixHasEdit) $("pass-sub").textContent += " An edit task whose group came back all 0 twice, or all 1 once, is retired and not drawn again.";
   var pe = $("pass-extra");
   // histogram of the last 10 steps
   (function () {
@@ -755,23 +791,105 @@ footer p { margin: 0; max-width: 92ch; }
   var bh = $("behaviour-charts");
   chart(bh, { title: "Sub-calls per episode", fmt: F.num, series: [series("sub-calls", "var(--c1)", function (r) { return get(r, ["shape", "subcalls"]); }, { area: true })], refs: [{ y: 30, label: "budget 30" }], yMaxAtLeast: 5, note: "Watch for sub-calls climbing toward 30 without accuracy following." });
   chart(bh, { title: "Budget-hit rate", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes that used all 30", "var(--c1)", function (r) { return get(r, ["shape", "budget_hit"]); })] });
-  chart(bh, { title: "Root turns per episode", fmt: F.num, series: [series("turns", "var(--c1)", function (r) { return get(r, ["shape", "turns"]); }, { area: true })], refs: [{ y: 12, label: "cap 12" }], yMaxAtLeast: 4 });
+  chart(bh, { title: "Root turns per episode", fmt: F.num, series: [series("turns", "var(--c1)", function (r) { return get(r, ["shape", "turns"]); }, { area: true })], refs: hasEdit ? [{ y: 12, label: "read cap 12" }, { y: 20, label: "edit cap 20" }] : [{ y: 12, label: "cap 12" }], yMaxAtLeast: 4, note: hasEdit ? "A mean over read and edit episodes, so it rises with the edit share." : null });
   chart(bh, { title: "First-turn submits", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("first-turn submit", "var(--c1)", function (r) { return get(r, ["shape", "first_turn_submit"]); })] });
-  chart(bh, { title: "Trouble per episode", fmt: F.num, endLabels: true, yMaxAtLeast: 1, series: [series("REPL errors", "var(--c1)", function (r) { return get(r, ["shape", "repl_errors"]); }), series("cell timeouts", "var(--c2)", function (r) { return get(r, ["shape", "timeouts"]); }), series("turns without code", "var(--c3)", function (r) { return get(r, ["shape", "no_code_turns"]); }), series("outputs cut at 2,000 chars", "var(--c4)", function (r) { return get(r, ["shape", "output_truncations"]); })] });
+  chart(bh, { title: "Trouble per episode", fmt: F.num, endLabels: true, yMaxAtLeast: 1, series: [series("REPL errors", "var(--c1)", function (r) { return get(r, ["shape", "repl_errors"]); }), series("cell timeouts", "var(--c2)", function (r) { return get(r, ["shape", "timeouts"]); }), series("turns without code", "var(--c3)", function (r) { return get(r, ["shape", "no_code_turns"]); }), series("outputs cut at 2,000 chars", "var(--c4)", function (r) { return get(r, ["shape", "output_truncations"]); })], note: hasEdit ? "A cell times out after 120 s of compute in a read episode and 300 s in an edit episode." : "A cell times out after 120 s of compute." });
   chart(bh, { title: "Root transcript length (tokens)", fmt: F.compact, endLabels: true, series: [series("mean", "var(--c1)", function (r) { return get(r, ["shape", "transcript_tokens_mean"]); }), series("p95", "var(--c2)", function (r) { return get(r, ["shape", "transcript_tokens_p95"]); }), series("max", "var(--c3)", function (r) { return get(r, ["shape", "transcript_tokens_max"]); })], note: "Sets packed_sequence_length for production." });
   chart(bh, { title: "Output tokens per episode", fmt: F.compact, endLabels: true, series: [series("root", "var(--c1)", function (r) { return get(r, ["shape", "root_completion_tokens"]); }), series("sub-calls", "var(--c2)", function (r) { return get(r, ["shape", "subcall_tokens"]); })] });
-  chart(bh, { title: "Context size (characters)", fmt: F.compact, series: [series("mean context", "var(--c1)", function (r) { return get(r, ["shape", "context_chars"]); }, { area: true })], note: "Rises as families move up levels: ~35K at level 1, ~400K at level 5." });
-  chart(bh, { title: "Episodes with a turn cut off at the token cap", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes with a cut-off turn", "var(--c1)", function (r) { return get(r, ["shape", "episodes_with_truncated_turn"]); })], note: "Root turns are capped at 3,072 output tokens." });
+  chart(bh, { title: "Context size (characters)", fmt: F.compact, series: [series("mean context", "var(--c1)", function (r) { return get(r, ["shape", "context_chars"]); }, { area: true })], note: hasEdit ? "Read families grow from ~35K characters at level 1 to ~400K at the top. An edit episode's context is only its task and file list, so the edit share pulls the mean down." : "Rises as families move up levels: ~35K at level 1, ~400K at level 5." });
+  chart(bh, { title: "Episodes with a turn cut off at the token cap", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes with a cut-off turn", "var(--c1)", function (r) { return get(r, ["shape", "episodes_with_truncated_turn"]); })], note: hasEdit ? "Root turns are capped at 3,072 output tokens in read episodes and 4,096 in edit episodes." : "Root turns are capped at 3,072 output tokens." });
+
+  // ------------------------------------------------------------------ editing (spec §12.9)
+  (function () {
+    $("editing").hidden = !hasEdit; $("nav-editing").hidden = !hasEdit;
+    if (!hasEdit) return;
+    var eh = $("edit-charts"), lastE = editSteps[editSteps.length - 1];
+    function es(label, color, key) { return series(label, color, function (r) { return ed(r, key); }); }
+    // a family has 4-8 edit episodes a step, so each line pools its last 3 steps (the controller's window)
+    function pooled3(label, color, count, rate) {
+      var pts = [];
+      steps.forEach(function (r, i) {
+        var n = 0, c = 0;
+        steps.slice(Math.max(0, i - 2), i + 1).forEach(function (q) { var k = count(q), v = rate(q); if (isNum(k) && k > 0 && isNum(v)) { n += k; c += v * k; } });
+        if (n && isNum(rate(r))) pts.push([r.step, c / n]);
+      });
+      return { label: label, color: color, pts: pts };
+    }
+    var resolvedAll = pooled3("all edits", "var(--c1)", function (r) { return ed(r, "episodes"); }, function (r) { return ed(r, "resolved"); });
+    chart(eh, { title: "Resolved rate, last 3 steps", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true,
+                headline: resolvedAll.pts.length ? F.pct(resolvedAll.pts[resolvedAll.pts.length - 1][1]) : null,
+                series: [resolvedAll].concat(editFams.map(function (f) { return pooled3(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "scored"]); }, function (r) { return get(r, ["families", f, "pass_rate"]); }); })),
+                xmarks: rollbackMarks(), note: "Share of edit episodes with every hidden test passing, pooled over 3 steps, overall and per family. Healthy: rising, edit real below edit synth." });
+    chart(eh, { title: "Hidden tests", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [es("f2p passing", "var(--c1)", "f2p_pass"), es("p2p broken", "var(--c2)", "p2p_broken")],
+                note: "Mean share of fail-to-pass tests passing, and share of episodes that broke a pass-to-pass test. Healthy: the first rising, the second low." });
+    chart(eh, { title: "Submitted, and submitted no change", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [es("submitted", "var(--c1)", "submitted"), es("empty diff", "var(--c2)", "empty_diff")],
+                note: "Share that called submit, and share whose diff was empty. Healthy: submitted near 100%, empty diff near 0." });
+    chart(eh, { title: "Tested after the last edit, before submit", fmt: F.pct, yMin: 0, yMax: 1, series: [es("tested before submit", "var(--c1)", "tested_before_submit")],
+                note: "Share that ran a test command between their last edit and submit. Healthy: high and rising; checking before submitting is the RLM way." });
+    chart(eh, { title: "Test runs and edit-test cycles per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, series: [es("test runs", "var(--c1)", "test_runs"), es("edit cycles", "var(--c2)", "edit_cycles")],
+                note: "Mean test commands, and edit-then-test cycles, per episode. Healthy: at least one of each; many cycles with no gain in resolved is flailing." });
+    chart(eh, { title: "Turn of the first edit", fmt: F.num, yMin: 0, yMaxAtLeast: 4, series: [es("turns to first edit", "var(--c1)", "turns_to_first_edit")],
+                note: "Mean turn of the first write to the repository, out of 20. Healthy: a few turns of exploring first, well before the cap." });
+    chart(eh, { title: "Lines changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 10, series: [es("diff lines", "var(--c1)", "diff_lines")],
+                note: "Mean changed lines in the submitted diff; the grader refuses over 2,000. Healthy: near the tasks' patch sizes, not ballooning." });
+    chart(eh, { title: "Files changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 2, series: [es("files changed", "var(--c1)", "files_changed")],
+                note: "Mean files the submitted diff touches. Level 1 needs one file, level 4 three or more, so it should rise with levels." });
+    chart(eh, { title: "Reading done by sub-calls", fmt: F.pct, yMin: 0, yMax: 1, series: [es("sub-call read share", "var(--c1)", "subcall_read_share")],
+                note: "Characters sent to sub-calls over those plus characters printed to the root. Healthy for an RLM: high, with reading delegated." });
+    chart(eh, { title: "Review sub-calls per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("review sub-calls", "var(--c1)", "review_subcalls")],
+                note: "Sub-calls whose prompt holds a diff, the root asking for a review. Healthy: above 0, and more on bigger tasks." });
+    chart(eh, { title: "Repeated cells per episode (loop signal)", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("repeated cells", "var(--c1)", "repeated_cells")],
+                note: "Cells identical to an earlier cell in the same episode. Healthy: near 0; a climb means the root is stuck in a loop." });
+    chart(eh, { title: "Blocked network attempts per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("network tries", "var(--c1)", "network_tries")],
+                note: "Logged only: network try never zeroes the reward. Healthy: near 0; a rise means it keeps trying to install or download." });
+    chart(eh, { title: "Grader time per episode", fmt: F.secs, tickFmt: function (v) { return v + " s"; }, yMin: 0, yMaxAtLeast: 30, series: [es("grader seconds", "var(--c1)", "grader_s")],
+                note: "Mean seconds the hidden-test run took, against a 600 s cap. Healthy: steady and far below the cap." });
+    // resolved by language, pooled over steps and weighted by episodes
+    var host = $("edit-langs"), cut = editSteps.length > 10 ? editSteps[editSteps.length - 10].step : -Infinity, run10 = {}, all = {};
+    editSteps.forEach(function (r) {
+      var by = get(r, ["edit", "by_language"]) || {};
+      Object.keys(by).forEach(function (l) {
+        var g = by[l]; if (!isNum(g.episodes)) return;
+        [all].concat(r.step >= cut ? [run10] : []).forEach(function (acc) {
+          var a = acc[l] = acc[l] || { n: 0, c: 0, k: 0 }; a.n += g.episodes;
+          if (isNum(g.resolved)) { a.c += g.resolved * g.episodes; a.k += g.episodes; }
+        });
+      });
+    });
+    var langs = Object.keys(all).sort(function (a, b) { return (a === "other") - (b === "other") || all[b].n - all[a].n || (a < b ? -1 : 1); });
+    var fig = el("figure", "chart"), cap = el("figcaption");
+    cap.appendChild(el("div", "c-title", "Resolved by repository language, whole run")); cap.appendChild(el("div", "c-val", langs.length + (langs.length === 1 ? " language" : " languages")));
+    cap.appendChild(el("div", "c-note", "Edit episodes and the share resolved, pooled over steps; the last column is resolved / episodes over the last 10 steps. Healthy: no language stuck near 0% while the others climb."));
+    fig.appendChild(cap);
+    if (!langs.length) { fig.appendChild(el("p", "empty", "No step has logged languages yet.")); host.appendChild(fig); return; }
+    function rate(a) { return a && a.k ? F.pct(a.c / a.k) : "–"; }
+    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+    ["language", "episodes", "resolved", "last 10 steps"].forEach(function (x, i) { var th = el("th", i ? "n" : null, x); if (i === 3) th.style.whiteSpace = "normal"; hr.appendChild(th); }); t.appendChild(hr);
+    langs.forEach(function (l) {
+      var tr = el("tr"), r10 = run10[l];
+      tr.appendChild(el("td", null, l)); tr.appendChild(el("td", "n", F.int(all[l].n))); tr.appendChild(el("td", "n", rate(all[l])));
+      tr.appendChild(el("td", "n", r10 ? rate(r10) + " / " + F.int(r10.n) : "–")); t.appendChild(tr);
+    });
+    wrap.appendChild(t); fig.appendChild(wrap); host.appendChild(fig);
+  })();
 
   // ------------------------------------------------------------------ reward
   var rw = $("reward-charts");
-  chart(rw, { title: "Exact accuracy and mean reward", fmt: F.pct, tipFmt: F.num, yMin: 0, yMax: 1, endLabels: true, series: [series("exact accuracy", "var(--c1)", function (r) { return get(r, ["reward", "exact"]); }), series("mean reward", "var(--c2)", function (r) { return get(r, ["reward", "mean"]); })] });
+  chart(rw, { title: "Exact accuracy and mean reward", fmt: F.pct, tipFmt: F.num, yMin: 0, yMax: 1, endLabels: true, series: [series("exact accuracy", "var(--c1)", function (r) { return get(r, ["reward", "exact"]); }), series("mean reward", "var(--c2)", function (r) { return get(r, ["reward", "mean"]); })], note: hasEdit ? "Over every episode; an edit episode counts as exact when it is resolved." : null });
   chart(rw, { title: "Partial credit and near-blind answers", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, endLabels: true, series: [series("partial credit", "var(--c1)", function (r) { return get(r, ["reward", "partial"]); }), series("near the blind guess", "var(--c2)", function (r) { return get(r, ["reward", "near_blind"]); })], note: "A rising near-blind rate means answers are drifting toward the metadata guess." });
+  // spec §7 and §12.6: every rule zeroes the reward except network_try, which is only logged (grey)
+  var RULES = { early_submit: ["early submit", 1], copied_answer: ["copied answer", 2], escape_attempt: ["escape attempt", 3], timeout_loop: ["timeout loop", 4],
+                test_tamper: ["test tamper", 5], grader_tamper: ["grader tamper", 7], test_aware: ["test aware", 6], network_try: ["network try (logged only)", 0] };
+  var RULE_ORDER = Object.keys(RULES);
   var rulesSeen = {}; steps.forEach(function (r) { Object.keys(get(r, ["reward", "hacks"]) || {}).forEach(function (k) { rulesSeen[k] = 1; }); });
-  var ruleNames = Object.keys(rulesSeen).length ? Object.keys(rulesSeen) : ["early_submit", "copied_answer", "escape_attempt", "timeout_loop"];
+  var ruleNames = Object.keys(rulesSeen).length ? Object.keys(rulesSeen) : RULE_ORDER.slice(0, hasEdit ? 8 : 4);
+  ruleNames.sort(function (a, b) { var i = RULE_ORDER.indexOf(a), j = RULE_ORDER.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || (a < b ? -1 : 1); });
+  function ruleLabel(k) { return RULES[k] ? RULES[k][0] : k.replace(/_/g, " "); }
+  function ruleColor(k, i) { return !RULES[k] ? "var(--c" + (i % 8 + 1) + ")" : RULES[k][1] ? "var(--c" + RULES[k][1] + ")" : "var(--muted)"; }
   var hackTotal = steps.reduce(function (s, r) { return s + (get(r, ["reward", "hacked"]) || 0); }, 0);
   chart(rw, { title: "Hack-detector hits by rule", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: 2, headline: hackTotal + " this run",
-              series: ruleNames.map(function (k, i) { return series(k.replace(/_/g, " "), "var(--c" + (i + 1) + ")", function (r) { return get(r, ["reward", "hacks", k]); }); }) });
+              series: ruleNames.map(function (k, i) { return series(ruleLabel(k), ruleColor(k, i), function (r) { return get(r, ["reward", "hacks", k]); }); }),
+              note: ruleNames.indexOf("network_try") >= 0 ? "Every rule zeroes the rollout's reward except network try, which is only logged (grey)." : "Every rule zeroes the rollout's reward before the group mean." });
   chart(rw, { title: "Episodes that submitted", fmt: F.pct, yMin: 0, yMax: 1, series: [series("submitted", "var(--c1)", function (r) { return get(r, ["reward", "submitted"]); })] });
   (function () {
     var host = $("audits"), keys = Object.keys(D.audits || {}).map(Number).sort(function (a, b) { return a - b; });
@@ -822,18 +940,24 @@ footer p { margin: 0; max-width: 92ch; }
   (function () {
     var host = $("eval-table"), main = evals.filter(function (e) { return e.name === mainEval; });
     if (!main.length) { host.appendChild(el("p", "empty", mainEval ? "No " + mainEval + " result yet." : "No eval configured.")); return; }
-    var first = main[0], latest = main[main.length - 1], famsE = Object.keys(get(latest, ["summary", "by_family"]) || {});
-    if (!famsE.length) return;
-    host.appendChild(el("div", "c-title", "By family: checkpoint " + first.checkpoint + " against checkpoint " + latest.checkpoint));
-    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
-    ["family", "tasks", "checkpoint " + first.checkpoint, "checkpoint " + latest.checkpoint, "change"].forEach(function (x, i) { hr.appendChild(el("th", i ? "n" : null, x)); }); t.appendChild(hr);
-    famsE.forEach(function (f) {
-      var a = get(first, ["summary", "by_family", f, "accuracy"]), b = get(latest, ["summary", "by_family", f, "accuracy"]), tr = el("tr");
-      var nm = el("td"), k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; nm.appendChild(k); nm.appendChild(document.createTextNode(famLabel(f))); tr.appendChild(nm);
-      tr.appendChild(el("td", "n", F.int(get(latest, ["summary", "by_family", f, "n"])))); tr.appendChild(el("td", "n", F.pct(a))); tr.appendChild(el("td", "n", F.pct(b)));
-      tr.appendChild(el("td", "n", isNum(a) && isNum(b) ? (b - a >= 0 ? "+" : "−") + Math.abs((b - a) * 100).toFixed(0) + " pts" : "–")); t.appendChild(tr);
+    var first = main[0], latest = main[main.length - 1];
+    // by_family, then (spec §12.9) by_language for the edit tasks; languages get no swatch, since colour means family
+    [["by_family", "family", "By family"], ["by_language", "language", "Edit tasks by language"]].forEach(function (g) {
+      var names = Object.keys(get(latest, ["summary", g[0]]) || {});
+      if (!names.length) return;
+      if (g[0] === "by_language") names.sort(function (a, b) { return (a === "other") - (b === "other") || (get(latest, ["summary", g[0], b, "n"]) || 0) - (get(latest, ["summary", g[0], a, "n"]) || 0) || (a < b ? -1 : 1); });
+      host.appendChild(el("div", "c-title", g[2] + ": checkpoint " + first.checkpoint + " against checkpoint " + latest.checkpoint));
+      var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+      [g[1], "tasks", "checkpoint " + first.checkpoint, "checkpoint " + latest.checkpoint, "change"].forEach(function (x, i) { hr.appendChild(el("th", i ? "n" : null, x)); }); t.appendChild(hr);
+      names.forEach(function (f) {
+        var a = get(first, ["summary", g[0], f, "accuracy"]), b = get(latest, ["summary", g[0], f, "accuracy"]), tr = el("tr"), nm = el("td");
+        if (g[0] === "by_family") { var k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; nm.appendChild(k); }
+        nm.appendChild(document.createTextNode(g[0] === "by_family" ? famLabel(f) : f)); tr.appendChild(nm);
+        tr.appendChild(el("td", "n", F.int(get(latest, ["summary", g[0], f, "n"])))); tr.appendChild(el("td", "n", F.pct(a))); tr.appendChild(el("td", "n", F.pct(b)));
+        tr.appendChild(el("td", "n", isNum(a) && isNum(b) ? (b - a >= 0 ? "+" : "−") + Math.abs((b - a) * 100).toFixed(0) + " pts" : "–")); t.appendChild(tr);
+      });
+      wrap.appendChild(t); host.appendChild(wrap);
     });
-    wrap.appendChild(t); host.appendChild(wrap);
   })();
 
   // ------------------------------------------------------------------ stop rules
@@ -905,12 +1029,13 @@ footer p { margin: 0; max-width: 92ch; }
       d.addEventListener("toggle", function () { if (d.open) ui.open[s.key] = 1; else delete ui.open[s.key]; });
       var sm = el("summary"), WHY = { win: ["Win", "t-good", "✓"], fail: ["Failure", "t-serious", "×"], flagged: ["Flagged", "t-crit", "!"], infra: ["Infra", "t-warn", "!"] }[s.why] || [s.why, "t-muted", "·"];
       var p = el("span", "pill " + WHY[1]); p.appendChild(el("span", "ic", WHY[2])); p.appendChild(document.createTextNode(WHY[0])); sm.appendChild(p);
-      var fk = el("span"), k = el("span", "key box"); k.style.background = famColor(s.family); k.style.marginRight = "6px"; fk.appendChild(k); fk.appendChild(document.createTextNode(famLabel(s.family) + " · level " + s.level)); sm.appendChild(fk);
+      var fk = el("span"), k = el("span", "key box"); k.style.background = famColor(s.family); k.style.marginRight = "6px"; fk.appendChild(k); fk.appendChild(document.createTextNode(famLabel(s.family) + " · level " + s.level + (s.language ? " · " + s.language : ""))); sm.appendChild(fk);
       sm.appendChild(el("span", "meta", "step " + s.step + " · reward " + F.num(s.reward) + " · " + plural(s.turn_count, "turn") + " · " + plural(s.subcalls_used || 0, "sub-call") + (s.hacks && s.hacks.length ? " · " + s.hacks.join(", ") : "") + (s.infra_kind ? " · infra: " + s.infra_kind : "")));
       d.appendChild(sm);
       var body = el("div", "sbody");
-      body.appendChild(el("h4", null, "Question")); body.appendChild(el("p", null, s.question));
-      body.appendChild(el("h4", null, "Context: " + F.int(s.context_chars) + " characters in " + F.int(s.context_lines) + " lines; the first 3 lines")); body.appendChild(pre(s.context_head || "(not shown)"));
+      body.appendChild(el("h4", null, s.edit ? "Task" : "Question")); body.appendChild(el("p", null, s.question));
+      if (s.edit) body.appendChild(el("h4", null, "Context: the task and the repository's file list, " + F.int(s.context_chars) + " characters; the files are on disk"));
+      else { body.appendChild(el("h4", null, "Context: " + F.int(s.context_chars) + " characters in " + F.int(s.context_lines) + " lines; the first 3 lines")); body.appendChild(pre(s.context_head || "(not shown)")); }
       (s.turns || []).forEach(function (t, i) {
         var idx = i < 3 || !s.turns_omitted ? i + 1 : s.turn_count - (s.turns.length - i) + 1;
         if (s.turns_omitted && i === 3) body.appendChild(el("p", "sub", "… " + s.turns_omitted + " turns not shown …"));
@@ -928,7 +1053,7 @@ footer p { margin: 0; max-width: 92ch; }
       body.appendChild(el("h4", null, "Scoring"));
       var dl = el("dl", "verdict");
       function dd(a, b) { dl.appendChild(el("dt", null, a)); dl.appendChild(el("dd", null, b)); }
-      dd("submitted", s.submitted ? s.answer : "(no submit)"); dd("gold", s.gold); dd("reward", F.num(s.reward) + (s.correct ? " (exact)" : ""));
+      dd("submitted", s.submitted ? s.answer : "(no submit)"); dd(s.edit ? "graded by" : "gold", s.edit ? "hidden tests, never shown here" : s.gold); dd("reward", F.num(s.reward) + (s.correct ? (s.edit ? " (resolved)" : " (exact)") : ""));
       var comp = Object.keys(s.components || {}).map(function (k) { return k + " " + F.num(s.components[k]); }).join(", "); if (comp) dd("components", comp);
       dd("detectors", s.hacks && s.hacks.length ? s.hacks.join(", ") : "none fired"); if (s.events || s.rejected) dd("sandbox", s.events + " audit events, " + s.rejected + " refused bridge requests");
       body.appendChild(dl);
@@ -937,13 +1062,14 @@ footer p { margin: 0; max-width: 92ch; }
   }
 
   // ------------------------------------------------------------------ table view
-  var COLS = [["step", function (r) { return r.step; }, String], ["status", function (r) { return r.status; }, String], ["pass", function (r) { return get(r, ["pass", "rate"]); }, F.pct],
-              ["trainable", function (r) { return get(r, ["pass", "trainable_groups"]); }, F.int], ["entropy", function (r) { return get(r, ["policy", "entropy"]); }, F.num],
+  var COLS = [["step", function (r) { return r.step; }, String], ["status", function (r) { return r.status; }, String], ["pass", function (r) { return get(r, ["pass", "rate"]); }, F.pct]]
+    .concat(hasEdit ? [["resolved", function (r) { return ed(r, "resolved"); }, F.pct], ["tested", function (r) { return ed(r, "tested_before_submit"); }, F.pct]] : [])
+    .concat([["trainable", function (r) { return get(r, ["pass", "trainable_groups"]); }, F.int], ["entropy", function (r) { return get(r, ["policy", "entropy"]); }, F.num],
               ["KL", function (r) { return get(r, ["policy", "kl_to_base"]); }, F.num], ["reward std", function (r) { return get(r, ["policy", "reward_std"]); }, F.num],
               ["grad norm", function (r) { return get(r, ["policy", "grad_norm"]); }, F.num], ["clip", function (r) { return get(r, ["policy", "clip_fraction"]); }, F.pct2],
               ["sub-calls", function (r) { return get(r, ["shape", "subcalls"]); }, F.num], ["turns", function (r) { return get(r, ["shape", "turns"]); }, F.num],
               ["hacks", function (r) { return get(r, ["reward", "hacked"]); }, F.int], ["infra", function (r) { return get(r, ["infra", "rate"]); }, F.pct],
-              ["cost", function (r) { return get(r, ["cost", "step_usd"]); }, F.usd3], ["time", function (r) { return get(r, ["time", "total_s"]); }, F.secs]];
+              ["cost", function (r) { return get(r, ["cost", "step_usd"]); }, F.usd3], ["time", function (r) { return get(r, ["time", "total_s"]); }, F.secs]]);
   (function () {
     var host = $("step-table");
     if (!steps.length) { host.appendChild(el("p", "empty", "No steps yet.")); return; }

@@ -20,12 +20,14 @@ from pathlib import Path
 from unittest import mock
 
 from rlm_rl import capability, capability_set, config, data, evals, reward, tasks
-from rlm_rl.tasks import aggregation, behaviours, repoloc, synthcode
+from rlm_rl.tasks import aggregation, behaviours, editreal, repoloc, synthcode
 
 HAVE_DATA = data.available()
 HAVE_LCA = HAVE_DATA and (data.derived("lca", "index-train.jsonl.gz")).exists() and shutil.which("git") is not None
 needs_data = unittest.skipUnless(HAVE_DATA, "no data root (rlm_rl/data.py)")
 needs_lca = unittest.skipUnless(HAVE_LCA, "no LCA index or git (scripts/build_data.py lca-git lca-index)")
+needs_edit_index = unittest.skipUnless(HAVE_DATA and editreal.index_path().exists(),
+                                       "no edit_real task index (scripts/build_edit_data.py)")
 
 FILE_RE = re.compile(r"^# ===== file: (.+?) =====$", re.M)
 
@@ -365,24 +367,29 @@ class RepoLocTest(FamilyContract, unittest.TestCase):
 
 
 class MixAndLicenceTest(unittest.TestCase):
-    def test_mix_is_7c(self):
-        """Decision 7c: cyber dropped, its 35% split between code (+20) and aggregation (+15)."""
-        self.assertEqual(tasks.DOMAIN_MIX, {"aggregation": 0.45, "code": 0.40, "repo": 0.15})
+    def test_mix_is_spec_v2(self):
+        """Spec v2 §12.7 (decision E-a): editing 40% (edit_real 25, edit_synth 15), aggregation 25, code reading 20,
+        repo localization 15, in that order, so allocate_step splits 40 tasks 10/4/4/6/10/6."""
+        self.assertEqual(tasks.DOMAIN_MIX, {"aggregation": 0.25, "code": 0.20, "repo": 0.15, "editing": 0.40})
         mix = tasks.production_mix()
+        self.assertEqual(list(mix), ["aggregation", "callgraph", "needle", "repo_loc", "edit_real", "edit_synth"])
         self.assertAlmostEqual(sum(mix.values()), 1.0)
-        self.assertAlmostEqual(mix["aggregation"], 0.45)
-        self.assertAlmostEqual(mix["callgraph"], 0.20)
-        self.assertAlmostEqual(mix["needle"], 0.20)
-        self.assertAlmostEqual(mix["repo_loc"], 0.15)
+        for family, share in {"aggregation": 0.25, "callgraph": 0.10, "needle": 0.10, "repo_loc": 0.15,
+                              "edit_real": 0.25, "edit_synth": 0.15}.items():
+            self.assertAlmostEqual(mix[family], share, msg=family)
 
+    @needs_edit_index
     def test_production_config(self):
         cfg = config.production("p", 2e-5)
-        self.assertEqual(cfg.selection, "selection-v1")
+        self.assertEqual(cfg.selection, "selection-v2")
+        self.assertEqual(cfg.prompt_version, "v2")
+        self.assertEqual(cfg.ceilings, {"train": 157.0, "eval": 30.0})
         self.assertEqual(cfg.capability_set, config.CAPABILITY_SET)
         self.assertEqual(cfg.mix, tasks.production_mix())
         self.assertEqual(config.production("p", 2e-5, tasks_from="tickets").selection, "selection-tickets-v1")
         self.assertEqual(config.manifest(cfg)["mix"], cfg.mix)
 
+    @needs_edit_index
     def test_licence_bar(self):
         tasks.check_mix(tasks.production_mix())
         for family in ("aggregation_heldout", "needle_heldout", "repo_loc_test", "repo_loc_select"):
@@ -400,6 +407,8 @@ class MixAndLicenceTest(unittest.TestCase):
 
     def test_selection_plan_is_64_tasks_and_heldout_families_stay_out_of_training(self):
         self.assertEqual(sum(evals.SELECTION_V1.values()), 64)
+        self.assertEqual(sum(evals.SELECTION_V2_READ.values()) + len(evals.SELECTION_V2_SYNTH), 48 + 6)  # + 10 edit_real
+        self.assertEqual(len(evals.HELDOUT_V2_SYNTH), 20)
         trained = set(tasks.production_mix())
         self.assertFalse({f for f, _ in evals.HELDOUT_TEST_V1} & trained)
         self.assertTrue({"tickets_all", "tickets_customer"} & {f for f, _ in evals.SELECTION_V1})

@@ -68,6 +68,30 @@ HELDOUT_TEST_V1 = {
 }
 HELDOUT_OOLONG_PER_BUCKET = 10
 
+# Spec v2 §12.10. selection-v2 (64 tasks): 48 read tasks, the read families in the new mix's proportions (25/10/10/15
+# of 60) plus the ticket tasks as the held-out generator family, and 16 edit tasks: 6 held-out seeds of edit_synth, one
+# per kind and level below, and the 10 edit_real tasks of the selection split (repositories training never sees).
+SELECTION_V2_READ = {
+    **{("aggregation", level): n for level, n in {1: 4, 2: 4, 3: 3, 4: 3, 5: 3}.items()},
+    **{("callgraph", level): n for level, n in {1: 2, 2: 2, 3: 1, 4: 1, 5: 1}.items()},
+    **{("needle", level): n for level, n in {1: 1, 2: 2, 3: 2, 4: 1, 5: 1}.items()},
+    **{("repo_loc_select", level): n for level, n in {1: 3, 2: 2, 3: 2, 4: 2}.items()},
+    **{(family, level): 1 for family in ("tickets_all", "tickets_customer") for level in (1, 2, 3, 5)},
+}
+SELECTION_V2_SYNTH = [("fix", 1), ("callers", 2), ("feature", 3), ("fix", 4), ("callers", 5), ("feature", 2)]
+# heldout-test-v2: heldout-test-v1 plus 60 edit tasks, 20 edit_synth_heldout (every kind at every level, plus five
+# more) and the 40 edit_real tasks of the test split (held-out repositories, at least 15 of them feature tasks).
+HELDOUT_V2_SYNTH = [(kind, level) for level in range(1, 6) for kind in ("fix", "callers", "feature")] + \
+                   [("fix", 3), ("callers", 3), ("feature", 4), ("callers", 4), ("feature", 5)]
+
+
+def _synth_set(name: str, family: str, plan: list[tuple[str, int]]) -> list[Task]:
+    from .tasks import editsynth
+
+    seeds = task_sets.private_seed_list(name, len(plan))
+    return [editsynth.make_task(seed, family, level, f"{name}-{i:02d}", kind=kind)
+            for i, (seed, (kind, level)) in enumerate(zip(seeds, plan))]
+
 
 def eval_set(name: str) -> tuple[list[Task], int]:
     """An eval set the training loop runs, by name: (tasks, samples per task)."""
@@ -85,6 +109,18 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         generated = task_sets.fixed_set(name, HELDOUT_TEST_V1)
         lca = repoloc.test_tasks(task_sets.private_seed_list(f"{name}-lca", len(repoloc.items("test"))), name)
         return generated + lca + oolong.load(HELDOUT_OOLONG_PER_BUCKET), 1
+    if name == "selection-v2":
+        from .tasks import editreal
+
+        read = task_sets.fixed_set(name, SELECTION_V2_READ)
+        synth = _synth_set(f"{name}-edit_synth", "edit_synth", SELECTION_V2_SYNTH)
+        return read + synth + editreal.eval_tasks("select", "edit_real_select"), 1
+    if name == "heldout-test-v2":
+        from .tasks import editreal
+
+        v1, _ = eval_set("heldout-test-v1")
+        synth = _synth_set(f"{name}-edit_synth_heldout", "edit_synth_heldout", HELDOUT_V2_SYNTH)
+        return v1 + synth + editreal.eval_tasks("test", "edit_real_test"), 1
     raise KeyError(f"no eval set named {name!r}")
 
 
@@ -102,12 +138,14 @@ def summarize(records: list[dict]) -> dict:
     infra = [r for r in records if r.get("infra_error")]
     n = len(clean)
     accuracy = _mean([float(bool(r["correct"])) for r in clean])
-    families, levels = collections.defaultdict(list), collections.defaultdict(list)
+    families, levels, languages = (collections.defaultdict(list) for _ in range(3))
     hacks = dict.fromkeys(detectors.RULES, 0)
     for r in clean:
         families[r["family"]].append(float(bool(r["correct"])))
         levels[f"{r['family']}/L{r['level']}"].append(float(bool(r["correct"])))
-        for hit in r.get("hacks", ()):
+        if r.get("language") and str(r["family"]).startswith(bridge.EDIT_PREFIX):
+            languages[str(r["language"]).lower()].append(float(bool(r["correct"])))
+        for hit in list(r.get("hacks", ())) + list(r.get("flags") or ()):
             hacks[hit["rule"]] = hacks.get(hit["rule"], 0) + 1
 
     def metric(name):
@@ -133,6 +171,7 @@ def summarize(records: list[dict]) -> dict:
         "est_cost_usd": round(sum(r["usage"]["est_cost_usd"] for r in records), 4),
         "by_family": {f: {"n": len(v), "accuracy": _mean(v)} for f, v in sorted(families.items())},
         "by_level": {k: {"n": len(v), "accuracy": _mean(v)} for k, v in sorted(levels.items())},
+        "by_language": {k: {"n": len(v), "accuracy": _mean(v)} for k, v in sorted(languages.items())},
     }
 
 
@@ -175,6 +214,7 @@ def record_trajectory(record: dict) -> Any:
         metrics=record["metrics"],
         metadata={"task_id": record["task_id"], "family": record["family"], "level": record["level"],
                   "episode_id": record["episode_id"], "eval": record["eval"] or "", "gold": str(record["gold"]),
+                  "language": record.get("language") or "",
                   "answer": "" if record["answer"] is None else str(record["answer"]),
                   "hacks": ",".join(hit["rule"] for hit in record.get("hacks", ()))},
     )

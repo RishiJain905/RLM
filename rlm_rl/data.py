@@ -108,6 +108,32 @@ SOURCES = {
         "files": ["hf/gfissore__arxiv-abstracts-2021/arxiv-abstracts.jsonl.gz",
                   "hf/gfissore__arxiv-abstracts-2021/README.md"],
     },
+    # The edit families' task sources (spec §12.7, plan step E4). Each repository's own licence file is checked too
+    # (tasks/editreal.check_licences). Only the Python and Go SWE-smith cards state a licence; Rishi chose on
+    # 2026-10-12 to train JavaScript, TypeScript, Rust and Java only on tasks we generate, so those four datasets'
+    # rows are eval-only.
+    **{f"swe-smith-{lang}": {
+        "what": f"SWE-smith {name} task instances (injected bugs with issue texts) and their per-repository images",
+        "origin": f"hf:SWE-bench/SWE-smith-{lang}", "revision": None, "licence": "MIT", "permissive": True,
+        "role": TRAIN, "files": [f"hf/SWE-bench__SWE-smith-{lang}/README.md"],
+        "dirs": [f"hf/SWE-bench__SWE-smith-{lang}/data"]} for lang, name in (("py", "Python"),
+                                                                                              ("go", "Go"))},
+    **{f"swe-smith-{lang}": {
+        "what": f"SWE-smith {name} task instances: eval splits only (the dataset card states no licence)",
+        "origin": f"hf:SWE-bench/SWE-smith-{lang}", "revision": None, "licence": "none stated on the dataset card",
+        "permissive": False, "role": EVAL, "files": [f"hf/SWE-bench__SWE-smith-{lang}/README.md"],
+        "dirs": [f"hf/SWE-bench__SWE-smith-{lang}/data"]}
+       for lang, name in (("js", "JavaScript"), ("ts", "TypeScript"), ("rs", "Rust"), ("java", "Java"))},
+    "swe-rebench-v2": {
+        "what": "SWE-rebench V2 real issues and merged pull requests, per-task images; permissive per-task licences only",
+        "origin": "hf:nebius/SWE-rebench-V2", "revision": None, "licence": "CC-BY-4.0", "permissive": True,
+        "role": TRAIN, "files": ["hf/nebius__SWE-rebench-V2/README.md"], "dirs": ["hf/nebius__SWE-rebench-V2/data"],
+    },
+    "generated": {
+        "what": "edit_real tasks we generate (feature removals, our own injected bugs) in permissive repositories",
+        "origin": "scripts/build_edit_data.py", "revision": None, "licence": "ours; each repository's own licence "
+        "is permissive", "permissive": True, "role": TRAIN, "files": [],
+    },
 }
 
 # Sources the plan names that are not used, and why (decision 7b and the research's avoid list).
@@ -115,7 +141,6 @@ NOT_USED = {
     "oolong-synth validation": "fails 7b: no licence, and built from non-commercial sets; replaced by our own "
                                "aggregation generator on CLINC150 and MASSIVE",
     "loghub": "fails 7b: research use only",
-    "swe-smith": "not needed: LCA covers the 15% repo share",
     "mteb/amazon_massive_intent": "downloaded, unused: the scenario labels are the ones the generator needs",
     "cyber sources (OTRF Security-Datasets, splunk attack_data, EVTX-ATTACK-SAMPLES, AIT-LDS v2)":
         "the cyber domain was dropped (decision 7c, Rishi 2026-10-11); its 35% went to code and aggregation",

@@ -22,9 +22,9 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import bridge
+from . import bridge, repl_tools
 
-FORMAT_VERSION = 2  # 2 adds "hacks", the detectors that fired (step 5)
+FORMAT_VERSION = 3  # 2 adds "hacks", the detectors that fired (step 5); 3 the edit families' fields and tools_version (spec §12)
 
 
 def transcript_path(run_dir: str | Path, split: str, step: int, eval_name: str | None = None) -> Path:
@@ -56,8 +56,12 @@ def episode_record(ep: Any, *, split: str, run: str, step: int, key: str, eval_n
         "root_model": ep.root_model,
         "subcall_model": ep.subcall_model,
         "api_version": bridge.API_VERSION,
-        "prompt_version": bridge.PROMPT_VERSION,
-        "prompt_hash": bridge.PROMPT_HASH,
+        "prompt_version": getattr(ep, "prompt_version", bridge.PROMPT_VERSION),
+        "prompt_hash": bridge.PROMPT_HASHES.get(getattr(ep, "prompt_version", bridge.PROMPT_VERSION), bridge.PROMPT_HASH),
+        "tools_version": repl_tools.TOOLS_VERSION if bridge.is_edit(ep.family) else None,  # edit episodes only
+        "limits": getattr(ep, "limits", {}),
+        "language": getattr(ep, "language", None),
+        "repo": getattr(ep, "repo", None),
         "context_chars": ep.context_chars,
         "context_lines": ep.context_lines,
         "context_sha256": ep.context_sha256,
@@ -72,6 +76,10 @@ def episode_record(ep: Any, *, split: str, run: str, step: int, key: str, eval_n
         "correct": ep.correct,
         "reward_components": ep.reward_components,
         "hacks": ep.hacks,
+        "flags": getattr(ep, "flags", []),
+        "diff": getattr(ep, "diff", None),
+        "grade": getattr(ep, "grade", None),
+        "edit_stats": getattr(ep, "edit_stats", {}),
         "infra_error": ep.infra_error,
         "infra_kind": ep.infra_kind,
         "host_traceback": ep.host_traceback,
