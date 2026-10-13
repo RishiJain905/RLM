@@ -267,6 +267,8 @@ class Sandbox:
         if self._proc is not None and self._proc.returncode is None:
             self._proc.kill()
             await self._proc.wait()
+            if self._names:  # as in _kill: a container the daemon was still creating
+                await self._docker("rm", "-f", *self._names)
         await asyncio.gather(*self._pumps, return_exceptions=True)
         await self.bridge.close()
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -447,6 +449,9 @@ class Sandbox:
             except asyncio.TimeoutError:
                 self._proc.kill()
                 await self._proc.wait()
+            # A launch that timed out may not have its container yet: on a slow drive the daemon finishes creating it
+            # after the first rm, and it stays "Created" for good. Once the client is gone, remove it again.
+            await self._docker("rm", "-f", self._names[-1])
         await asyncio.gather(*self._pumps, return_exceptions=True)
 
     # ------------------------------------------------------------------ docker
