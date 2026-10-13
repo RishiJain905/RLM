@@ -117,6 +117,15 @@ class CheckDiffTest(unittest.TestCase):
         c = self.check(file_patch("pkg/api.py", ["a"], ["b"]) + file_patch("tests/test_new.py", [], ["def test_x(): pass"], new_file=True))
         self.assertEqual((self.rules(c), c.stripped["new_test_files"], c.files_changed), ([], 1, 1))
 
+    def test_new_test_files_never_reach_the_run_in_any_language(self):
+        # Go, Rust and Java compile every test file in scope (a Go init() would run), so a new one is dropped, not just unrun.
+        for language, path in (("go", "pkg/evil_test.go"), ("rust", "tests/evil.rs"), ("java", "src/test/java/a/EvilTest.java"),
+                               ("javascript", "src/evil.test.js"), ("typescript", "src/evil.spec.ts"), ("python", "pkg/evil_test.py")):
+            c = self.check(file_patch("pkg/api.py", ["a"], ["b"]) + file_patch(path, [], ["func init() { os.Exit(0) }"], new_file=True),
+                           language)
+            self.assertEqual(([f.path for f in c.files], c.stripped["new_test_files"], self.rules(c)), (["pkg/api.py"], 1, []),
+                             language)
+
     def test_any_conftest_is_test_configuration(self):
         for patch in (file_patch("conftest.py", [], ["import pytest"], new_file=True),
                       file_patch("pkg/conftest.py", ["x = 1"], ["x = 2"]), file_patch("pytest.ini", ["[pytest]"], ["[pytest]", "addopts = -x"])):
