@@ -268,6 +268,21 @@ class LeakAndLevelTest(unittest.TestCase):
         self.assertEqual(editreal.level_of(4, 60), 4)
         self.assertEqual(editreal.level_of(3, 150), 5)
 
+    def test_rust_removed_files_named_by_what_is_left(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            for rel, text in {"Cargo.toml": '[package]\nname = "x"\n\n[[test]]\nname = "special"\npath = "tests/special.rs"\n',
+                              "tests/a.rs": "mod common;\n#[test] fn a() { common::help(); }\n",
+                              "tests/b.rs": "#[test] fn b() {}\n", "src/lib.rs": "pub fn f() {}\n"}.items():
+                (tree / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tree / rel).write_text(text, encoding="utf-8")
+            self.assertEqual(editdata.rust_hidden_named(tree, ["tests/b.rs"]), [])  # its own crate: nothing breaks
+            self.assertEqual(len(editdata.rust_hidden_named(tree, ["tests/common/mod.rs"])), 1)  # `mod common;`
+            self.assertEqual(len(editdata.rust_hidden_named(tree, ["tests/special.rs"])), 1)  # a Cargo.toml path
+
     def test_patches_without_git_headers_get_them(self):
         bare = "--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,2 +1,2 @@\n x\n-y\n+z\n--- /dev/null\n+++ b/src/n.ts\n@@ -0,0 +1 @@\n+w\n"
         fixed = editdata.with_git_headers(bare)

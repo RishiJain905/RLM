@@ -594,7 +594,30 @@ async def validate(record: dict, image: editbox.EditImage, runs: int = 3, run_id
 VISIBLE_CHECK_VERSION = 4  # 2: Go compiles tests instead of `go vet`; 3: and doesn't run TestMain (-exec /bin/true);
 # 4: a check that runs out of time is tried again with more, and never counts as broken visible tests; Gradle builds
 # compile their tests with Gradle
-VISIBLE_TIMEOUT_S = 1800  # compiling every test target (Go packages, a Rust crate) on the slow data drive, under load
+VISIBLE_TIMEOUT_S = 1800  # compiling every test target of a Go module on the slow data drive, under load
+
+
+def rust_hidden_named(tree: Path, removed: list[str]) -> list[str]:
+    """Rust: which removed files something left in the repository still names: a `mod` line where the module would
+    load it from, or a string naming the file (`#[path = ...]`, a Cargo.toml `path`). Each integration test file
+    under tests/ is its own crate, and a test module under src/ stays as an empty file (hide_plan), so a removed file
+    breaks the visible tests' build only when something names it."""
+    files = [p for p in tree.rglob("*") if p.is_file() and (p.suffix == ".rs" or p.name == "Cargo.toml")
+             and "target" not in p.relative_to(tree).parts]
+    texts = {p: p.read_text(encoding="utf-8", errors="replace") for p in files}
+    named = []
+    for rel in removed:
+        path = tree / rel
+        stem, loader_dir = (path.parent.name, path.parent.parent) if path.name == "mod.rs" else (path.stem, path.parent)
+        mod_line = re.compile(rf"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+{re.escape(stem)}\s*;", re.M)
+        literal = re.compile(rf"[\"'][^\"'\n]*{re.escape(path.name)}[\"']")
+        for p, text in texts.items():
+            if p == path:
+                continue
+            if (p.suffix == ".rs" and p.parent == loader_dir and mod_line.search(text)) or literal.search(text):
+                named.append(f"{rel} (named in {p.relative_to(tree).as_posix()})")
+                break
+    return named
 
 
 async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str = "edit-validate") -> tuple[bool, str]:
@@ -604,6 +627,11 @@ async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str 
     task = editreal.to_task(record, "edit_real")
     ws_dir = await asyncio.to_thread(task.workspace.ensure)
     language = record["language"]
+    if language == "rust" and not record.get("visible_check"):
+        # Compiling every test target of a crate ran past an hour on the data drive; what a removal can break is
+        # decided statically instead (rust_hidden_named).
+        named = await asyncio.to_thread(rust_hidden_named, ws_dir / "tree", list(record.get("remove") or []))
+        return (not named), ("still named: " + "; ".join(named)) if named else "no removed file is named by what's left"
     checks = {"python": ["python", "-m", "pytest", "-q", "--collect-only", "-p", "no:cacheprovider"],
               "go": ["go", "test", "-count=1", "-run", "^$", "-exec", "/bin/true", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
               "java": ["mvn", "-o", "-q", "test-compile"]}
