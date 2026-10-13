@@ -417,7 +417,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 <section class="hero wide">
   <div class="herowrap">
     <div>
-      <p class="eyebrow">RLM project · Part 1 field guide · state on 12 Oct 2026</p>
+      <p class="eyebrow">RLM project · Part 1 field guide · state on 13 Oct 2026</p>
       <h1 style="margin-top:14px">Teaching Qwen to <em>recurse</em></h1>
       <p class="lede">We are about to train <span class="t" data-t="qwen">Qwen3.8-27B</span> to answer questions about texts it never reads, and to change code in repositories too big to read. It gets a Python <span class="t" data-t="repl">REPL</span> holding up to ~400,000 characters, 12 turns, and 30 calls to a frozen copy of itself; for a coding task, a repository on disk, 20 turns, and tests it never sees that decide its score. This page walks the whole <span class="t" data-t="rl">RL</span> run end to end: what is built and tested, what the model actually sees, how every episode is scored and policed, how training decides when to stop, and what the run and the final eval will look like.</p>
       <div class="heromark">
@@ -428,7 +428,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <span class="chip prop">Proposed, not decided</span>
         <span class="chip illus">Illustration</span>
       </div>
-      <p class="small muted" style="margin-top:12px">Every number on this page comes from the project's committed docs and code (steps 1-9 on branch <code>claude/project-thread-9nnh3n</code>), the project's spend log, and, for code editing and prompt v2, spec v2 (§12 of <code>production-spec.md</code>) and <code>code-editing-plan.md</code>, which Rishi approved on 12 Oct. Editing is being built now: nothing about it has run, and its costs are estimates. Anything not yet run is labelled. Dotted words explain themselves on hover or tap.</p>
+      <p class="small muted" style="margin-top:12px">Every number on this page comes from the project's committed docs and code (steps 1-9 on branch <code>claude/project-thread-9nnh3n</code>), the project's spend log, and, for code editing and prompt v2, spec v2 (§12 of <code>production-spec.md</code>) and <code>code-editing-plan.md</code>, which Rishi approved on 12 Oct, and the edit build's results (<code>edit-build-results.md</code>). The edit environment is built and passed a dry run on the PC with a scripted model in place of Qwen; no real model has tried an edit task yet, so edit costs are still estimates. Anything not yet run is labelled. Dotted words explain themselves on hover or tap.</p>
     </div>
     <figure class="heroviz" aria-label="Animated illustration of one episode: the root model probes a 391,846-character context, sends one chunk to a sub-call, fans out 19 more in parallel, sums the counts and submits.">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
@@ -458,21 +458,21 @@ label.ctl output{color:var(--ink);font-weight:700}
     <div class="grid g4">
       <div class="card"><div class="k">Method</div><div class="stat" style="margin-top:8px">GRPO</div><p style="margin-top:8px">On <span class="t" data-t="wandb">W&amp;B</span> serverless RL (<span class="t" data-t="art">ART</span> 0.5.20), training a LoRA on Qwen3.8-27B. Chosen after a three-way test with <span class="t" data-t="sdpo">SDPO</span> and <span class="t" data-t="rlsd">RLSD</span>, then a 20-step head-to-head with RLSD.</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
       <div class="card"><div class="k">Evidence so far</div><div class="stat" style="margin-top:8px">0.50 → 0.70</div><p style="margin-top:8px">Held-out accuracy, base vs GRPO after 20 steps, 100 episodes each: about 3 <span class="t" data-t="se">standard errors</span>. One seed only, which step 10 repeats.</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
-      <div class="card"><div class="k">Built so far</div><div class="stat" style="margin-top:8px">9 <small>of 13 steps</small></div><p style="margin-top:8px">Sandbox, limiter, reward, detectors, difficulty controller, training loop, data, red-team, live dashboard. Through step 8: 246 tests, 245 pass. $0 of W&amp;B credit spent on steps 3-9. Code editing (steps E1-E6) is being built now.</p><p style="margin-top:8px"><span class="chip built">Built and tested</span></p></div>
+      <div class="card"><div class="k">Built so far</div><div class="stat" style="margin-top:8px">9 <small>of 13 steps</small></div><p style="margin-top:8px">Sandbox, limiter, reward, detectors, difficulty controller, training loop, data, red-team, live dashboard. Through step 8: 246 tests, 245 pass. $0 of W&amp;B credit spent on steps 3-9. Code editing (E1-E5) is built too, at $0: 399 tests pass, 1 skipped.</p><p style="margin-top:8px"><span class="chip built">Built and tested</span></p></div>
       <div class="card"><div class="k">The binding limit</div><div class="stat" style="margin-top:8px">~$218</div><p style="margin-top:8px">W&amp;B inference credit left of $250. Every rollout, sub-call and eval bills here. The $1,000 training-GPU pot is barely touched ($8.02).</p><p style="margin-top:8px"><span class="chip measured">Measured</span></p></div>
     </div>
   </div>
 
   <div class="col" style="margin-top:34px">
     <h3 style="margin-top:0">The build, step by step</h3>
-    <p>The production plan has 13 steps, and spec v2 added six more, E1-E6, for code editing. Steps 1-9 are done and committed; step 9, the live dashboard, was tested on a dry run. E1, the spec, is approved; E2-E5 build it on Rishi's PC and are under way. E6, the brief for a red-team of the edit environment, is written last, and Rishi hands it to a separate Claude session himself. Step 10 can run now, alongside that build (decision E-g); steps 11 and 12 need the edit tasks, so they follow it. Steps 10-13 spend credit, so each waits for Rishi's go-ahead. Pick a step.</p>
+    <p>The production plan has 13 steps, and spec v2 added six more, E1-E6, for code editing. Steps 1-9 are done and committed; step 9, the live dashboard, was tested on a dry run. E1, the spec, is approved, and E2-E5 built it on Rishi's PC, finishing on 13 Oct with a first round of real coding tasks in Python, Go and JavaScript. E6, the brief for a red-team of the edit environment, is written when Rishi asks for it, and he hands it to a separate Claude session himself. Step 10 uses no edit tasks (decision E-g); steps 11 and 12 use them. Steps 10-13 spend credit, so each waits for Rishi's go-ahead. Pick a step.</p>
   </div>
   <div class="wide">
     <figure class="fig">
       <div class="track" id="track" role="group" aria-label="The 13 build steps and the six edit-build steps"></div>
-      <div class="tracklegend" aria-hidden="true"><span><i style="background:var(--ok)"></i>built and tested</span><span><i style="background:repeating-linear-gradient(135deg,var(--prog) 0 5px,color-mix(in srgb,var(--prog) 45%,transparent) 5px 10px)"></i>edit build, under way</span><span><i style="background:var(--plan-bg);border:1px dashed var(--plan)"></i>planned</span></div>
+      <div class="tracklegend" aria-hidden="true"><span><i style="background:var(--ok)"></i>built and tested</span><span><i style="background:var(--plan-bg);border:1px dashed var(--prog)"></i>edit build, still to do</span><span><i style="background:var(--plan-bg);border:1px dashed var(--plan)"></i>planned</span></div>
       <div class="trackdetail" id="trackDetail" aria-live="polite"></div>
-      <figcaption><b>Green</b> steps are built and tested at $0 of W&amp;B credit, apart from step 2's $0.13 of checks. <b>Striped</b> steps E2-E5 add code editing and are being built at $0 of W&amp;B credit, with E6 to follow; the edit probe the plan once called E7 was dropped, and step 11 measures edit costs instead. <b>Dashed</b> steps are planned and spend inference credit, except step 13, which runs off W&amp;B.</figcaption>
+      <figcaption><b>Green</b> steps are built and tested at $0 of W&amp;B credit, apart from step 2's $0.13 of checks. E2-E5 added code editing the same way. <b>Blue dashed</b> E6, the edit red-team brief, is still to write. The edit probe the plan once called E7 was dropped, and step 11 measures edit costs instead. <b>Dashed</b> steps are planned and spend inference credit, except step 13, which runs off W&amp;B.</figcaption>
     </figure>
   </div>
 
@@ -814,7 +814,7 @@ label.ctl output{color:var(--ink);font-weight:700}
   <div class="col">
     <div class="chhead"><span class="chnum">06 · WHAT IT TRAINS ON</span><h2>Six task families: four that read, two that edit</h2></div>
     <p>Every read task is generated on the host from a fresh random 64-bit seed, has one verifiable answer (a number, a name or a list, never multiple choice or a judge), and carries a <span class="t" data-t="blind">blind guess</span> so partial credit only pays for beating it. Each read family has five <span class="t" data-t="level">levels</span>, from the ~36K characters of the old ticket tasks up to ~400K, which about 20 sub-calls of ~20K characters can cover. Cybersecurity was dropped from training on 11 Oct (decision 7c), and its share went to aggregation and code.</p>
-    <p>On 12 Oct, spec v2 cut the four read families to 60% of the tasks and gave the other 40% to two edit families, which ask the model to change code rather than answer a question (decision E-a). The read families are built and tested; the edit families are being built now, and <a href="#editing">chapters 09 and 10</a> explain them.</p>
+    <p>On 12 Oct, spec v2 cut the four read families to 60% of the tasks and gave the other 40% to two edit families, which ask the model to change code rather than answer a question (decision E-a). Both are built and tested: the read families in steps 3-8, the edit families in steps E2-E5. <a href="#editing">Chapters 09 and 10</a> explain the edit families.</p>
   </div>
   <div class="wide">
     <div class="grid g3" style="margin-top:22px">
@@ -838,13 +838,13 @@ label.ctl output{color:var(--ink);font-weight:700}
         <p>A real GitHub issue and its repository's Python files at the commit it was filed against. The answer is the set of files the real fix changed, scored by set-F1. Git history never enters the sandbox.</p>
         <p class="small muted" style="margin-top:8px">Long Code Arena bug localization: 531 training items from 37 repos. Blind guess: the files the issue names. Unchanged at 15%: finding where a change goes is the read skill closest to editing.</p>
       </div>
-      <div class="card" style="border-top:4px dashed var(--f5)">
-        <div class="row" style="justify-content:space-between"><div class="k">edit_real · 25% · edit</div><span class="chip plan">Planned</span></div><h4 style="margin-top:6px">Fix the bug, or build the feature</h4>
-        <p>A real repository with its own test suite, and a task: a reported bug to fix, or a described feature to implement. The change is graded by tests the model never sees. Repositories in five language groups, permissive licences only.</p>
-        <p class="small muted" style="margin-top:8px">Bug tasks (SWE-smith's for Python and Go, our own for the other languages), feature tasks we generate, and a small real-PR slice from SWE-rebench V2: about 310 in all. Levels by the size of the real fix. <a href="#editing">More in chapter 09.</a></p>
+      <div class="card" style="border-top:4px solid var(--f5)">
+        <div class="row" style="justify-content:space-between"><div class="k">edit_real · 25% · edit</div><span class="chip built">Built and tested</span></div><h4 style="margin-top:6px">Fix the bug, or build the feature</h4>
+        <p>A real repository with its own test suite, and a task: a reported bug to fix, or a described feature to implement. The change is graded by tests the model never sees. Permissive licences only. The first round trains on Python, Go and JavaScript repositories; Rust, TypeScript and Java follow in a later round.</p>
+        <p class="small muted" style="margin-top:8px">Bug tasks (SWE-smith's for Python and Go), feature tasks we generate, and real-PR tasks from SWE-rebench V2: 107 training tasks in the first round, of about 310 planned. Levels by the size of the real fix. <a href="#editing">More in chapter 09.</a></p>
       </div>
-      <div class="card" style="border-top:4px dashed var(--f6)">
-        <div class="row" style="justify-content:space-between"><div class="k">edit_synth · 15% · edit</div><span class="chip plan">Planned</span></div><h4 style="margin-top:6px">Change our generated packages</h4>
+      <div class="card" style="border-top:4px solid var(--f6)">
+        <div class="row" style="justify-content:space-between"><div class="k">edit_synth · 15% · edit</div><span class="chip built">Built and tested</span></div><h4 style="margin-top:6px">Change our generated packages</h4>
         <p>The packages behind callgraph and needle, with something to change: a bug to find from its symptom, a function to change along with every caller, or an option to thread through several modules. Hidden property tests grade it.</p>
         <p class="small muted" style="margin-top:8px">About a third of edit_real's cost per episode, and clean difficulty levels. <a href="#editing">More in chapter 09.</a></p>
       </div>
@@ -930,10 +930,10 @@ label.ctl output{color:var(--ink);font-weight:700}
           <tr><td>LEDGAR (LexGLUE)</td><td>CC-BY-4.0</td><td><b>Training</b> · aggregation</td></tr>
           <tr><td>arXiv titles</td><td>CC0-1.0</td><td><b>Training</b> · aggregation (levels 1-3)</td></tr>
           <tr><td>Long Code Arena bug localization</td><td>Apache-2.0; repos MIT or Apache-2.0</td><td><b>Training</b> · repo_loc</td></tr>
-          <tr><td>SWE-smith per-repository images; Python and Go task instances</td><td>MIT datasets; each repository kept only if its own licence is permissive</td><td><b>Training</b> · edit_real (planned)</td></tr>
+          <tr><td>SWE-smith per-repository images; Python and Go task instances</td><td>MIT datasets; each repository kept only if its own licence is permissive</td><td><b>Training</b> · edit_real</td></tr>
           <tr><td>SWE-smith JavaScript, TypeScript, Rust and Java task instances</td><td>none stated</td><td>Eval only (fails 7b); training uses our own tasks on the same permissive repositories</td></tr>
-          <tr><td>SWE-rebench V2 (real-PR slice)</td><td>CC-BY-4.0; repositories checked the same way</td><td><b>Training</b> · edit_real (planned)</td></tr>
-          <tr><td>Our code generators</td><td>ours</td><td><b>Training</b> · edit_synth (planned)</td></tr>
+          <tr><td>SWE-rebench V2 (real-PR slice)</td><td>CC-BY-4.0; repositories checked the same way</td><td><b>Training</b> · edit_real</td></tr>
+          <tr><td>Our code generators</td><td>ours</td><td><b>Training</b> · edit_synth</td></tr>
           <tr><td>HuffPost News Category</td><td>CC-BY-4.0</td><td>Eval only, held out by design</td></tr>
           <tr><td>OOLONG-synth</td><td>none stated; built from some non-commercial sets</td><td>Eval only (fails 7b)</td></tr>
           <tr><td>IFEval · MMLU-Pro · CRUXEval</td><td>Apache-2.0 · MIT · MIT</td><td>Eval only, capability check</td></tr>
@@ -1039,7 +1039,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 <section class="ch" id="editing">
   <div class="col">
     <div class="chhead"><span class="chnum">09 · CHANGING CODE</span><h2>Edit episodes: the model changes a repository</h2></div>
-    <div class="row"><span class="chip plan">Planned</span><span class="chip prog">Being built now</span><span class="chip illus">Costs inferred, nothing measured</span></div>
+    <div class="row"><span class="chip built">Built and tested</span><span class="chip illus">Costs inferred: no real model has run an edit task yet</span></div>
     <p style="margin-top:12px">Every task in the chapters so far ends in an answer: a number, a name, a list of files. The root writes Python in every one of those episodes, but only to read. On 12 Oct Rishi approved adding real code editing to the run, so the model learns to change code, not only to read it. Under spec v2, 40% of the training tasks are coding tasks, and one attempt at one of them is an edit episode. A step's 32 episodes include 12 or 16 of them: 3 or 4 of its 8 tasks, 4 rollouts each.</p>
     <div class="note" style="margin-top:16px"><b class="lab">An edit episode, in four sentences</b>The model gets a coding task (fix this bug, or add this feature) and a repository on disk at <code>/work/repo</code>. For up to 20 turns it writes Python that explores the files, asks sub-calls to read and draft, edits files, and runs the repository's own tests. Then it calls <code>submit()</code> with a one-line summary, which nobody grades. The host takes the diff it made, applies it to a clean copy in a fresh container, runs tests the model never saw, and scores 1 if every one passes and 0 otherwise.</div>
   </div>
@@ -1075,13 +1075,13 @@ label.ctl output{color:var(--ink);font-weight:700}
           <tr class="grp"><th>Limits</th><td></td><td></td></tr>
           <tr><th>Turns</th><td class="tnum">12</td><td class="tnum">20</td></tr>
           <tr><th>Root tokens a turn</th><td class="tnum">3,072</td><td class="tnum">4,096</td></tr>
-          <tr><th>Compute per cell</th><td class="tnum">120 s</td><td class="tnum">300 s</td></tr>
+          <tr><th>Compute per cell</th><td class="tnum">120 s</td><td>300 s; more for a task whose tests run slowly</td></tr>
           <tr><th>Sub-calls</th><td>30, each ≤24,000 chars in, ≤1,024 tokens out</td><td>30, the same</td></tr>
           <tr><th>Output shown a turn</th><td class="tnum">2,000 chars</td><td class="tnum">2,000 chars</td></tr>
           <tr><th>Container</th><td>1 CPU, 512 MB, 64 processes</td><td>2 CPUs, 4 GB, 256 processes</td></tr>
           <tr><th>Can run programs</th><td>No: every exec fails</td><td>Yes: the image's own build tools and test runner</td></tr>
           <tr><th>Can write</th><td><code>/scratch</code></td><td><code>/scratch</code> and <code>/work/repo</code></td></tr>
-          <tr><th>Grader time</th><td>none needed</td><td>up to 600 s</td></tr>
+          <tr><th>Grader time</th><td>none needed</td><td>at least 600 s; more for a task whose tests run slowly</td></tr>
           <tr><th>Cost an episode</th><td>$0.016 at level 1 (measured); ~$0.06 at level 5 (fitted)</td><td>~$0.06 edit_synth, ~$0.15 edit_real (inferred)</td></tr>
         </tbody>
       </table>
@@ -1139,26 +1139,26 @@ label.ctl output{color:var(--ink);font-weight:700}
 
   <div class="col">
     <h3>Two edit families</h3>
-    <p>Both families are being built now (steps E3 and E4). Real repositories are the point, because that is the work Rishi does and a model trained only on synthetic edits may not carry the skill over. The synthetic tier costs about a third as much, needs no new images, and has clean difficulty levels for the controller.</p>
+    <p>Both families were built in steps E3 and E4. Real repositories are the point, because that is the work Rishi does and a model trained only on synthetic edits may not carry the skill over. The synthetic tier costs about a third as much, needs no new images, and has clean difficulty levels for the controller.</p>
   </div>
   <div class="wide">
     <div class="grid g2" style="margin-top:18px">
-      <div class="card" style="border-top:4px dashed var(--f5)">
-        <div class="row" style="justify-content:space-between"><div class="k">edit_real · 25% of tasks</div><span class="chip plan">Planned</span></div>
+      <div class="card" style="border-top:4px solid var(--f5)">
+        <div class="row" style="justify-content:space-between"><div class="k">edit_real · 25% of tasks</div><span class="chip built">Built and tested</span></div>
         <h4 style="margin-top:6px">Proper engineering on real repositories</h4>
-        <p>Real repositories with their own test suites, in five language groups (<a href="#langs">the language box below</a>), about 310 training tasks of three kinds.</p>
+        <p>Real repositories with their own test suites, planned in five language groups (<a href="#langs">the language box below</a>), with tasks of three kinds. The first round has 107 training tasks in Python, Go and JavaScript.</p>
         <ul class="tight small" style="margin-top:8px">
           <li><b>Bug fixes:</b> an injected bug in the source, an issue that describes the symptom, and the existing tests it breaks. For Python and Go they come from SWE-smith, which leaves those tests visible; we hide them and re-validate every task in our own grader. For JavaScript, TypeScript, Rust and Java we inject the bugs ourselves, because SWE-smith's datasets for those languages state no licence.</li>
           <li><b>Feature tasks</b> we generate on the same images: remove a function or small feature that existing tests cover, and write the request from its docstring and those tests. The tests that fail after the removal become the hidden set. This is the kind of work Rishi does most (decision E-f).</li>
-          <li><b>A real-PR slice</b> of about 24 tasks from Nebius's SWE-rebench V2: real issues and the merged pull requests that fixed them, so a few tasks aren't made by injecting or removing anything.</li>
+          <li><b>A real-PR slice</b> from Nebius's SWE-rebench V2 (about 24 tasks planned; 2 Go tasks in the first round): real issues and the merged pull requests that fixed them, so a few tasks aren't made by injecting or removing anything.</li>
           <li><b>Levels</b> by the real fix: 1 = one file and up to ~10 lines; 2 = one file up to ~40; 3 = two files; 4 = three or more; 5 = multi-file features of ~100+ lines.</li>
           <li><b>One image per repository</b>, SWE-smith's model (decision E-b). Datasets with one image per task need terabytes of images, a cluster's job; one per repository fits Rishi's PC, at roughly 100 GB in all (estimate). Only the small real-PR slice uses one image per task.</li>
           <li><b>Licences:</b> a repository trains only if its own licence is permissive (7b). Repositories that SWE-bench Pro, DeepSWE v1.1 or SWE-bench Multilingual use are dropped from training, and every image must pass its own tests with no network.</li>
         </ul>
         <p class="small muted" style="margin-top:8px">~$0.15 an episode (inferred). Feature requests are written by a Claude thread, at no W&amp;B cost; a leak check refuses any that quotes the removed code or a hidden test's name.</p>
       </div>
-      <div class="card" style="border-top:4px dashed var(--f6)">
-        <div class="row" style="justify-content:space-between"><div class="k">edit_synth · 15% of tasks</div><span class="chip plan">Planned</span></div>
+      <div class="card" style="border-top:4px solid var(--f6)">
+        <div class="row" style="justify-content:space-between"><div class="k">edit_synth · 15% of tasks</div><span class="chip built">Built and tested</span></div>
         <h4 style="margin-top:6px">A cheap tier from our own generators</h4>
         <p>The 15-60-module packages behind callgraph and needle, standard library only, each with a change to make. Each task kind is the edit twin of a read family, so reading and writing meet in one codebase.</p>
         <ul class="tight small" style="margin-top:8px">
@@ -1176,12 +1176,12 @@ label.ctl output{color:var(--ink);font-weight:700}
   <!-- ================= EDIT LANGUAGES: the one place on this page that names edit_real's languages. Update here only. ================= -->
   <div class="wide">
     <figure class="fig" id="langs">
-      <div class="fighead"><h4>Five language groups, one Python REPL</h4><span class="chip plan">Decided 12 Oct · planned, not built</span></div>
-      <p style="font-size:.98rem">Rishi asked for a broad spectrum, so edit_real is multi-language: real repositories in five language groups, <b>Python, Go, TypeScript/JavaScript, Rust and Java</b>. That covers all four of SWE-bench Pro's languages (Python, Go, JavaScript and TypeScript), plus Rust, whose strict compiler gives sharp feedback, and Java. C++ is left out of this run: its builds are slow and its test runners vary too much. Every language has held-out repositories, never trained on, for selection-v2 and heldout-test-v2. Each task records its language, and the dashboard and every eval report results by language.</p>
+      <div class="fighead"><h4>Five language groups, one Python REPL</h4><span class="chip built">First round built 13 Oct: Python, Go, JavaScript</span></div>
+      <p style="font-size:.98rem">Rishi asked for a broad spectrum, so edit_real is multi-language: real repositories in five language groups, <b>Python, Go, TypeScript/JavaScript, Rust and Java</b>. That covers all four of SWE-bench Pro's languages (Python, Go, JavaScript and TypeScript), plus Rust, whose strict compiler gives sharp feedback, and Java. C++ is left out of this run: its builds are slow and its test runners vary too much. Every language gets held-out repositories, never trained on, for selection-v2 and heldout-test-v2. The first round, finished on 13 Oct, trains and evaluates on Python, Go and JavaScript: the images live on a slow USB drive, where checking every task took longer than planned, so Rust, TypeScript and Java wait for a later round, with their images and candidate tasks kept on the drive. Each task records its language, and the dashboard and every eval report results by language.</p>
       <div class="split" style="margin-top:16px;align-items:start">
         <div>
           <div class="hbars" id="langTasks"></div>
-          <p class="small muted" style="margin-top:10px">About 310 training tasks (planned counts). Every language group runs on SWE-smith's images, one per repository. Python and Go train on SWE-smith's own bug tasks plus our feature-removal tasks; JavaScript, TypeScript, Rust and Java train only on tasks we make ourselves (feature removals and our own injected bugs), because SWE-smith's datasets for them state no licence, and their SWE-smith tasks are used for evals only. The real-PR slice, 8 tasks each in Python, Go and TypeScript, comes from Nebius's SWE-rebench V2: real issues and their merged fixes, one image per task, CC-BY-4.0. The images live on the PC's D: drive, roughly 100 GB in all (estimate).</p>
+          <p class="small muted" style="margin-top:10px">First round: 107 training tasks, against about 310 planned. Every task passed our grader's checks: its hidden tests fail without the fix, pass on three runs with it, and the visible tests still build. Every language group runs on SWE-smith's images, one per repository. Python and Go train on SWE-smith's own bug tasks plus our feature-removal tasks; JavaScript, TypeScript, Rust and Java train only on tasks we make ourselves (feature removals and our own injected bugs), because SWE-smith's datasets for them state no licence, and their SWE-smith tasks are used for evals only. The real-PR slice (planned at 8 tasks each in Python, Go and TypeScript; 2 Go tasks in the first round) comes from Nebius's SWE-rebench V2: real issues and their merged fixes, one image per task, CC-BY-4.0. The images live on the PC's D: drive, roughly 100 GB in all (estimate).</p>
         </div>
         <div class="scroll-x">
           <table class="tbl langtbl">
@@ -1203,7 +1203,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <div class="ar">builds and tests</div>
         <div class="box" style="border-color:var(--f5)"><b style="color:var(--f5)">/work/repo</b>The code and its visible tests. The first message names a generic test command for the repository, never the hidden tests' names.</div>
       </div>
-      <figcaption><b>The model never leaves Python.</b> It searches, reads and edits files with the coding tools (or plain <code>open</code>) and runs everything else through <code>shell</code> (or <code>subprocess</code>). The grader reads per-test results from each language's own test report, so one grader serves all five. Spec v2 §12.7 pins this list and §12.5 the report formats; nothing for it is built yet.</figcaption>
+      <figcaption><b>The model never leaves Python.</b> It searches, reads and edits files with the coding tools (or plain <code>open</code>) and runs everything else through <code>shell</code> (or <code>subprocess</code>). The grader reads per-test results from each language's own test report, so one grader serves all five. Spec v2 §12.7 pins this list and §12.5 the report formats. The grader reads all five formats; the first round trains on three of the languages.</figcaption>
     </figure>
   </div>
   <!-- ================= end EDIT LANGUAGES ================= -->
@@ -1241,7 +1241,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 <section class="ch" id="grading">
   <div class="col">
     <div class="chhead"><span class="chnum">10 · JUDGING A CHANGE</span><h2>Hidden tests, a fresh box, and a 1 or a 0</h2></div>
-    <div class="row"><span class="chip plan">Planned</span><span class="chip prog">Being built now</span></div>
+    <div class="row"><span class="chip built">Built and tested</span></div>
     <p style="margin-top:12px">A read episode's answer is checked against a gold answer the host already holds. An edit episode hands back a change to a codebase, and the fair test of a change is to run it. So the host runs it, in a container the model never touched, against tests the model never saw. This chapter covers the sandbox an edit episode runs in, the grader, the reward, the new detectors, how the task pool stays useful, and the evals, as spec v2 §12 sets them.</p>
   </div>
 
@@ -1274,7 +1274,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 
   <div class="wide">
     <figure class="fig" id="tools">
-      <div class="fighead"><h4>Seven coding tools in the REPL</h4><span class="chip prog">Written, not wired in yet</span></div>
+      <div class="fighead"><h4>Seven coding tools in the REPL</h4><span class="chip built">Built and tested</span></div>
       <p style="font-size:.98rem">Rishi asked for the tools a real coding harness gives its model. Claude Code, Codex, DeepSeek Harness and Qwen Code (the coding agent from the model's own family) all ship much the same core: read a file, find files, search contents, make an exact edit, write a file and run a command. We add <code>diff</code>, which they get through the shell. Our root writes Python, so here each tool is a Python function it calls from code, and what comes back is a Python value it can filter, count or hand to a sub-call. It still sees only what it prints.</p>
       <div class="scroll-x" style="margin-top:14px">
         <table class="tbl">
@@ -1340,7 +1340,7 @@ label.ctl output{color:var(--ink);font-weight:700}
     </div>
   </div>
   <div class="col" style="margin-top:20px">
-    <p>Broader signals, such as <code>inspect.stack()</code>, new environment-variable reads or <code>sys.settrace</code> in non-test code, are legitimate often enough that they go to the Claude audit's queue instead of the reward. Before any credit is spent on edit tasks, the edit environment and the grader get a red-team, as step 8 did for reading. Step E6 is the brief for it, written last, once everything else is built; Rishi hands it to a separate Claude session himself. That session checks whether reward can be earned without solving the task: forged results, test edits, conftest tricks, history mining, reaching the hidden tests, crashing the grader. Every hole that works gets fixed and a regression test.</p>
+    <p>Broader signals, such as <code>inspect.stack()</code>, new environment-variable reads or <code>sys.settrace</code> in non-test code, are legitimate often enough that they go to the Claude audit's queue instead of the reward. Before any credit is spent on edit tasks, the edit environment and the grader get a red-team, as step 8 did for reading. Step E6 is the brief for it: everything else is built, and the brief is written when Rishi asks for it; he hands it to a separate Claude session himself. That session checks whether reward can be earned without solving the task: forged results, test edits, conftest tricks, history mining, reaching the hidden tests, crashing the grader. Every hole that works gets fixed and a regression test.</p>
     <details class="card" style="margin-top:14px">
       <summary class="mono" style="cursor:pointer">Exploits closed by construction (no detector needed)</summary>
       <div class="scroll-x" style="margin-top:10px">
@@ -1379,7 +1379,7 @@ label.ctl output{color:var(--ink);font-weight:700}
   <div class="wide">
     <div class="grid g3" style="margin-top:18px">
       <div class="card"><div class="k">Every 10 steps · picks the checkpoint</div><h4 style="margin-top:6px">selection-v2 · 64 tasks</h4><p>48 read tasks (the read families in the new mix's proportions, plus the ticket tasks) and 16 edit tasks: 6 edit_synth held-out seeds and 10 edit_real tasks from repositories training never sees, across languages. It replaces the first selection set for production and the baselines.</p></div>
-      <div class="card"><div class="k">Once, at the end · never chooses anything</div><h4 style="margin-top:6px">heldout-test-v2 · 230 tasks</h4><p>The 170 read tasks of the first held-out test plus 60 edit tasks: 20 from edit_synth_heldout and 40 edit_real tasks from held-out repositories, at least 15 of them feature tasks.</p></div>
+      <div class="card"><div class="k">Once, at the end · never chooses anything</div><h4 style="margin-top:6px">heldout-test-v2 · 230 tasks</h4><p>The 170 read tasks of the first held-out test plus 60 edit tasks: 20 from edit_synth_heldout and 40 edit_real tasks from held-out repositories, at least 15 of them feature tasks (the first round has 8, a known gap).</p></div>
       <div class="card"><div class="k">Step 11 · ~$9, on W&amp;B</div><h4 style="margin-top:6px">The base model's starting point</h4><p>The base model runs selection-v2, with its 16 edit tasks twice. That gives the step-0 resolved rate every comparison needs, and the first measured cost of an edit episode. Until then the costs on this page are estimates.</p></div>
     </div>
   </div>
@@ -1674,7 +1674,7 @@ label.ctl output{color:var(--ink);font-weight:700}
   <div class="col">
     <div class="chhead"><span class="chnum">15 · WATCHING IT</span><h2>A live dashboard friends can open</h2></div>
     <p><span class="chip built">Built and dry-run tested</span></p>
-    <p style="margin-top:10px">Step 9 is one shareable page, modelled on MiMo-V2.6's public RL page. A Claude session on Rishi's PC republishes it after every training step (9a), Rishi invites friends from its Share menu (9b), and it shows sampled training transcripts (9c). Every chart shares one step axis, so hovering one puts a crosshair on that step in all of them. One link serves every run, so friends invited now will see the second seed and production. <a href="https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3">The dashboard</a> is private until Rishi shares it, and today it shows a dry run, badged as one. Spec v2 adds an Editing panel, being built now with the edit families (step E5); it is the dashed card below.</p>
+    <p style="margin-top:10px">Step 9 is one shareable page, modelled on MiMo-V2.6's public RL page. A Claude session on Rishi's PC republishes it after every training step (9a), Rishi invites friends from its Share menu (9b), and it shows sampled training transcripts (9c). Every chart shares one step axis, so hovering one puts a crosshair on that step in all of them. One link serves every run, so friends invited now will see the second seed and production. <a href="https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3">The dashboard</a> is private until Rishi shares it, and today it shows a dry run, badged as one. Step E5 added an Editing panel, the dashed card below; it fills once a run has edit episodes.</p>
   </div>
   <div class="wide">
     <div class="grid g4" style="margin-top:20px" id="dashPanels"></div>
@@ -1704,7 +1704,7 @@ label.ctl output{color:var(--ink);font-weight:700}
 <section class="ch" id="run">
   <div class="col">
     <div class="chhead"><span class="chnum">16 · WHAT HAPPENS NEXT</span><h2>Three runs that spend money, in order</h2></div>
-    <p>Everything above was built and tested at $0, apart from the editing work, which is being built now, also at $0 of W&amp;B credit. The next three steps each wait for Rishi's go-ahead before they spend inference credit. Step 10 doesn't touch edit tasks, so it can run while the edit build goes on; steps 11 and 12 need it finished.</p>
+    <p>Everything above was built and tested at $0 of W&amp;B credit, the editing work included. The next three steps each wait for Rishi's go-ahead before they spend inference credit. Step 10 doesn't touch edit tasks; steps 11 and 12 use them.</p>
   </div>
   <div class="wide">
     <div class="grid g3" style="margin-top:20px">
@@ -1723,7 +1723,7 @@ label.ctl output{color:var(--ink);font-weight:700}
       <div class="card" style="border-top:4px dashed var(--plan)">
         <div class="row" style="justify-content:space-between"><div class="k">Step 12 · ≤$157 + ~$30</div><span class="chip plan">Planned</span></div>
         <h4 style="margin-top:8px">Production</h4>
-        <p>GRPO at 32 episodes a step on spec v2's mix (60% read, 40% edit), every family starting at level 1, the dashboard updating each step. selection-v2 and the capability check every 10 steps. It runs until a stop rule fires or the ~$157 ceiling: about 75 steps at ~$2.10 each <i>(inferred)</i>, with about 960 edit episodes. Stop rules are unchanged; saturation counts the edit families too.</p>
+        <p>GRPO at 32 episodes a step on spec v2's mix (60% read, 40% edit), every family starting at level 1, the dashboard updating each step. selection-v2 and the capability check every 10 steps. It runs until a stop rule fires or the ~$157 ceiling: about 75 steps at ~$2.10 each <i>(inferred)</i>, with about 960 edit episodes. Stop rules are unchanged; saturation counts the edit families too. On the PC's USB drive a step should take about 30-35 minutes, against 290 s for a read-only step, so the run takes about 40 hours <i>(inferred from timing the first round's tasks under load)</i>. The slow drive costs time, never reward. The first round's 107 training tasks are fewer than the ~150 edit_real draws such a run makes, and retiring used-up tasks shrinks the pool further, so step 12 settles that before it starts.</p>
         <p class="small" style="margin-top:8px"><b>Watch for:</b> reward std falling off a cliff, entropy dropping fast or KL jumping, sub-calls climbing toward 30 without accuracy following, turns or tokens at their caps, infra errors above 1%. For edits: episodes at 20 turns with tests still failing, repeated cells, empty diffs, and the resolved rate rising without the testing and sub-call habits that should come with it.</p>
       </div>
     </div>
@@ -1804,8 +1804,8 @@ label.ctl output{color:var(--ink);font-weight:700}
     <div class="grid g4" style="margin-top:18px" id="decisionCards"></div>
   </div>
   <div class="col">
-    <h3>Decided on 12 Oct: the edit plan</h3>
-    <p>Rishi approved every recommended option in the edit plan (E-a to E-g), dropped its paid edit probe, and cut the reserve to $10. Spec v2 now records them, and they settle the old 10a, 10b and 12a. The language list for edit_real was settled the same day and added to spec v2, and so was how licence rule 7b applies to SWE-smith's datasets.</p>
+    <h3>Decided on 12-13 Oct: the edit plan</h3>
+    <p>Rishi approved every recommended option in the edit plan (E-a to E-g), dropped its paid edit probe, and cut the reserve to $10. Spec v2 now records them, and they settle the old 10a, 10b and 12a. The language list for edit_real was settled the same day and added to spec v2, and so was how licence rule 7b applies to SWE-smith's datasets. On 13 Oct he chose to finish the edit build with a first round in three of the five languages.</p>
   </div>
   <div class="wide">
     <div class="grid g4" style="margin-top:18px" id="decidedCards"></div>
@@ -1834,6 +1834,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <tr><td><code>production-build-plan.md</code></td><td>The 13 steps and the edit build E1-E6, costs, open decisions</td></tr>
         <tr><td><code>production-spec.md</code></td><td>Bridge API, prompts, reward, limits, training settings, LR rule, detectors</td></tr>
         <tr><td><code>production-spec.md</code> §12 (spec v2)</td><td>Edit families: limits, sandbox, grader, reward, detectors, mix, logged metrics, evals, budget. Authoritative where it differs from the plan below</td></tr>
+        <tr><td><code>edit-build-results.md</code></td><td>The edit build E2-E5 as built: sandbox, grader, tasks per language, the first round's counts and known gaps, the slow-drive limits, tests and the dry run</td></tr>
         <tr><td><code>code-editing-plan.md</code></td><td>Why editing, other labs' recipes, task sources, the RLM way of editing, cost estimates, evals, risks</td></tr>
         <tr><td><code>rl-run-research.md</code></td><td>Holes H1-H13, MiMo-V2.6 lessons, cost model, eval design</td></tr>
         <tr><td><code>grpo-for-rlm.md</code>, <code>archive/rlm-three-way-results.md</code></td><td>The three-way and 20-step results, reward by sub-calls</td></tr>
@@ -1848,7 +1849,7 @@ label.ctl output{color:var(--ink);font-weight:700}
         <tr><td><a href="https://arxiv.org/html/2512.24601v3">RLM paper</a> · <a href="https://arxiv.org/abs/2601.20802">SDPO</a> · <a href="https://arxiv.org/abs/2604.03128">RLSD</a></td><td>Background</td></tr>
       </tbody>
     </table>
-    <p class="foot">Built 11-12 Oct 2026 from the committed state of steps 1-9 (step 9 is commit <code>aed0766</code>) and the mix fix (<code>2ce8f87</code>); updated 12 Oct for spec v2 (code editing, prompt v2 and the per-family limits) in every chapter, from the approved but not yet committed spec §12 and edit plan. The call-graph replay ran our generator, observation builder, reward and detectors locally with scripted moves; no model was called and no W&amp;B credit was used. The aggregation episode, the edit episode and its grading scenarios, the controller simulation and the expected-shape charts are illustrations and are labelled as such. Nothing about editing has run yet, and its costs are estimates.</p>
+    <p class="foot">Built 11-12 Oct 2026 from the committed state of steps 1-9 (step 9 is commit <code>aed0766</code>) and the mix fix (<code>2ce8f87</code>); updated 12 Oct for spec v2 (code editing, prompt v2 and the per-family limits) in every chapter, from the approved spec §12 and edit plan; updated 13 Oct for the finished edit build (E2-E5) and its first round of tasks, from <code>edit-build-results.md</code> (commit <code>5957cf6</code>). The call-graph replay ran our generator, observation builder, reward and detectors locally with scripted moves; no model was called and no W&amp;B credit was used. The aggregation episode, the edit episode and its grading scenarios, the controller simulation and the expected-shape charts are illustrations and are labelled as such. Edit episodes have run only in dry runs with a scripted model, so edit costs are estimates.</p>
   </div>
 </section>
 
@@ -1969,7 +1970,7 @@ const G = {
   readep: ["Read episode", "An episode from one of the four read families: the root answers a question about a long text, and the answer itself is graded against the gold. 12 turns, 3,072 tokens a turn, 120-second cells."],
   editfam: ["Edit family", "A task family whose tasks ask the root to change code: edit_real and edit_synth, 40% of the tasks under spec v2. Their episodes are graded by hidden tests."],
   readfam: ["Read family", "A task family whose tasks end in an answer: aggregation, callgraph, needle and repo_loc, 60% of the tasks under spec v2."],
-  edit_real: ["edit_real", "The real-engineering edit family, 25% of the tasks: real repositories with their own test suites, in five language groups, and a bug to fix, a feature to build or a real issue to resolve. About 310 training tasks; levels go by the size of the real fix."],
+  edit_real: ["edit_real", "The real-engineering edit family, 25% of the tasks: real repositories with their own test suites, planned in five language groups, and a bug to fix, a feature to build or a real issue to resolve. The first round has 107 training tasks in Python, Go and JavaScript, of about 310 planned; levels go by the size of the real fix."],
   edit_synth: ["edit_synth", "The cheap edit family, 15% of the tasks: our own generated packages with a bug to find from its symptom, a function to change along with every caller, or an option to add. Graded by hidden property tests; about a third of edit_real's cost per episode."],
   repo: ["Repository", "A project's code under version control: its source files, tests and build setup. In an edit episode one sits at /work/repo, copied fresh at the task's base commit with no other history."],
   diff: ["Diff / patch", "The line-by-line changes between two versions of some files. The grader takes the diff of /work/repo against the task's base commit; that diff, not the submitted text, is what gets scored."],
@@ -1988,7 +1989,7 @@ const G = {
   retire: ["Task retirement", "Dropping a task that has shown it teaches nothing: one whose group came back all-0 twice, or all-1 once, isn't drawn again. It matters for edit_real's fixed pool of tasks, and the state is saved with every checkpoint."],
   swesmith: ["SWE-smith", "A toolkit and set of datasets that inject bugs into real repositories and write an issue for each, with one prebuilt Docker image per repository rather than per task. edit_real uses its images for every language and its bug tasks for Python and Go, whose datasets are MIT, permissive repositories only."],
   swerebench: ["SWE-rebench V2", "Nebius's dataset of real GitHub issues paired with the merged fixes and their tests, one Docker image per task, CC-BY-4.0. edit_real takes a slice of about 24 real pull requests from it."],
-  realpr: ["Real-PR task", "An edit_real task built from a real issue and the pull request that fixed it, rather than from an injected bug or a removed feature. About 24 of edit_real's tasks, from SWE-rebench V2."],
+  realpr: ["Real-PR task", "An edit_real task built from a real issue and the pull request that fixed it, rather than from an injected bug or a removed feature. About 24 planned, from SWE-rebench V2; the first round has 2, both in Go."],
   swebench: ["SWE-bench", "The best-known benchmark of real GitHub issues: a model must change the repository so hidden tests pass. Its Verified subset is no longer reported by OpenAI or on Qwen3.8's card, because of flawed tests and contamination. Repositories in its Multilingual set are kept out of edit_real's training tasks."],
   swebenchpro: ["SWE-bench Pro", "Scale's harder successor to SWE-bench: 731 public tasks on real repositories in several languages, with fixes averaging ~107 lines over ~4 files. Step 13's primary real-repository eval, off W&B."],
   deepswe11: ["DeepSWE v1.1", "Datacurve's benchmark of 113 original long-horizon tasks in permissive repositories; reference fixes average ~668 added lines over ~7 files. Its data is marked do-not-train, so here it is an eval only, in step 13."],
@@ -2015,10 +2016,10 @@ const G = {
   junit: ["JUnit XML", "A common report format that lists every test by name with its result. The grader reads it, or the test runner's own equivalent, and counts a test missing from the report as failed."],
   featrem: ["Feature-removal task", "An edit_real task we generate: remove a function or small feature that existing tests cover, and write the request from its docstring and those tests. The tests that fail after the removal become the hidden fail-to-pass set."],
   injected: ["Injected bug", "A bug added to working code on purpose, such as a flipped comparison or an off-by-one. SWE-smith's bug tasks, our own edit_real bug tasks and edit_synth's fix-the-symptom tasks are made this way, so the fix and the tests that catch it are known."],
-  multilang: ["Multi-language", "Covering more than one programming language. edit_real's repositories come in five language groups; the REPL stays Python and drives each repository's own toolchain through the shell tool or subprocess."],
+  multilang: ["Multi-language", "Covering more than one programming language. edit_real's repositories are planned in five language groups, three of them in the first round; the REPL stays Python and drives each repository's own toolchain through the shell tool or subprocess."],
   heldoutrepo: ["Held-out repository", "A repository that no training task uses. The edit tasks in selection-v2 and heldout-test-v2 come from them, in every language, so a score there can't come from having trained on that codebase."],
   selv2: ["selection-v2", "Spec v2's selection set: 64 tasks, 48 read and 16 edit (6 edit_synth held-out seeds, 10 edit_real tasks from repositories training never sees). Run every 10 steps to pick the checkpoint."],
-  heldv2: ["heldout-test-v2", "Spec v2's held-out test: the 170 read tasks plus 60 edit tasks (20 from edit_synth_heldout, 40 edit_real from held-out repositories, at least 15 of them feature tasks). Run once, at the end."],
+  heldv2: ["heldout-test-v2", "Spec v2's held-out test: the 170 read tasks plus 60 edit tasks (20 from edit_synth_heldout, 40 edit_real from held-out repositories, at least 15 of them feature tasks; the first round has 8). Run once, at the end."],
   workrepo: ["/work/repo", "Where an edit episode's repository sits inside the container: a fresh copy at the task's base commit, as a git repository with one commit and no other history. Its files survive a REPL restart."],
   property: ["Property test", "A test that checks a rule on many inputs rather than one fixed example. edit_synth's hidden tests compare the changed code with a reference implementation on inputs drawn fresh for each task."],
   visible: ["Visible test", "A test left in the episode's copy of the repository, which the model can run. The hidden fail-to-pass tests are never among them."],
@@ -2258,21 +2259,21 @@ const AGG = [
     ["Training loop and monitoring", "built", "scripts/train.py: evals every 10 steps, five stop rules, the LR fallback, entropy / KL / clip / grad-norm logging, spending ceilings, a stop switch and resume from any kept checkpoint. 214 tests on fakes; a 42-step dry run in 34 s.", "PC · $0", "#loop"],
     ["Data", "built", "Built with aggregation 45%, code generators 40%, repo localization 15% (spec v2 has since moved the read families to 25/20/15 and given 40% to editing). Five levels per family up to ~400K characters. A 64-task selection set, a 170-task held-out test, a 100-prompt capability check, and a manifest pinning every file. Cyber dropped (7c).", "PC + design · $0 · holes H7, H8", "#data"],
     ["Red-team", "built", "copied_answer was zeroing 13 of 104 honest wins; fixed to 1 of 104 (documented). reward_check.py crashed on 4 of 6 families; rewritten. Every isolation test green. 246 tests, 245 pass.", "Claude agent · $0 · re-checks H1-H4, H11", "#cheating"],
-    ["Live dashboard", "built", "A shareable page a Claude session republishes after every step: 13 panels of per-step charts, cost against the pot, stop-rule status, notices and sampled training transcripts. A paced 14-step dry run got a new version ~9 s after each step. 14 new tests pass. Matching the cost panel to W&B billing waits for step 10. The same thread also fixed the per-step mix rounding. Spec v2 adds an Editing panel (E5).", "PC + Claude · $0 on W&B", "#dashboard"],
-    ["Second seed (the smoke test)", "plan", "The 20-step GRPO run again on environment v2, plus a 100-episode held-out eval: ~740 episodes. It checks 0.70 reproduces, catches plumbing bugs cheaply, picks production's learning rate, and is the dashboard's first live run. It uses no edit tasks, so it can run now, alongside E2-E6 (decision E-g).", "Spend · ~$12 · hole H12", "#run"],
+    ["Live dashboard", "built", "A shareable page a Claude session republishes after every step: 13 panels of per-step charts, cost against the pot, stop-rule status, notices and sampled training transcripts. A paced 14-step dry run got a new version ~9 s after each step. 14 new tests pass. Matching the cost panel to W&B billing waits for step 10. The same thread also fixed the per-step mix rounding. E5 added an Editing panel.", "PC + Claude · $0 on W&B", "#dashboard"],
+    ["Second seed (the smoke test)", "plan", "The 20-step GRPO run again on environment v2, plus a 100-episode held-out eval: ~740 episodes. It checks 0.70 reproduces, catches plumbing bugs cheaply, picks production's learning rate, and is the dashboard's first live run. It uses no edit tasks (decision E-g), and starts when Rishi says so.", "Spend · ~$12 · hole H12", "#run"],
     ["Spec v2", "e1", "Prompt v2, the edit limits, the edit sandbox, the grader contract, the binary reward, three new detectors, the new mix, the edit metrics, selection-v2 and heldout-test-v2, and the new budget, written into production-spec.md §12. Rishi approved it on 12 Oct with every recommended option (E-a to E-g), the paid edit probe dropped and the reserve cut to $10.", "Design · $0", "#editing"],
-    ["Edit sandbox and grader", "ed", "A derived image per real repository, a writable /work/repo with one commit and no history, a standalone Python for the REPL, processes allowed with no network, bigger limits, the seven coding tools loaded into the REPL, and the grader with hidden tests and canaries. Done when every step 3 test still passes and new tests show the hidden tests unreachable, history absent, canaries working and grader failures counted as infra.", "PC · $0", "#grading"],
-    ["edit_synth", "ed", "Three task kinds on our generated packages (fix the symptom, change and update callers, add a feature), levels 1-5, hidden property tests, and a held-out variant. Done when the real change scores 1 and the empty, stub and delete patches score 0 on every kind and level, and a fake-model dry run trains on it.", "PC · $0", "#editing"],
-    ["edit_real data", "ed", "About 310 training tasks in five language groups, plus held-out repositories in every language: choosing the repositories (permissive licences only), pulling and deriving the images, validating every task in our grader, the feature-removal generator, task texts, splits and a manifest. The images, roughly 100 GB (estimate), live on the PC's D: drive.", "PC · $0 of W&B", "#langs"],
-    ["Edit reward, detectors, evals, dashboard", "ed", "The binary reward, test_tamper, grader_tamper, test_aware and network_try, task retirement, selection-v2 and heldout-test-v2, the tool-use metrics, and the dashboard's Editing panel. Done when each detector has unit tests and a dry run fills every new panel.", "PC · $0", "#grading"],
-    ["Edit red-team brief", "edplan", "A written brief, documentation/edit-red-team-brief.md, for red-teaming the edit environment and the grader before any credit is spent on edit tasks: forged results, test edits, conftest tricks, history mining, reaching the hidden tests, crashing the grader. It is written last, once E2-E5 are built, and Rishi hands it to a separate Claude session himself. Done when the brief is delivered and, after that session's run, no working exploit is left.", "Claude · $0", "#grading"],
+    ["Edit sandbox and grader", "built", "A derived image per real repository, a writable /work/repo with one commit and no history, a standalone Python for the REPL, processes allowed with no network, bigger limits, the seven coding tools loaded into the REPL, and the grader with hidden tests and canaries. Tests show the hidden tests unreachable, history absent, canaries working and grader failures counted as infra. Checking real tasks caught the grader counting its own planted canary as one of a task's tests; it now drops canary results once they have vouched for a run. A slow disk costs time, never reward: limits are per task, and a grader run that times out reruns once, alone, at double the cap.", "PC · $0", "#grading"],
+    ["edit_synth", "built", "Three task kinds on our generated packages (fix the symptom, change and update callers, add a feature), levels 1-5, hidden property tests, and a held-out variant. The real change scores 1 and the empty, stub, delete and hard-coded patches score 0, and a dry run with a scripted model trains on it.", "PC · $0", "#editing"],
+    ["edit_real data", "built", "First round, finished 13 Oct: 107 training tasks (86 Python, 16 Go, 5 JavaScript), plus 10 selection and 40 test tasks from repositories training never sees. Every task was validated in our grader (its hidden tests fail without the fix and pass on three runs with it) and timed under load. Known gaps: Go has 16 training tasks against 60 planned, and the test split has 8 feature tasks against 15. Rust, TypeScript and Java follow in a later round; their images and candidate tasks stay on the PC's D: drive.", "PC · $0 of W&B", "#langs"],
+    ["Edit reward, detectors, evals, dashboard", "built", "The binary reward, test_tamper, grader_tamper, test_aware and network_try, task retirement, selection-v2 and heldout-test-v2, the tool-use metrics, and the dashboard's Editing panel. Each detector has unit tests; the full suite is 399 passed, 1 skipped, and a dry run of the training loop in the real edit sandbox passed with no errors.", "PC · $0", "#grading"],
+    ["Edit red-team brief", "edplan", "A written brief, documentation/edit-red-team-brief.md, for red-teaming the edit environment and the grader before any credit is spent on edit tasks: forged results, test edits, conftest tricks, history mining, reaching the hidden tests, crashing the grader. E2-E5 are built; the brief is written when Rishi asks for it, and he hands it to a separate Claude session himself. Done when the brief is delivered and, after that session's run, no working exploit is left.", "Claude · $0", "#grading"],
     ["Baselines", "plan", "The base model as an RLM on selection-v2 (64 tasks, 16 of them edits, which run twice), and reading the context directly on the read tasks. Every stop rule and claim compares against these, and they give the first measured cost of an edit episode.", "Spend · ~$9", "#run"],
-    ["Production run", "plan", "GRPO at 32 episodes a step on spec v2's mix (60% read, 40% edit) until a stop rule fires or the ~$157 ceiling: about 75 steps at ~$2.10 each (inferred), about 960 edit episodes. selection-v2 and the capability check every 10 steps (~$30 in all).", "Spend · ≤$157 + ~$30", "#run"],
+    ["Production run", "plan", "GRPO at 32 episodes a step on spec v2's mix (60% read, 40% edit) until a stop rule fires or the ~$157 ceiling: about 75 steps at ~$2.10 each (inferred), about 960 edit episodes. selection-v2 and the capability check every 10 steps (~$30 in all). About 30-35 minutes a step on the PC's USB drive, so about 40 hours (inferred).", "Spend · ≤$157 + ~$30", "#run"],
     ["Final eval off W&B", "plan", "The best LoRA goes to Hugging Face; heldout-test-v2, the public benchmarks (now with SWE-bench Pro, DeepSWE v1.1 and optionally Terminal-Bench 2.1) and the capability check run outside W&B on it and on the base model, with paired tests, plus a normal-coding-agent arm.", "PC or GPU host · $0 on W&B", "#after"],
   ];
   const LABEL = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "E1", "E2", "E3", "E4", "E5", "E6", "11", "12", "13"];
   const chips = { built: '<span class="chip built">Built and tested</span>', measured: '<span class="chip measured">Measured</span>', plan: '<span class="chip plan">Planned</span>',
-    e1: '<span class="chip dec">Approved 12 Oct</span>', ed: '<span class="chip prog">Being built, not yet tested</span>', edplan: '<span class="chip plan">Planned, after E2-E5</span>' };
+    e1: '<span class="chip dec">Approved 12 Oct</span>', ed: '<span class="chip prog">Being built, not yet tested</span>', edplan: '<span class="chip plan">Planned, on Rishi&#39;s word</span>' };
   const cls = { built: "done", measured: "done", e1: "done", plan: "plan", ed: "ed", edplan: "ed plan" };
   const track = $("#track"), det = $("#trackDetail");
   track.innerHTML = S.map((s, i) => `<button type="button" class="${cls[s[1]]}" aria-pressed="false" data-i="${i}" aria-label="Step ${LABEL[i]}: ${esc(s[0])}"><span class="bar"></span><span class="num">${LABEL[i]}</span></button>`).join("");
@@ -2282,7 +2283,7 @@ const AGG = [
     det.innerHTML = `<h4>Step ${LABEL[i]}. ${esc(s[0])} ${chips[s[1]]}</h4><p>${esc(s[2])}</p><div class="meta">${esc(s[3])} · <a href="${s[4]}">read more on this page</a></div>`;
   }
   track.addEventListener("click", e => { const b = e.target.closest("button"); if (b) pick(+b.dataset.i); });
-  pick(10);
+  pick(13);
 })();
 
 /* ------------------------------------------------------------------ holes */
@@ -2386,13 +2387,12 @@ $("#sysPrompt").textContent = REPLAY.system + "\n\nFirst message of a read task:
   $("#evAll").addEventListener("click", () => { shown = msgs.length; update(); });
   setKind("honest");
 })();
-/* ------------------------------------------------------------------ edit_real languages (planned counts; the language box is the one place that names them) */
+/* ------------------------------------------------------------------ edit_real languages (first-round counts against the plan; the language box is the one place that names them) */
 hbars($("#langTasks"), [
-  { label: "Python", v: 90, text: "~90", cls: "sub" }, { label: "Go", v: 60, text: "~60", cls: "sub" },
-  { label: "TypeScript / JavaScript", v: 60, text: "~60", cls: "sub" }, { label: "Rust", v: 45, text: "~45", cls: "sub" },
-  { label: "Java", v: 35, text: "~35", cls: "sub" },
-  { label: "Real-PR slice", sub: "Python, Go, TypeScript", v: 24, text: "~24", tip: "8 real pull requests each in Python, Go and TypeScript, from SWE-rebench V2" },
-].map(r => ({ tip: `${r.label}: about ${r.v} training tasks (planned)`, ...r })), { max: 90 });
+  { label: "Python", sub: "of ~90 planned", v: 86, text: "86", cls: "ok" }, { label: "Go", sub: "of ~60, incl. 2 real PRs", v: 16, text: "16", cls: "ok" },
+  { label: "TypeScript / JavaScript", sub: "of ~60; JavaScript only", v: 5, text: "5", cls: "ok" }, { label: "Rust", sub: "of ~45; later round", v: 0, text: "0" },
+  { label: "Java", sub: "of ~35; later round", v: 0, text: "0" },
+].map(r => ({ tip: `${r.label}: ${r.v} training tasks in the first round (${r.sub})`, ...r })), { max: 90 });
 
 /* ------------------------------------------------------------------ prompt v2 (spec v2 §12.2) */
 $("#promptV2").textContent = "Added to the system prompt:\n\nFor coding tasks, the REPL starts in the repository and also has these tools. They return values; print what you need to see.\n- `read_file(path, start=1, n=40) -> str`: numbered lines of a file\n- `find_files(pattern, path=\".\") -> list[str]`: files matching a glob such as \"src/**/*.py\"\n- `grep(pattern, path=\".\", glob=None, ignore_case=False, files_only=False) -> list[str]`: regex matches as \"path:line: text\"\n- `edit_file(path, old, new, replace_all=False) -> str`: replace exact text that occurs once (or every time with replace_all=True); raises otherwise\n- `write_file(path, text) -> str`: create or overwrite a file\n- `shell(cmd, timeout=120)`: run a shell command; the result has `.code` and `.out` and prints as the exit code and the end of the output\n- `diff() -> str`: your changes so far, as they will be graded\n\nExplore with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and `llm` to draft or review a change. Run the relevant build or tests with `shell` before you submit. Your changes to the repository are what gets graded, by tests you cannot see, so do not change existing tests or test configuration. There is no network.\n\nFirst message of an edit task:\n\nTask: {task}\n\nThe repository is at /work/repo ({language}, {n_files} files). `context` holds this task and the repository's file list with sizes. Run its tests with: {test_hint}\n\nWhen your change is ready, call submit() with a one-line summary. You have at most {max_turns} turns and {max_subcalls} sub-calls, and each cell may run for {cell_timeout_s} seconds.";
@@ -3079,7 +3079,7 @@ $("#dashPanels").innerHTML = [
   ["Sampled transcripts", "From training rollouts only: per step one win, one failure and up to two flagged, cut short and scrubbed of URLs, paths and checkpoint names (9c)."],
   ["Table view", "The last 15 steps' main numbers, and a button that copies every step as CSV."],
   ["Editing", "Resolved rate, fail-to-pass pass rate, broken pass-to-pass tests, empty diffs, tested-before-submit, test runs, edit cycles, turns to first edit, diff size, sub-call read share, review sub-calls, repeated cells, network tries, grader time, and a by-language table. It appears once a step has edit episodes.", 1],
-].map(([h, p, plan]) => `<div class="card"${plan ? ' style="border-style:dashed"' : ""}><div class="row" style="justify-content:space-between"><h4>${h}</h4>${plan ? '<span class="chip prog">Being built</span>' : ""}</div><p style="margin-top:4px">${esc(p)}</p></div>`).join("");
+].map(([h, p, plan]) => `<div class="card"${plan ? ' style="border-style:dashed"' : ""}><div class="row" style="justify-content:space-between"><h4>${h}</h4>${plan ? '<span class="chip built">Built, no run yet</span>' : ""}</div><p style="margin-top:4px">${esc(p)}</p></div>`).join("");
 
 (function () {
   const lag = [21, 13, 9, 8, 8, 9, 10, 7, 8, 7, 26, 19, 12, 8];
@@ -3184,6 +3184,7 @@ $("#decidedCards").innerHTML = [
   ["E-g", "When to run the second seed", "Now, while the edit work is built. Settles 10b: it runs."],
   ["12a", "The reserve", "Cut from $25 to ~$10, and spent only after asking Rishi. The paid edit probe (E7) was dropped."],
   ["Langs", "Which languages edit_real covers", "Five language groups, about 310 training tasks, and held-out repositories in every language. The list is in chapter 09's language box."],
+  ["13 Oct", "The first round of edit_real", "Python, Go and JavaScript, so the edit build finished on 13 Oct. Rust, TypeScript and Java follow in a later round; their images and candidate tasks stay on the D: drive."],
 ].map(([id, h, p]) => `<div class="card"><div class="row" style="justify-content:space-between"><span class="mono small muted">${id}</span><span class="chip dec">Decided</span></div><h4 style="margin-top:6px">${h}</h4><p style="margin-top:4px">${esc(p)}</p></div>`).join("");
 
 /* ------------------------------------------------------------------ glossary */
