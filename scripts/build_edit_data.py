@@ -98,6 +98,14 @@ def update_registry(key: str, entry: dict) -> None:
 # How a repository's tests run when the derive stage's guess (from the files and packages it finds) is wrong: monorepos
 # whose tests run from one package with their own configuration. `test_cwd` is that package, relative to the root.
 REPO_TESTS = {
+    # JavaScript and TypeScript: the settings each repository's own `npm test` uses.
+    "react-hook-form/react-hook-form": {"args": ["--config", "./scripts/jest/jest.config.js"],
+                                        "test_hint": "npx jest --config ./scripts/jest/jest.config.js <test file>"},
+    "homebridge/homebridge": {"args": ["--forceExit"], "test_hint": "npx jest --forceExit <test file>"},
+    "nock/nock": {"runner": "mocha", "bin": ["mocha"], "test_hint": "npx mocha <test file>"},
+    # Yarn's pnpm linker makes no node_modules/.bin; the tests are ES modules.
+    "svg/svgo": {"bin": ["node", "node_modules/jest/bin/jest.js"], "env": {"NODE_OPTIONS": "--experimental-vm-modules"},
+                 "test_hint": "NODE_OPTIONS=--experimental-vm-modules node node_modules/jest/bin/jest.js <test file>"},
     # Java: the SWE-smith images build with their own wrappers (no system Maven or Gradle), and some never resolved
     # their test dependencies, which an offline run then can't compile (`warm`, editdata.warm_image).
     "json-path/JsonPath": {"warm": "./gradlew testClasses --no-daemon --console=plain && "
