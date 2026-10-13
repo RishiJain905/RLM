@@ -378,7 +378,10 @@ class EvalSplitTest(unittest.TestCase):
         self.assertEqual(build.generated_scope("typescript", tests, test_cwd="packages/rx"),
                          (["spec/a-spec.ts"], "packages/rx", ["packages/rx/spec/a-spec.ts"]))
         self.assertTrue(all(build.REPO_TESTS[r]["runner"] in grader.RUNNERS for r in build.REPO_TESTS))
-        js = {"packages/rx/spec/a-spec.ts": "describe('a', () => { it('works', () => {}); });",
+        self.assertEqual(build.hide_plan("rust", ["src/datetime/tests.rs", "tests/it.rs", "crates/c/src/tests/mod.rs"]),
+                         (["tests/it.rs"], {"src/datetime/tests.rs": "", "crates/c/src/tests/mod.rs": ""}))
+        self.assertEqual(build.hide_plan("go", ["a_test.go"]), (["a_test.go"], {}))
+        js = {"packages/rx/spec/a-spec.ts":"describe('a', () => { it('works', () => {}); });",
               "packages/rx/spec/helpers/marbles.ts": "export function hot(m: string) { return cold(m); }"}
         self.assertEqual(build.generated_scope("typescript", sorted(js), js, "packages/rx")[2], ["packages/rx/spec/a-spec.ts"])
 

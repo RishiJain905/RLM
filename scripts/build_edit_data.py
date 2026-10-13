@@ -648,7 +648,8 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
                 "id": rid, "split": entry["split"], "language": language, "repo": entry["repo"], "key": key,
                 "kind": "feature", "source": "generated", "instance_id": None, "licence": entry["licence"],
                 "image": entry["tag"], "snapshot": entry["snapshot"], "snapshot_sha256": entry["sha256"],
-                "break_patch": break_patch, "gold_patch": gold, "remove": sorted(tests), "issue": "",
+                "break_patch": break_patch, "gold_patch": gold, "remove": hide_plan(language, tests)[0],
+                "replace": hide_plan(language, tests)[1], "issue": "",
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
                                          f2p=[], p2p=[], language=language, hidden=hidden, cwd=cwd,
@@ -756,7 +757,8 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
                 "id": rid, "split": entry["split"], "language": language, "repo": entry["repo"], "key": key,
                 "kind": "bug", "source": "generated", "instance_id": None, "licence": entry["licence"],
                 "image": entry["tag"], "snapshot": entry["snapshot"], "snapshot_sha256": entry["sha256"],
-                "break_patch": break_patch, "gold_patch": gold, "remove": sorted(tests), "issue": "",
+                "break_patch": break_patch, "gold_patch": gold, "remove": hide_plan(language, tests)[0],
+                "replace": hide_plan(language, tests)[1], "issue": "",
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
                                          f2p=[], p2p=[], language=language, hidden=editdata.snapshot_read(snapshot, tests),
@@ -949,6 +951,16 @@ def generated_scope(language: str, tests: list[str], texts: dict | None = None,
     return sorted(tests), ".", sorted(tests)
 
 
+def hide_plan(language: str, tests: list[str]) -> tuple[list[str], dict[str, str]]:
+    """How a task's hidden test files leave its repository: (files removed, files replaced by a placeholder). A Rust
+    test module in its own file under src/ (src/**/tests.rs) is named by a `mod tests;` line in the code, so removing
+    the file breaks the crate's build; it stays as an empty module instead. The grader writes the full file back."""
+    if language != "rust":
+        return sorted(tests), {}
+    replace = {t: "" for t in tests if "src" in t.split("/")[:-1] and "tests" not in t.split("/")[:-1][:1]}
+    return sorted(t for t in tests if t not in replace), replace
+
+
 def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
     """A Go candidate that hides test functions instead of whole files: `replace` holds each hidden test file
     without those functions (helpers kept), `remove` keeps only files left with nothing to show. The hidden texts stay
@@ -973,8 +985,9 @@ def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
 
 def cmd_fixscope(args) -> int:
     """Generated Rust and Java candidates written with file paths as their scope (Cargo wants `--test <name>`, Maven
-    test classes), or (Java) hiding a test helper with the tests: rewritten in place, and the results the old scope
-    caused forgotten so they're validated again."""
+    test classes), hiding a test helper with the tests (Java, JavaScript, TypeScript), or removing a Rust test module
+    file the code names (hide_plan): rewritten in place, and the results the old version caused forgotten so they're
+    validated again."""
     for language in args.languages:
         path = editdata.edit_path("candidates", f"{language}.jsonl")
         cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
@@ -986,6 +999,11 @@ def cmd_fixscope(args) -> int:
             test_cwd = rec["tests"].get("cwd") if rec["tests"].get("cwd", ".") != "." else None
             scope, cwd, used = generated_scope(language, sorted(hidden), hidden, test_cwd)
             helpers = language in ("java", "javascript", "typescript") and used != sorted(hidden)
+            remove, replace = hide_plan(language, rec["remove"])
+            if replace and (rec.get("replace") or {}) != replace:  # Rust: src/**/tests.rs stays as an empty module
+                rec["remove"], rec["replace"] = remove, replace
+                changed += 1
+                ids.add(rec["id"])
             if scope and (scope != rec["tests"]["scope"] or cwd != rec["tests"].get("cwd", ".") or helpers):
                 rec["tests"] = dict(rec["tests"], scope=scope, cwd=cwd)
                 if helpers:  # the helpers go back into the repository
