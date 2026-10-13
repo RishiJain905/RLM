@@ -1583,7 +1583,9 @@ def cmd_index(args) -> int:
             if bad:
                 print(f"left out {rid}: {bad}")
                 continue
-            cap = WANT.get(rec["split"], {}).get(language)
+            # training bug tasks per repository; the eval splits are spread over languages by balance() instead (with
+            # fewer languages than planned, per-repository caps left them short of their sizes)
+            cap = WANT["train"].get(language) if rec["split"] == "train" else None
             if cap and per_repo[(rec["key"], rec["split"])] >= cap and not rec.get("kind") == "feature":
                 continue
             per_repo[(rec["key"], rec["split"])] += 1
