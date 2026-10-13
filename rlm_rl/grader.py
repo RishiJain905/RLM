@@ -110,6 +110,7 @@ class GradeResult:
     results: dict = field(default_factory=dict)  # per-test outcomes, host only
     retries: int = 0  # runs repeated after the first hit the cap (alone, with double the cap)
     queued_s: float = 0.0  # time waiting for a grader slot: counted against no limit
+    run_results: list = field(default_factory=list)  # validation's repeated runs: each run's outcomes (grade(runs=n))
 
     @property
     def f2p_share(self) -> float:
@@ -1061,6 +1062,10 @@ class GraderSlots:
                 self.cond.notify_all()
 
 
+# Runners whose report goes where the grader says (or to stdout), so one container can run the tests several times
+# with a report per run. Maven and Gradle write fixed report paths inside the repository, so they can't.
+MULTI_RUN_RUNNERS = frozenset({"pytest", "unittest", "go", "cargo", "jest", "vitest", "mocha"})
+
 GRADER_CONCURRENCY: int | None = None  # graders at once per process; None = no cap (set_grader_concurrency)
 _SLOTS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, GraderSlots]" = weakref.WeakKeyDictionary()
 
@@ -1082,13 +1087,18 @@ def grader_slots() -> GraderSlots:
 async def grade(diff_text: str, spec: TestSpec, *, ws_dir: Path, image: Any, run_id: str = "adhoc",
                 docker: str = "docker", root: Path | None = None, runtime: Path | None = None,
                 bundle: Path | None = None, limits: Any = None, keep_all: bool = False,
-                retry: bool = True) -> GradeResult:
+                retry: bool = True, runs: int = 1) -> GradeResult:
     """Grade one episode's diff (spec §12.5). Raises InfraError when the grader itself fails. `keep_all` keeps every
     test's outcome, not only the task's (validation, scripts/build_edit_data.py).
 
     A run that hits the task's cap (`spec.timeout_s`) runs once more, alone, with double the cap: a slow disk or a
     busy machine costs time, not the reward. Only a second timeout is the model's (its missing tests count as failed).
+
+    `runs` > 1 (validation only, MULTI_RUN_RUNNERS) runs the tests that many times back to back in the one container,
+    each with its own report and cap, and fills `run_results`; the rest of the result describes the first run.
     """
+    if runs > 1 and spec.runner not in MULTI_RUN_RUNNERS:
+        raise ValueError(f"the {spec.runner} runner can't repeat its tests in one container")
     started = time.monotonic()
     checked = check_diff(diff_text, spec.language, ws_dir / "tree")
     result = GradeResult(applied=True, empty=checked.empty, resolved=False, f2p_total=len(spec.f2p),
@@ -1099,7 +1109,7 @@ async def grade(diff_text: str, spec: TestSpec, *, ws_dir: Path, image: Any, run
         result.seconds = round(time.monotonic() - started, 3)
         return result
     kw = dict(ws_dir=ws_dir, image=image, run_id=run_id, docker=docker, root=root, runtime=runtime, bundle=bundle,
-              limits=limits, keep_all=keep_all)
+              limits=limits, keep_all=keep_all, runs=runs)
     slots = grader_slots()
     t0 = time.monotonic()
     async with slots.shared():
@@ -1122,14 +1132,16 @@ async def grade(diff_text: str, spec: TestSpec, *, ws_dir: Path, image: Any, run
         result.results = dict(results) if keep_all else {k: v for k, v in results.items()
                                                           if k in set(spec.f2p) | set(spec.p2p)}
         result.f2p_passed, result.p2p_failed, result.resolved = score(results, spec)
+        if runs > 1:
+            result.run_results = [dict(r) for r in outcome["run_results"]]
     result.seconds = round(time.monotonic() - started - result.queued_s, 3)
     return result
 
 
 async def _grade_once(checked: CheckedDiff, spec: TestSpec, cap_s: float, *, ws_dir: Path, image: Any, run_id: str,
                       docker: str, root: Path | None, runtime: Path | None, bundle: Path | None, limits: Any,
-                      keep_all: bool) -> dict:
-    """One grader run in a fresh container, with the tests capped at `cap_s`."""
+                      keep_all: bool, runs: int = 1) -> dict:
+    """One grader container, with the tests capped at `cap_s` (and run `runs` times, each with that cap)."""
     from . import editbox, sandbox
 
     runner = RUNNER_CLASSES[spec.runner]
@@ -1146,24 +1158,38 @@ async def _grade_once(checked: CheckedDiff, spec: TestSpec, cap_s: float, *, ws_
             raise InfraError(f"preparing the grader's repository failed: {exc!r}") from exc
         if not applied:
             return {"applied": False, "why": why, "deadline_hit": False}
-        report = f"{REPORT_DIR}/{token}.out"
-        commands, reports = runner.commands(spec, list(spec.scope) + canary.scope, report, canary)
-        for command in commands:  # every runner caps its command at the task's cap; this run's may be double
-            command["timeout"] = cap_s
+        plan, commands, reports = [], [], []
+        for i in range(runs):
+            report = f"{REPORT_DIR}/{token}-{i}.out" if runs > 1 else f"{REPORT_DIR}/{token}.out"
+            cmds, reps = runner.commands(spec, list(spec.scope) + canary.scope, report, canary)
+            for command in cmds:  # every runner caps its command at the task's cap; this run's may be double
+                command["timeout"] = cap_s
+            plan.append((report, len(cmds)))
+            commands += cmds
+            reports += reps
         job = {"nonce": secrets.token_hex(16), "commands": commands, "reports": reports, "report_dir": REPORT_DIR,
-               "deadline_s": cap_s, "require_landlock": limits.require_landlock,
+               "deadline_s": cap_s * runs, "require_landlock": limits.require_landlock,
                "writable": ["/work/repo", "/scratch", "/tmp", *getattr(image, "writable", ())]}
         if getattr(image, "bundle", False) and bundle is None:
             bundle = editbox.python_bundle_dir()
         driver = await run_driver(job, image=image, grade_dir=grade_dir, run_id=run_id, docker=docker,
                                   runtime=runtime or editbox.runtime_dir(), bundle=bundle, limits=limits,
-                                  timeout=cap_s + GRADER_START_SLACK_S)
-        results, build_failed, malformed = runner.parse(spec, driver, report)
-        deadline_hit = bool(driver.get("deadline_hit"))
-        verdict = malformed or canary_verdict(results, canary, driver.get("commands") or [], deadline_hit,
-                                              bool(build_failed))
-        return {"applied": True, "why": "", "deadline_hit": deadline_hit, "build_failed": bool(build_failed),
-                "verdict": verdict, "results": results}
+                                  timeout=cap_s * runs + GRADER_START_SLACK_S)
+        outcomes, done = [], 0
+        for report, n in plan:
+            ran = (driver.get("commands") or [])[done:done + n]
+            done += n
+            view = dict(driver, commands=ran)
+            results, build_failed, malformed = runner.parse(spec, view, report)
+            deadline_hit = any(c.get("timed_out") for c in ran) or (runs == 1 and bool(driver.get("deadline_hit")))
+            verdict = malformed or canary_verdict(results, canary, ran, deadline_hit, bool(build_failed))
+            outcomes.append({"results": results, "deadline_hit": deadline_hit, "build_failed": bool(build_failed),
+                             "verdict": verdict})
+        first = outcomes[0]
+        return {"applied": True, "why": "", "deadline_hit": any(o["deadline_hit"] for o in outcomes),
+                "build_failed": first["build_failed"], "verdict": next((o["verdict"] for o in outcomes if o["verdict"]),
+                                                                       None),
+                "results": first["results"], "run_results": [o["results"] for o in outcomes]}
     finally:
         editbox.remove_tree(grade_dir)
         editbox.remove_tree(scratch)

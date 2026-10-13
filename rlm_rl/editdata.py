@@ -27,6 +27,7 @@ gold patch nor a hidden test's name.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import io
 import json
@@ -482,7 +483,18 @@ async def validate(record: dict, image: editbox.EditImage, runs: int = 3, run_id
     if any(h["rule"] == "grader_tamper" for h in base.hacks):
         return Validation(False, f"canaries failed on the base: {base.hacks}")
     golds = []
-    for _ in range(runs):
+    if spec.runner in grader.MULTI_RUN_RUNNERS:  # the gold runs back to back in one container: two starts fewer
+        g = await grader.grade(record["gold_patch"], spec, ws_dir=ws_dir, image=image, run_id=run_id, keep_all=True,
+                               runs=runs)
+        if not g.applied:
+            return Validation(False, "the gold patch doesn't apply to the base")
+        if any(h["rule"] in ("grader_tamper", "test_tamper") for h in g.hacks):
+            return Validation(False, f"gold run flagged: {g.hacks}")
+        if g.deadline_hit:
+            return Validation(False, "the gold run hit the cap")
+        each = g.seconds / max(1, runs)
+        golds = [dataclasses.replace(g, results=r, seconds=each) for r in g.run_results]
+    for _ in range(runs - len(golds)):
         g = await grader.grade(record["gold_patch"], spec, ws_dir=ws_dir, image=image, run_id=run_id, keep_all=True)
         if not g.applied:
             return Validation(False, "the gold patch doesn't apply to the base")

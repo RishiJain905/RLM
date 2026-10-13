@@ -75,6 +75,68 @@ class GraderRetryTest(unittest.TestCase):
         self.assertEqual(editdata.cell_limit(200.0), 420)  # twice the gold test command, in 30 s steps
 
 
+class MultiRunTest(unittest.TestCase):
+    """Validation runs the gold patch's tests three times in one container, each with its own report and cap."""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp())
+        (self.ws / "tree" / "src").mkdir(parents=True)
+        (self.ws / "tree" / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+        self.addCleanup(shutil.rmtree, self.ws, True)
+        self.diff = file_patch("src/a.py", ["x = 1"], ["x = 2"])
+        self.canary = grader.Canary({"tests/test_k.py": "def test_cp(): pass\n"}, "test_cp", "test_cf",
+                                    ["tests/test_k.py"])
+
+    @staticmethod
+    def junit(cases):
+        rows = []
+        for file, name, ok in cases:
+            body = "" if ok else '<failure message="no"/>'
+            rows.append(f'<testcase classname="{file[:-3].replace("/", ".")}" name="{name}" file="{file}">{body}</testcase>')
+        return f'<testsuite>{"".join(rows)}</testsuite>'
+
+    def run_with(self, timed_out_run=None):
+        jobs = []
+
+        async def fake_driver(job, **kw):
+            jobs.append(job)
+            commands, reports = [], []
+            for i, path in enumerate(job["reports"]):
+                late = i == timed_out_run
+                commands.append({"argv": ["pytest"], "exit": None if late else 0, "timed_out": late})
+                cases = [("tests/test_k.py", "test_cp", True), ("tests/test_k.py", "test_cf", False),
+                         ("tests/test_a.py", "test_new", True), ("tests/test_a.py", "test_old", True)]
+                reports.append({"path": path, "found": not late, "text": None if late else self.junit(cases)})
+            return {"commands": commands, "reports": reports, "deadline_hit": timed_out_run is not None}
+
+        with mock.patch.object(grader, "run_driver", fake_driver), \
+                mock.patch.object(grader.Pytest, "canary", lambda runner, spec: self.canary):
+            result = asyncio.run(grader.grade(self.diff, SPEC, ws_dir=self.ws, image=None, keep_all=True, runs=3,
+                                              retry=False))
+        return result, jobs
+
+    def test_three_runs_one_container(self):
+        result, jobs = self.run_with()
+        self.assertEqual(len(jobs), 1)  # one container
+        self.assertEqual(len(jobs[0]["commands"]), 3)
+        self.assertEqual(len(set(jobs[0]["reports"])), 3)  # a report each
+        self.assertEqual(jobs[0]["deadline_s"], 3 * SPEC.timeout_s)
+        self.assertEqual({c["timeout"] for c in jobs[0]["commands"]}, {SPEC.timeout_s})
+        self.assertEqual(len(result.run_results), 3)
+        self.assertTrue(all(r["tests/test_a.py::test_new"] == "passed" for r in result.run_results))
+        self.assertEqual((result.resolved, result.deadline_hit, result.hacks), (True, False, []))
+
+    def test_a_run_that_times_out_is_seen(self):
+        result, _ = self.run_with(timed_out_run=1)
+        self.assertTrue(result.deadline_hit)
+        self.assertNotIn("tests/test_a.py::test_new", result.run_results[1])
+
+    def test_runners_with_fixed_report_paths_refuse(self):
+        spec = TestSpec(runner="maven", scope=["a.FooTest"], f2p=["a.FooTest.t"], p2p=[], language="java")
+        with self.assertRaises(ValueError):
+            asyncio.run(grader.grade(self.diff, spec, ws_dir=self.ws, image=None, keep_all=True, runs=3))
+
+
 class GraderSlotsTest(unittest.TestCase):
     def test_a_retry_runs_alone(self):
         async def scenario():
