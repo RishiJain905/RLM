@@ -249,6 +249,8 @@ Validation stopped at 2:25 pm ET on 2026-10-13 (Rishi: finish step 9.5 now) so t
 | Go | 38 (17 + 2 real PRs / 15 / 4) | 16 (4 bug, 10 feature, 2 real PRs) |
 | JavaScript | 18 (5 / 9 / 4) | 5 (feature) |
 
+**The index** (`D:\RLM-data\edit\index.json`, 157 tasks): training 107 (Python 86, Go 16 including 2 real PRs, JavaScript 5), selection 10 (Python 3, Go 4, JavaScript 3), test 40 (Python 16, Go 15, JavaScript 9; 8 of them feature tasks). `measure` timed 40 of 44 sample tasks under 15-at-once load (median test command: Python 143 s, JavaScript 263 s, Go 861 s); `index` set each task's grader cap and, where needed, its cell limit from those timings (unmeasured tasks take their repository's slowest).
+
 The eval splits are filled from all three languages: selection 10 of 13 passing, test 40 of 43 passing (about 8 feature tasks). The first index left them short (6 and 24) because a per-repository cap meant for training bug tasks also applied to the eval splits and counted feature tasks; it now applies to training only.
 
 **Known gaps in this round:**
@@ -257,3 +259,10 @@ The eval splits are filled from all three languages: selection 10 of 13 passing,
 - **Rust, TypeScript and Java are not in this round.** Their candidates, texts, images and partial results stay on `D:\RLM-data\edit` for a later round. TypeScript's runner problems are fixed (react-hook-form passes with real tests); Rust works but its builds are slow on the drive; Java's images are derived with their own build wrappers.
 - **JsonPath is parked**: its Gradle tests still report nothing on the warmed image, cause not yet found.
 - **rxjs, foam and formik have no tasks** (see §4.2).
+
+**Checks run at the end of this round (2026-10-13 evening):**
+- `measure` timed 40 of 44 sample tasks (2 per repository) 15 at a time in episode containers, the gold change written through the REPL and graded in a fresh grader container; `index` took each task's grader cap and cell limit from those timings.
+- **Real-sandbox dry run** (`train.py start --dry-run --kind production --lr 2e-5 --real-edit --stop-after 1`, run `dry-edit-final3`): the selection eval at checkpoint 0 (64 tasks, its 10 edit_real tasks in the real edit sandbox), the capability eval (100%), one trained step, and a clean operator stop; no errors and no infra. The first attempt showed the dry run's oracle answering every edit_real task with the read policy: it keyed its gold changes on the task's first message with the default 300 s cell limit, while `index` now raises slow tasks' limits and the environment quotes the raised one. Fixed in `tests/dryrun.py`.
+- **Full test suite:** 400 tests, 395 passed, 1 skipped. The 5 failures were Docker tests run beside `measure` and the dry runs on the saturated drive: a sandbox that didn't start among 32 concurrent ones, the Docker training-loop test pausing on that infra, and teardowns that found leftover containers. The leftovers were a real leak (`rlm_rl/sandbox.py`): a launch that timed out removed its container before the slow daemon had finished creating it, so it stayed "Created" for good (66 had piled up). The container is now removed again once the docker client has exited. Rerun of those Docker test classes alone after the fix (`EditReplTest`, `DockerTest`, `DockerLoopTest`): **14 tests, all passed** (632 s). With them, the suite stands at 399 passed and 1 skipped.
+
+*Follow-up, not built:* a launch the daemon takes longer to create than the second removal pass can still leave a "Created" container; a periodic sweep of the run's own never-started containers (by its `rlm.run` label) would close that.
