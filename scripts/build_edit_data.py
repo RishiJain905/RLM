@@ -173,7 +173,7 @@ def cmd_derive(args) -> int:
                     entry.update(editdata.export_snapshot(image, language, snapshot))
                 elif "sha256" not in entry:  # a snapshot left by a run that stopped before recording it
                     entry.update(editdata.snapshot_stats(snapshot, image, language))
-                tag = editdata.derive(image, language)
+                tag = editdata.derive(image, language, warm=REPO_TESTS.get(repo.replace("__", "/", 1), {}).get("warm"))
                 break
             except (RuntimeError, subprocess.TimeoutExpired) as exc:
                 print(f"retry {key} ({attempt + 1}/3): {str(exc)[-200:]}", flush=True)

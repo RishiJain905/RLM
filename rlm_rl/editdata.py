@@ -223,11 +223,36 @@ def node_modules_moves(source: str, repo_dir: str = REPO_DIR) -> list[str]:
     return sorted(p[2:] for p in out.stdout.decode().split() if p.startswith("./"))
 
 
+def warm_image(source: str, warm: str, repo_dir: str = REPO_DIR, name: str | None = None) -> str:
+    """The source image with its build tool's dependency cache filled: `warm` (a shell command, e.g. compiling the
+    tests) runs once in the checkout, with the network on. Some source images never resolved their test
+    dependencies (JsonPath's Gradle cache has none), and episodes and graders run offline. The derived image is built
+    from this one; nothing in an episode or a grader ever has the network."""
+    digest = hashlib.sha256(f"{source}\n{repo_dir}\n{warm}".encode()).hexdigest()[:12]
+    tag = f"rlm-warm-{name or repo_key(source)}:{digest}"
+    if _docker("image", "inspect", tag, check=False).returncode == 0:
+        return tag
+    dockerfile = f"FROM {source}\nUSER root\nRUN cd {repo_dir} && {warm}\n"
+    context = io.BytesIO()
+    with tarfile.open(fileobj=context, mode="w") as tar:
+        info = tarfile.TarInfo("Dockerfile")
+        info.size = len(dockerfile.encode())
+        tar.addfile(info, io.BytesIO(dockerfile.encode()))
+    out = _docker("build", "--pull=false", "-t", tag, "-", input=context.getvalue(), check=False,
+                  timeout=DERIVE_TIMEOUT_S)
+    if out.returncode:
+        raise RuntimeError(f"warming {source} failed: {out.stderr.decode()[-800:]}")
+    return tag
+
+
 def derive(source: str, language: str, uid: int | None = None, gid: int | None = None, repo_dir: str = REPO_DIR,
-           name: str | None = None, rebench: bool = False) -> str:
+           name: str | None = None, rebench: bool = False, warm: str | None = None) -> str:
     """Build (or find) the derived image for one source image. Returns its tag. `rebench`: a SWE-rebench V2 image,
     whose repository is at `repo_dir`, whose caches may sit outside what an episode can write, and whose Go caches are
-    found by probing."""
+    found by probing. `warm`: fill the build tool's dependency cache first (warm_image)."""
+    if warm:
+        name = name or repo_key(source)  # the derived image keeps the repository's name
+        source = warm_image(source, warm, repo_dir, name)
     uid, gid = (uid, gid) if uid is not None else editbox.host_user()
     probe = probe_source(source)
     if not probe["git"]:
