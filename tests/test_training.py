@@ -175,7 +175,8 @@ class ProductionMixTest(LoopCase):
         self.assertTrue(drawn and drawn <= set(cfg.mix), drawn)
         selection = [e for e in st["evals"] if e["name"] == "selection-v2"]
         self.assertEqual([e["checkpoint"] for e in selection], [0])
-        self.assertEqual(selection[0]["summary"]["n"], 64)
+        from rlm_rl.tasks import editreal  # 48 read + 6 edit_synth + the index's selection split (10 when full)
+        self.assertEqual(selection[0]["summary"]["n"], 48 + 6 + len(editreal.records("select")))
         pinned = json.loads((self.results / "mix7a" / "config.json").read_text())
         self.assertEqual(pinned["manifest"]["mix"], cfg.mix)
         self.assertIsNotNone(pinned["manifest"]["dataset_manifest_sha256"])

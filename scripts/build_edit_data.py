@@ -1548,9 +1548,10 @@ def cmd_measure(args) -> int:
 
 
 def cmd_index(args) -> int:
-    """Assemble edit/index.json from validated records, capped per repository and split."""
+    """Assemble edit/index.json from validated records, capped per repository and split. `--languages`: only these
+    (a round that leaves the others for later, e.g. 2026-10-13's Python, Go and JavaScript)."""
     tasks, counts = [], collections.Counter()
-    for language in sorted(editdata.LANGS):
+    for language in sorted(args.languages or editdata.LANGS):
         cpath = editdata.edit_path("candidates", f"{language}.jsonl")
         vpath = editdata.edit_path("validated", f"{language}.jsonl")
         if not cpath.exists() or not vpath.exists():
@@ -1704,7 +1705,8 @@ def main() -> int:
                    help="tasks per repository (0: all); index gives the rest the repository's slowest test command")
     p = sub.add_parser("gostrip")
     p.add_argument("--pending", action="store_true", help="also rewrite, in place, candidates not validated yet")
-    sub.add_parser("index")
+    p = sub.add_parser("index")
+    p.add_argument("--languages", nargs="+", choices=sorted(editdata.LANGS), help="only these languages' tasks")
     sub.add_parser("manifest")
     sub.add_parser("report")
     args = parser.parse_args()
