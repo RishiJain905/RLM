@@ -15,6 +15,7 @@ to read, which is what plan step 9's dashboard needs to be built against.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import random
 import re
@@ -44,8 +45,16 @@ class Oracle:
     def record(self, tasks: list) -> list:
         for t in tasks:
             if bridge.is_edit(t.family):  # the gold change, as files to write (spec §12)
-                first = bridge.initial_messages(t.question, t.context, edit=t.edit, limits=bridge.limits(t.family))[1]
-                self.gold[first["content"]] = (EditGold(t, echo=self.echo_real_tests and t.family != "edit_synth"), t.level)
+                lim = bridge.limits(t.family)
+                if (t.edit or {}).get("cell_timeout_s"):  # the task's own cell limit, quoted as the environment does
+                    lim = dataclasses.replace(lim, cell_timeout_s=int(t.edit["cell_timeout_s"]))
+                gold = (EditGold(t, echo=self.echo_real_tests and t.family != "edit_synth"), t.level)
+                for version in bridge.PROMPT_VERSIONS:
+                    try:
+                        first = bridge.initial_messages(t.question, t.context, version, lim, edit=t.edit)[1]
+                    except ValueError:  # edit tasks need prompt v2 (spec §12.2)
+                        continue
+                    self.gold[first["content"]] = gold
                 continue
             for version in bridge.PROMPT_VERSIONS:
                 first = bridge.first_user_message(t.question, t.context, version, bridge.limits(t.family))
