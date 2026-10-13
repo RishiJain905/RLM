@@ -593,6 +593,9 @@ async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str 
                            bin=record["tests"].get("bin") or [])
     if spec.runner == "gradle":  # Gradle builds compile their tests with testClasses, not Maven's test-compile
         checks["java"] = grader.Gradle.bin(spec) + ["testClasses", "--offline", "--no-daemon", "--console=plain"]
+    elif spec.runner == "maven":  # from the root, with the modules the task's module depends on (as the grader runs)
+        checks["java"] = grader.Maven.bin(spec) + ["-o", "-q", "test-compile", *grader.Maven.module_args(spec)]
+        spec = dataclasses.replace(spec, cwd=".")
     argv = record.get("visible_check") or checks.get(language)
     if not argv:
         return True, "no visible check for this language"

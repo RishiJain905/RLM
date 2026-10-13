@@ -377,7 +377,7 @@ class EvalSplitTest(unittest.TestCase):
         tests = ["packages/rx/spec/a-spec.ts", "apps/site/src/b.spec.ts"]  # a monorepo's tests run from one package
         self.assertEqual(build.generated_scope("typescript", tests, test_cwd="packages/rx"),
                          (["spec/a-spec.ts"], "packages/rx", ["packages/rx/spec/a-spec.ts"]))
-        self.assertTrue(all(build.REPO_TESTS[r]["runner"] in grader.RUNNERS for r in build.REPO_TESTS))
+        self.assertTrue(all(o.get("runner", "jest") in grader.RUNNERS for o in build.REPO_TESTS.values()))
         self.assertEqual(build.hide_plan("rust", ["src/datetime/tests.rs", "tests/it.rs", "crates/c/src/tests/mod.rs"]),
                          (["tests/it.rs"], {"src/datetime/tests.rs": "", "crates/c/src/tests/mod.rs": ""}))
         self.assertEqual(build.hide_plan("go", ["a_test.go"]), (["a_test.go"], {}))

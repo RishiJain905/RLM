@@ -139,6 +139,13 @@ Training repositories give training tasks; the selection and test repositories a
 
 **Eval overlap.** No repository is in an eval we report. I checked every pick against SWE-bench Pro's public set and SWE-bench Multilingual (both downloaded to `D:\RLM-data\hf\evals`) and against the task names in DeepSWE v1.1 (the dataset itself is gated, so I used its file listing). **go-critic was the second Go test repository, but DeepSWE v1.1 has a go-critic task**, so bitset replaced it. trpc, an earlier TypeScript test pick, failed to pull after 11 minutes and was dropped; homebridge and formik are the TypeScript test repositories.
 
+**How each repository's tests run** (`REPO_TESTS` in `scripts/build_edit_data.py`, where the derive stage's guess from the files was wrong; `retest` applies it to existing candidates):
+- *picocli*: a pom.xml for the core module only and no Maven in the image; every module builds with `./gradlew`, whose cache holds the dependencies.
+- *dropwizard metrics*: `./mvnw` (no system Maven), its Maven under `MAVEN_USER_HOME=/opt/rlm-cache/m2`. A Maven module's tests run from the root with `-pl <module> -am`, so the modules it depends on build in the same reactor rather than being looked up in the local repository.
+- *JsonPath*: the image's Gradle cache has none of the test dependencies, so offline the tests can't compile. The image is derived from a warmed copy (`warm_image`: the repository's own `testClasses` once, network on); episodes and graders stay offline.
+- *rxjs*: **not used** (`UNUSABLE`). Its specs import the built package (`exports` point at `dist/`, which the image never built), and mapping the import to `src/` with tsconfig-paths sends mocha down the ESM loader, which can't load `.ts`. *foam*: the derive stage found no runner it supports, so it has no tasks.
+- A wrapper (`./gradlew`, `./mvnw`) is named from the repository root wherever the tests run from; a task whose module has no build file for its runner is dropped before any container.
+
 ### 4.3 Licences and sources (Rishi's call, 2026-10-12)
 
 | Source | Licence status | Used for |

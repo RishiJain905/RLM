@@ -98,12 +98,35 @@ def update_registry(key: str, entry: dict) -> None:
 # How a repository's tests run when the derive stage's guess (from the files and packages it finds) is wrong: monorepos
 # whose tests run from one package with their own configuration. `test_cwd` is that package, relative to the root.
 REPO_TESTS = {
+    # Java: the SWE-smith images build with their own wrappers (no system Maven or Gradle), and some never resolved
+    # their test dependencies, which an offline run then can't compile (`warm`, editdata.warm_image).
+    "json-path/JsonPath": {"warm": "./gradlew testClasses --no-daemon --console=plain && "
+                                   "(./gradlew test --no-daemon --console=plain --tests rlm.warm.None || true)"},
+    # A pom.xml for the core module only; every module builds with Gradle, whose cache holds the dependencies.
+    "remkop/picocli": {"runner": "gradle", "bin": ["./gradlew"], "junit": "4",
+                       "test_hint": "./gradlew test --offline --tests <TestClass>"},
+    # The Maven wrapper keeps its Maven under MAVEN_USER_HOME, copied with the cache.
+    "dropwizard/metrics": {"bin": ["./mvnw"], "env": {"MAVEN_USER_HOME": "/opt/rlm-cache/m2"},
+                           "test_hint": "MAVEN_USER_HOME=/opt/rlm-cache/m2 ./mvnw -o -q test -pl <module> -am "
+                                        "-Dtest=<TestClass> -Dsurefire.failIfNoSpecifiedTests=false"},
     # Vitest is installed, but the library's specs (`*-spec.ts`) run with mocha from packages/rxjs; apps/rxjs.dev's
-    # specs need Karma and a browser, so its functions aren't used.
-    "ReactiveX/rxjs": {"runner": "mocha", "bin": ["mocha"], "args": ["--config", "spec/support/.mocharc.js"],
+    # specs need Karma and a browser, so its functions aren't used. The specs import "rxjs", which the package's
+    # exports send to dist/ (never built here); tsconfig-paths maps it to src/ through the tsconfig's paths instead.
+    "ReactiveX/rxjs": {"runner": "mocha", "bin": ["mocha"],
+                       "args": ["--config", "spec/support/.mocharc.js", "--require", "tsconfig-paths/register"],
                        "env": {"TS_NODE_PROJECT": "tsconfig.mocha.json"}, "test_cwd": "packages/rxjs",
                        "test_hint": "cd packages/rxjs && TS_NODE_PROJECT=tsconfig.mocha.json npx mocha "
-                                    "--config spec/support/.mocharc.js 'spec/**/*-spec.ts'"},
+                                    "--config spec/support/.mocharc.js --require tsconfig-paths/register "
+                                    "'spec/**/*-spec.ts'"},
+}
+
+
+# Repositories whose tests can't run in their image here, with why: their candidates are never validated or indexed
+# (they stay in candidates/).
+UNUSABLE = {
+    "ReactiveX/rxjs": "its specs import the built package (the exports point at dist/, which the image never built); "
+                      "mapping the import to src/ with tsconfig-paths sends mocha down the ESM loader, which can't "
+                      "load .ts files",
 }
 
 
@@ -1025,6 +1048,35 @@ def cmd_fixscope(args) -> int:
     return 0
 
 
+def cmd_retest(args) -> int:
+    """Candidates of repositories in REPO_TESTS get its runner settings (runner, command, arguments, environment, JUnit
+    version, test hint), keeping their scope and folder; results the old settings caused are forgotten."""
+    keys = ("runner", "bin", "args", "env", "junit")
+    for language in args.languages:
+        path = editdata.edit_path("candidates", f"{language}.jsonl")
+        cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+        ids = set()
+        for rec in cands:
+            over = REPO_TESTS.get(rec["repo"])
+            if not over or rec["kind"] == "real_pr":
+                continue
+            tests = dict(rec["tests"], **{k: over[k] for k in keys if k in over})
+            hint = over.get("test_hint", rec.get("test_hint"))
+            if tests != rec["tests"] or hint != rec.get("test_hint"):
+                rec["tests"], rec["test_hint"] = tests, hint
+                ids.add(rec["id"])
+        editdata.write_lines(path, [json.dumps(c, ensure_ascii=False) for c in cands])
+        vpath = editdata.edit_path("validated", f"{language}.jsonl")
+        dropped = 0
+        if vpath.exists():
+            rows = vpath.read_text(encoding="utf-8").splitlines()
+            keep = [l for l in rows if json.loads(l)["id"] not in ids]
+            dropped = len(rows) - len(keep)
+            editdata.write_lines(vpath, keep)
+        print(f"{language}: {len(ids)} candidates take REPO_TESTS' settings; {dropped} results forgotten")
+    return 0
+
+
 def cmd_gostrip(args) -> int:
     """Go candidates the visible-test check dropped (a hidden test file defined helpers the visible tests use),
     rewritten to hide only their test functions, as new candidates (id + "-gs") for the next validation."""
@@ -1249,7 +1301,7 @@ def cmd_validate(args) -> int:
         # a Go candidate rewritten by gostrip (id + "-gs") replaces its original, which is never validated again
         replaced = {c["id"][:-3] for c in cands if c["id"].endswith("-gs")}
         todo = [c for c in cands if c["id"] not in done and (not args.split or c["split"] == args.split)
-                and not (not c["id"].endswith("-gs") and c["id"][:77] in replaced)]
+                and not (not c["id"].endswith("-gs") and c["id"][:77] in replaced) and c["repo"] not in UNUSABLE]
         if args.per_repo:
             # Training bug tasks beyond what the index can take are not worth a validation on a slow drive: per
             # repository, stop once `per_repo` have passed (counting earlier runs). Features, real PRs and the eval
@@ -1472,7 +1524,7 @@ def cmd_index(args) -> int:
         per_repo = collections.Counter()
         for rid, rec in sorted(cands.items()):
             v = results.get(rid)
-            if not v or not v["ok"]:
+            if not v or not v["ok"] or rec["repo"] in UNUSABLE:
                 continue
             if not rec["issue"]:
                 if not texts.get(rid):
@@ -1574,7 +1626,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("runtime")
     for name in ("pull", "derive", "candidates", "features", "bugs", "bugtexts", "briefs", "validate", "rebench", "prune",
-                 "fixscope", "revisible"):
+                 "fixscope", "revisible", "retest"):
         p = sub.add_parser(name)
         p.add_argument("languages", nargs="+", choices=sorted(editdata.LANGS))
         if name in ("pull", "rebench"):
@@ -1608,7 +1660,7 @@ def main() -> int:
     sub.add_parser("report")
     args = parser.parse_args()
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
-            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
+            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "retest": cmd_retest, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 
 
 if __name__ == "__main__":

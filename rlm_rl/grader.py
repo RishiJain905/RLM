@@ -926,15 +926,34 @@ class JUnitXmlRunner(Runner):
         return results, build_failed, bad
 
 
+def _root_bin(spec: TestSpec, default: list[str]) -> list[str]:
+    """A build tool's command. A wrapper (`./gradlew`, `./mvnw`) sits at the repository root while a module's tests
+    may run from the module's folder, so the wrapper is named from the root."""
+    argv = list(spec.bin or default)
+    if argv[0].startswith("./"):
+        argv[0] = posixpath.join(bridge.EDIT_REPO_PATH, argv[0][2:])
+    return argv
+
+
 class Maven(JUnitXmlRunner):
     name = "maven"
 
+    @staticmethod
+    def bin(spec: TestSpec) -> list[str]:
+        return _root_bin(spec, ["mvn"])
+
+    @staticmethod
+    def module_args(spec: TestSpec) -> list[str]:
+        """A module's tests run from the root, building the modules it depends on in the same reactor (-am): run from
+        the module's folder, Maven looks for those modules' artifacts in the local repository, where they may not be."""
+        return ["-pl", spec.cwd, "-am"] if spec.cwd not in ("", ".") else []
+
     def commands(self, spec, scope, report, canary):
-        argv = (spec.bin or ["mvn"]) + ["-o", "-B", "test", "-Dtest=" + ",".join(scope), "-DfailIfNoTests=false",
-                                        "-Dsurefire.failIfNoSpecifiedTests=false", "-Dmaven.test.failure.ignore=true",
-                                        *spec.args]
+        argv = self.bin(spec) + ["-o", "-B", "test", *self.module_args(spec), "-Dtest=" + ",".join(scope),
+                                 "-DfailIfNoTests=false", "-Dsurefire.failIfNoSpecifiedTests=false",
+                                 "-Dmaven.test.failure.ignore=true", *spec.args]
         reports = posixpath.join(self._cwd(spec), "**/target/surefire-reports/TEST-*.xml")
-        return [{"argv": argv, "cwd": self._cwd(spec), "env": spec.env, "timeout": spec.timeout_s}], [reports]
+        return [{"argv": argv, "cwd": bridge.EDIT_REPO_PATH, "env": spec.env, "timeout": spec.timeout_s}], [reports]
 
 
 class Gradle(JUnitXmlRunner):
@@ -942,12 +961,8 @@ class Gradle(JUnitXmlRunner):
 
     @staticmethod
     def bin(spec: TestSpec) -> list[str]:
-        """The Gradle command. A wrapper (`./gradlew`) sits at the repository root, while a module's tests run from the
-        module's folder (Gradle finds the build from there), so the wrapper is named from the root."""
-        argv = list(spec.bin or ["gradle"])
-        if argv[0].startswith("./"):
-            argv[0] = posixpath.join(bridge.EDIT_REPO_PATH, argv[0][2:])
-        return argv
+        """The Gradle command, run from the module's folder (Gradle finds the build from there)."""
+        return _root_bin(spec, ["gradle"])
 
     def commands(self, spec, scope, report, canary):
         argv = self.bin(spec) + ["test", "--offline", "--no-daemon", "--console=plain", "--continue",
