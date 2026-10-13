@@ -232,5 +232,47 @@ class SlowStartTest(AsyncCase):
         self.assertIsNone(ep.reward)  # never trained on as a 0
 
 
+class VisibleCheckTimeTest(unittest.TestCase):
+    """Validation's visible-test check: running out of time is the drive's problem, never broken visible tests."""
+
+    def check_with(self, drivers):
+        from rlm_rl import editbox, editdata
+
+        caps = []
+
+        async def fake_driver(job, **kw):
+            caps.append(job["commands"][0]["timeout"])
+            return drivers.pop(0)
+
+        task = types.SimpleNamespace(workspace=types.SimpleNamespace(ensure=lambda: Path("/nonexistent")))
+        record = {"language": "go", "tests": {"runner": "go", "cwd": "."}}
+        with mock.patch.object(editdata.editreal, "to_task", lambda rec, family: task), \
+                mock.patch.object(editbox, "materialize", lambda *a: None), \
+                mock.patch.object(editbox, "remove_tree", lambda *a: None), \
+                mock.patch.object(editbox, "python_bundle_dir", lambda: None), \
+                mock.patch.object(editbox, "runtime_dir", lambda: Path("/nonexistent")), \
+                mock.patch.object(grader, "run_driver", fake_driver):
+            return asyncio.run(editdata.visible_tests_run(record, types.SimpleNamespace(writable=()))), caps
+
+    def test_a_timeout_is_tried_again_with_double_the_time(self):
+        from rlm_rl import editdata
+
+        late = {"commands": [{"exit": None, "timed_out": True, "stdout": "   Compiling"}], "deadline_hit": True}
+        done = {"commands": [{"exit": 0, "timed_out": False, "stdout": "ok"}], "deadline_hit": False}
+        (ok, _), caps = self.check_with([late, done])
+        self.assertEqual((ok, caps), (True, [editdata.VISIBLE_TIMEOUT_S, 2 * editdata.VISIBLE_TIMEOUT_S]))
+
+    def test_two_timeouts_are_an_infra_error_not_a_drop(self):
+        late = {"commands": [{"exit": None, "timed_out": True, "stdout": ""}], "deadline_hit": True}
+        with self.assertRaises(grader.InfraError):
+            self.check_with([late, dict(late)])
+
+    def test_a_real_break_is_not_retried(self):
+        broken = {"commands": [{"exit": 1, "timed_out": False, "stdout": "undefined: helper"}], "deadline_hit": False}
+        (ok, out), caps = self.check_with([broken])
+        self.assertEqual((ok, len(caps)), (False, 1))
+        self.assertIn("undefined: helper", out)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -334,6 +334,9 @@ class CanaryTest(unittest.TestCase):
             argv = " ".join(cmds[0]["argv"])
             for piece in a.scope:
                 self.assertIn(piece, argv, runner)
+        module = TestSpec(runner="gradle", scope=["com.ex.ATest"], f2p=[], p2p=[], cwd="core", bin=["./gradlew"])
+        cmds, _ = grader.RUNNER_CLASSES["gradle"].commands(module, module.scope, "", None)
+        self.assertEqual((cmds[0]["argv"][0], cmds[0]["cwd"]), ("/work/repo/gradlew", "/work/repo/core"))  # root wrapper
         jest = grader.RUNNER_CLASSES["jest"].canary(TestSpec(runner="jest", scope=["src/x/a.spec.tsx"], f2p=[], p2p=[]))
         self.assertTrue(list(jest.files)[0].startswith("src/x/rlm") and list(jest.files)[0].endswith(".spec.tsx"))
         go = grader.RUNNER_CLASSES["go"].canary(TestSpec(runner="go", scope=["./a"], f2p=["m/a::TestX"], p2p=[]))

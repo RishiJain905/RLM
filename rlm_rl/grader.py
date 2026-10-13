@@ -939,9 +939,18 @@ class Maven(JUnitXmlRunner):
 class Gradle(JUnitXmlRunner):
     name = "gradle"
 
+    @staticmethod
+    def bin(spec: TestSpec) -> list[str]:
+        """The Gradle command. A wrapper (`./gradlew`) sits at the repository root, while a module's tests run from the
+        module's folder (Gradle finds the build from there), so the wrapper is named from the root."""
+        argv = list(spec.bin or ["gradle"])
+        if argv[0].startswith("./"):
+            argv[0] = posixpath.join(bridge.EDIT_REPO_PATH, argv[0][2:])
+        return argv
+
     def commands(self, spec, scope, report, canary):
-        argv = (spec.bin or ["gradle"]) + ["test", "--offline", "--no-daemon", "--console=plain", "--continue",
-                                           *[a for c in scope for a in ("--tests", c)], *spec.args]
+        argv = self.bin(spec) + ["test", "--offline", "--no-daemon", "--console=plain", "--continue",
+                                 *[a for c in scope for a in ("--tests", c)], *spec.args]
         reports = posixpath.join(self._cwd(spec), "**/build/test-results/test/TEST-*.xml")
         return [{"argv": argv, "cwd": self._cwd(spec), "env": spec.env, "timeout": spec.timeout_s}], [reports]
 

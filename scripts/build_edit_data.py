@@ -1047,6 +1047,60 @@ def cmd_features(args) -> int:
     return 0
 
 
+def read_results(path: Path) -> list[dict]:
+    """A validated/<language>.jsonl file, one result per task: a later line for a task (`revisible`) replaces an
+    earlier one."""
+    if not path.exists():
+        return []
+    by_id = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        r = json.loads(line)
+        by_id[r["id"]] = r
+    return list(by_id.values())
+
+
+async def _revisible_all(records: list[tuple[dict, dict]], out_path: Path, jobs: int) -> None:
+    gate = asyncio.Semaphore(jobs)
+    images: dict[str, editbox.EditImage] = {}
+
+    async def one(rec, old):
+        async with gate:
+            image = images.setdefault(rec["image"], editbox.EditImage.derived(rec["image"]))
+            t = time.time()
+            try:
+                vis_ok, vis_out = await editdata.visible_tests_run(rec, image)
+            except Exception as exc:  # left as it was; the next run tries again
+                print(f"err {rec['id']:55s} {exc!r}"[:200], flush=True)
+                return
+            result = dict(old, ok=vis_ok, why="" if vis_ok else f"visible tests break without the hidden files: "
+                          f"{vis_out[-200:]}", at=time.time(), visible_check=editdata.VISIBLE_CHECK_VERSION)
+            with open(out_path, "a", encoding="utf-8") as f:  # appended: a validation may be writing this file too
+                f.write(json.dumps(result) + "\n")
+            print(f"{'OK ' if vis_ok else 'no '} {rec['id']:55s} {time.time() - t:5.0f}s {result['why'][:120]}",
+                  flush=True)
+
+    await asyncio.gather(*(one(rec, old) for rec, old in records))
+
+
+def cmd_revisible(args) -> int:
+    """Tasks an older visible-test check dropped (a 300 s cap the slow drive ran past, or an older Go check) get the
+    current check again, alone: their base and gold runs passed, so nothing else is repeated."""
+    for language in args.languages:
+        cands = {json.loads(l)["id"]: json.loads(l) for l in editdata.edit_path("candidates", f"{language}.jsonl")
+                 .read_text(encoding="utf-8").splitlines()}
+        out = editdata.edit_path("validated", f"{language}.jsonl")
+        reg = registry()
+        todo = []
+        for r in read_results(out):
+            if (not r["ok"] and r["why"].startswith("visible tests break") and r["id"] in cands
+                    and r.get("visible_check", 1) < editdata.VISIBLE_CHECK_VERSION):
+                rec = dict(cands[r["id"]], image=reg[cands[r["id"]]["key"]]["tag"])
+                todo.append((rec, r))
+        print(f"{language}: checking the visible tests of {len(todo)} tasks again", flush=True)
+        asyncio.run(_revisible_all(todo, out, args.jobs))
+    return 0
+
+
 async def _validate_all(records: list[dict], out_path: Path, jobs: int) -> None:
     gate = asyncio.Semaphore(jobs)
     images: dict[str, editbox.EditImage] = {}
@@ -1079,14 +1133,17 @@ def cmd_validate(args) -> int:
             encoding="utf-8").splitlines()]
         out = editdata.edit_path("validated", f"{language}.jsonl")
         out.parent.mkdir(parents=True, exist_ok=True)
-        results = [json.loads(l) for l in out.read_text(encoding="utf-8").splitlines()] if out.exists() else []
+        results = read_results(out)
         stale = {r["id"] for r in results if language == "go" and not r["ok"]  # only Go's check changed
                  and r["why"].startswith("visible tests break")
-                 and r.get("visible_check", 1) < editdata.VISIBLE_CHECK_VERSION}  # an older, wrong check dropped them
-        results = [r for r in results if r["id"] not in stale]
+                 and r.get("visible_check", 1) < 3}  # `go vet` dropped them (later versions: `revisible`)
+        infra = {r["id"] for r in results if not r["ok"] and r["why"].startswith("error: InfraError")}
+        results = [r for r in results if r["id"] not in stale | infra]
         done = {r["id"] for r in results}
         if stale:
             print(f"{language}: {len(stale)} tasks dropped by an older visible-test check are validated again")
+        if infra:
+            print(f"{language}: {len(infra)} tasks that hit an infra error are validated again")
         reg = registry()
         for c in cands:  # the derived image may have been rebuilt since the candidate was written
             c["image"] = reg[c["key"]]["tag"]
@@ -1398,7 +1455,7 @@ def cmd_report(args) -> int:
     for language in sorted(editdata.LANGS):
         vpath = editdata.edit_path("validated", f"{language}.jsonl")
         if vpath.exists():
-            rows = [json.loads(l) for l in vpath.read_text(encoding="utf-8").splitlines()]
+            rows = read_results(vpath)
             why = collections.Counter(r["why"].split(":")[0][:60] for r in rows if not r["ok"])
             print(f"{language}: {sum(r['ok'] for r in rows)} ok of {len(rows)}; drops: {dict(why.most_common(6))}")
     out = subprocess.run(["docker", "system", "df"], capture_output=True, text=True)
@@ -1411,7 +1468,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("runtime")
     for name in ("pull", "derive", "candidates", "features", "bugs", "bugtexts", "briefs", "validate", "rebench", "prune",
-                 "fixscope"):
+                 "fixscope", "revisible"):
         p = sub.add_parser(name)
         p.add_argument("languages", nargs="+", choices=sorted(editdata.LANGS))
         if name in ("pull", "rebench"):
@@ -1422,6 +1479,8 @@ def main() -> int:
             p.add_argument("--seed", type=int, default=12)
         if name == "briefs":
             p.add_argument("--all", action="store_true", help="include candidates not validated yet")
+        if name == "revisible":
+            p.add_argument("--jobs", type=int, default=2)
         if name == "validate":
             p.add_argument("--jobs", type=int, default=4)
             p.add_argument("--limit", type=int, default=0)
@@ -1441,7 +1500,7 @@ def main() -> int:
     sub.add_parser("report")
     args = parser.parse_args()
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
-            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
+            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 
 
 if __name__ == "__main__":

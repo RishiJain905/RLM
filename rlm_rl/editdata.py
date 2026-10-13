@@ -32,7 +32,6 @@ import hashlib
 import io
 import json
 import math
-import os
 import re
 import secrets
 import shutil
@@ -49,9 +48,10 @@ from .tasks import editreal
 
 EDIT_DIR = "edit"
 REPO_DIR = "/testbed"
-DERIVE_VERSION = 1
+DERIVE_VERSION = 2  # 2: JavaScript and TypeScript keep node_modules where the image installed them (no copy)
 # Copying a JavaScript project's node_modules (or a Rust target/) into a writable layer took over an hour on the USB data
-# drive under load; a build cut off at the old 1-hour limit starts again from nothing.
+# drive under load (TypeScript's 5-6 GB images ran for hours); a build cut off at the old 1-hour limit starts again from
+# nothing.
 DERIVE_TIMEOUT_S = 6 * 3600
 
 # Per language: the runner, a generic command for the visible tests, what the snapshot leaves out, the derived
@@ -153,13 +153,27 @@ def cache_env(source: str) -> dict:
 
 
 def derive_dockerfile(source: str, language: str, uid: int, gid: int, repo_dir: str = REPO_DIR,
-                      path: str | None = None, go: dict | None = None, extra_env: dict | None = None) -> str:
+                      path: str | None = None, go: dict | None = None, extra_env: dict | None = None,
+                      deps: list[str] | None = None) -> str:
     """The derived image (spec §12.4): no checkout, the image's repository path -> /work/repo, caches the sandbox user
-    can write, offline. `go` (SWE-rebench V2 images, from probe_source) says where Go's module and build caches are."""
+    can write, offline. `go` (SWE-rebench V2 images, from probe_source) says where Go's module and build caches are.
+
+    `deps` (JavaScript, TypeScript: the checkout's outermost node_modules folders) stay where the image installed them:
+    moving or re-owning them copies every file into a new layer, hours for a 5 GB node_modules on the data drive. The
+    checkout around them goes instead (.git and every file outside node_modules; folders stay, empty), the repository
+    path stays a folder rather than a link to /work/repo, and /opt/rlm-deps is a link to it, so an episode's
+    /work/repo/<folder> -> /opt/rlm-deps/<folder> links reach them. They stay owned by root: read-only to the
+    sandbox user, which the tests only read."""
     cfg = LANGS[language]
-    steps = [f"rm -rf {repo_dir} /root/setup_env.sh", "mkdir -p /work /opt/rlm /scratch /episode /opt/rlm-cache /opt/rlm-deps",
-             f"ln -s /work/repo {repo_dir}"]
-    chown = ["/opt/rlm-cache", "/opt/rlm-deps"]
+    if deps:
+        steps = [f"rm -rf {repo_dir}/.git /root/setup_env.sh",
+                 f"find {repo_dir} -mindepth 1 \\( -type d -name node_modules -prune \\) -o \\( ! -type d -exec rm -f {{}} + \\)",
+                 "mkdir -p /work /opt/rlm /scratch /episode /opt/rlm-cache", f"ln -s {repo_dir} /opt/rlm-deps"]
+        chown = ["/opt/rlm-cache"]
+    else:
+        steps = [f"rm -rf {repo_dir} /root/setup_env.sh",
+                 "mkdir -p /work /opt/rlm /scratch /episode /opt/rlm-cache /opt/rlm-deps", f"ln -s /work/repo {repo_dir}"]
+        chown = ["/opt/rlm-cache", "/opt/rlm-deps"]
     env_go = {}
     if language == "go" and go:
         # The module cache stays where it is, read-only (GOPROXY=off fetches nothing): its folders are opened up
@@ -218,14 +232,10 @@ def derive(source: str, language: str, uid: int | None = None, gid: int | None =
     probe = probe_source(source)
     if not probe["git"]:
         raise RuntimeError(f"{source} has no git, which the coding tools need (spec §12.1)")
+    moves = node_modules_moves(source, repo_dir) if language in ("javascript", "typescript") else []
     dockerfile = derive_dockerfile(source, language, uid, gid, repo_dir=repo_dir, path=login_path(source, probe),
                                    go=probe if rebench and language == "go" else None,
-                                   extra_env=cache_env(source) if rebench else None)
-    moves = node_modules_moves(source, repo_dir) if language in ("javascript", "typescript") else []
-    if moves:  # keep the installed dependencies, outside the checkout that is deleted
-        mv = "; ".join(f"mkdir -p /opt/rlm-deps/{os.path.dirname(d) or '.'} && mv {repo_dir}/{d} /opt/rlm-deps/{d}"
-                       for d in moves)
-        dockerfile = dockerfile.replace("RUN set -e; rm -rf", f"RUN set -e; {mv}; rm -rf", 1)
+                                   extra_env=cache_env(source) if rebench else None, deps=moves)
     digest = hashlib.sha256(dockerfile.encode()).hexdigest()[:12]
     tag = f"rlm-edit-{name or repo_key(source)}:{digest}"
     if _docker("image", "inspect", tag, check=False).returncode == 0:
@@ -532,35 +542,49 @@ async def validate(record: dict, image: editbox.EditImage, runs: int = 3, run_id
 
 
 # Bumped when the visible-test check changes; a task dropped by an older check is validated again (validate stage).
-VISIBLE_CHECK_VERSION = 3  # 2: Go compiles tests instead of `go vet`; 3: and doesn't run TestMain (-exec /bin/true)
+VISIBLE_CHECK_VERSION = 4  # 2: Go compiles tests instead of `go vet`; 3: and doesn't run TestMain (-exec /bin/true);
+# 4: a check that runs out of time is tried again with more, and never counts as broken visible tests; Gradle builds
+# compile their tests with Gradle
+VISIBLE_TIMEOUT_S = 1800  # compiling every test target (Go packages, a Rust crate) on the slow data drive, under load
 
 
 async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str = "edit-validate") -> tuple[bool, str]:
-    """Spec §12.8: removing the hidden test files doesn't break the visible tests (they still collect or compile)."""
+    """Spec §12.8: removing the hidden test files doesn't break the visible tests (they still collect or compile).
+    A check that runs out of time runs once more with double the time; a second timeout is an InfraError (the drive's
+    problem, not the task's), never a broken-visible-tests verdict."""
     task = editreal.to_task(record, "edit_real")
     ws_dir = await asyncio.to_thread(task.workspace.ensure)
     language = record["language"]
     checks = {"python": ["python", "-m", "pytest", "-q", "--collect-only", "-p", "no:cacheprovider"],
               "go": ["go", "test", "-count=1", "-run", "^$", "-exec", "/bin/true", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
               "java": ["mvn", "-o", "-q", "test-compile"]}
+    spec = grader.TestSpec(runner=record["tests"]["runner"], scope=[], f2p=[], p2p=[], language=language,
+                           cwd=record["tests"].get("cwd", "."), env=record["tests"].get("env", {}),
+                           bin=record["tests"].get("bin") or [])
+    if spec.runner == "gradle":  # Gradle builds compile their tests with testClasses, not Maven's test-compile
+        checks["java"] = grader.Gradle.bin(spec) + ["testClasses", "--offline", "--no-daemon", "--console=plain"]
     argv = record.get("visible_check") or checks.get(language)
     if not argv:
         return True, "no visible check for this language"
-    spec = grader.TestSpec(runner=record["tests"]["runner"], scope=[], f2p=[], p2p=[], language=language,
-                           cwd=record["tests"].get("cwd", "."), env=record["tests"].get("env", {}))
-    job = {"nonce": secrets.token_hex(16), "commands": [{"argv": argv, "cwd": grader.Runner._cwd(spec),
-                                                          "env": dict(LANGS[language]["env"], **spec.env),
-                                                          "timeout": 300, "merge": True}],
-           "reports": [], "deadline_s": 300, "writable": ["/work/repo", "/scratch", "/tmp", *image.writable]}
-    base = editbox.cache_root() / f"visible-{secrets.token_hex(6)}"
-    try:
-        editbox.materialize(ws_dir, base)
-        driver = await grader.run_driver(job, image=image, grade_dir=base, run_id=run_id, docker="docker",
-                                         runtime=editbox.runtime_dir(), bundle=editbox.python_bundle_dir(),
-                                         limits=editbox.edit_sandbox_limits(), timeout=300 + grader.GRADER_START_SLACK_S)
-    finally:
-        editbox.remove_tree(base)
-    cmd = (driver.get("commands") or [{}])[0]
+    for cap in (VISIBLE_TIMEOUT_S, 2 * VISIBLE_TIMEOUT_S):
+        job = {"nonce": secrets.token_hex(16), "commands": [{"argv": argv, "cwd": grader.Runner._cwd(spec),
+                                                              "env": dict(LANGS[language]["env"], **spec.env),
+                                                              "timeout": cap, "merge": True}],
+               "reports": [], "deadline_s": cap, "writable": ["/work/repo", "/scratch", "/tmp", *image.writable]}
+        base = editbox.cache_root() / f"visible-{secrets.token_hex(6)}"
+        try:
+            editbox.materialize(ws_dir, base)
+            driver = await grader.run_driver(job, image=image, grade_dir=base, run_id=run_id, docker="docker",
+                                             runtime=editbox.runtime_dir(), bundle=editbox.python_bundle_dir(),
+                                             limits=editbox.edit_sandbox_limits(),
+                                             timeout=cap + grader.GRADER_START_SLACK_S)
+        finally:
+            editbox.remove_tree(base)
+        cmd = (driver.get("commands") or [{}])[0]
+        if not (cmd.get("timed_out") or driver.get("deadline_hit")):
+            break
+    else:
+        raise grader.InfraError(f"the visible-test check ran past {cap} s on its second try")
     out = (cmd.get("stdout") or "") + (cmd.get("stderr") or "")
     if language == "python":
         ok = cmd.get("exit") in (0, 5) and "error" not in out.lower().split("collected")[-1][:400].lower()

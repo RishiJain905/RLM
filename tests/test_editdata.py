@@ -150,6 +150,16 @@ class DeriveTest(unittest.TestCase):
         self.assertLess(rust.index("mv /testbed/target /opt/rlm-cache/target"), rust.index("rm -rf /testbed"))
         self.assertIn('LABEL rlm.edit.writable="/opt/rlm-cache"', go)
 
+    def test_node_modules_stay_where_the_image_installed_them(self):
+        text = editdata.derive_dockerfile("src:img", "typescript", 1000, 1000, deps=["node_modules", "pkg/a/node_modules"])
+        self.assertIn("rm -rf /testbed/.git", text)
+        self.assertIn("find /testbed -mindepth 1 \\( -type d -name node_modules -prune \\) -o \\( ! -type d -exec rm -f {} + \\)",
+                      text)  # every checkout file goes, node_modules stay
+        self.assertIn("ln -s /testbed /opt/rlm-deps", text)
+        self.assertNotIn("mv /testbed", text)  # no copy of node_modules
+        self.assertNotIn("ln -s /work/repo /testbed", text)
+        self.assertNotIn("/opt/rlm-deps", text.split("chown -R 1000:1000")[1].split("\n")[0])  # never re-owned (a copy)
+
     def test_a_real_pr_image_keeps_its_go_cache_readable_and_moves_unwritable_caches(self):
         text = editdata.derive_dockerfile("rb:img", "go", 1000, 1000, repo_dir="/kin-openapi",
                                           go={"gomodcache": "/root/go/pkg/mod", "gocache": "/root/.cache/go-build"},
