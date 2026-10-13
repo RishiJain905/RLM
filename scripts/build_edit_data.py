@@ -1054,6 +1054,36 @@ def cmd_fixscope(args) -> int:
     return 0
 
 
+# A canary's result key, from any runner: its file or package (test_<8 hex>.py, rlm<8 hex>.<ext>, rlmc<8 hex>) and its
+# test (c<10 hex>, test_c<10 hex>, TestC<10 hex>).
+CANARY_KEY = re.compile(r"(?:(?:^|/)test_[0-9a-f]{8}\.py|rlmc?[0-9a-f]{8}|RlmCanary[0-9A-F]{8}Test)"
+                        r".*(?:::|\.)(?:test_c|TestC|c)[0-9a-f]{10}(?:\(\))?$")
+
+
+def cmd_decanary(args) -> int:
+    """Validation results whose test lists picked up a canary (the grader kept canary results until e.g. 2026-10-13):
+    the canary keys go, and a task left with no fail-to-pass test fails. Corrected results are appended (a later line
+    replaces an earlier one), since a validation may be writing the file."""
+    for language in args.languages:
+        out = editdata.edit_path("validated", f"{language}.jsonl")
+        fixed = []
+        for r in read_results(out):
+            f2p = [k for k in r.get("f2p") or [] if not CANARY_KEY.search(k)]
+            p2p = [k for k in r.get("p2p") or [] if not CANARY_KEY.search(k)]
+            if f2p == (r.get("f2p") or []) and p2p == (r.get("p2p") or []):
+                continue
+            new = dict(r, f2p=f2p, p2p=p2p, at=time.time(), decanaried=True)
+            if r["ok"] and not f2p:
+                new.update(ok=False, why="no test fails on the base and passes with the gold patch (only a canary did)")
+            fixed.append(new)
+        with open(out, "a", encoding="utf-8") as f:
+            for r in fixed:
+                f.write(json.dumps(r) + "\n")
+        dropped = sum(1 for r in fixed if not r["ok"])
+        print(f"{language}: {len(fixed)} results lose canary keys; {dropped} of them no longer pass")
+    return 0
+
+
 def cmd_retest(args) -> int:
     """Candidates of repositories in REPO_TESTS get its runner settings (runner, command, arguments, environment, JUnit
     version, test hint), keeping their scope and folder; results the old settings caused are forgotten."""
@@ -1635,7 +1665,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("runtime")
     for name in ("pull", "derive", "candidates", "features", "bugs", "bugtexts", "briefs", "validate", "rebench", "prune",
-                 "fixscope", "revisible", "retest"):
+                 "fixscope", "revisible", "retest", "decanary"):
         p = sub.add_parser(name)
         p.add_argument("languages", nargs="+", choices=sorted(editdata.LANGS))
         if name in ("pull", "rebench"):
@@ -1670,7 +1700,7 @@ def main() -> int:
     sub.add_parser("report")
     args = parser.parse_args()
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
-            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "retest": cmd_retest, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
+            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "retest": cmd_retest, "decanary": cmd_decanary, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 
 
 if __name__ == "__main__":

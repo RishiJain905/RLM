@@ -117,6 +117,13 @@ class CheckDiffTest(unittest.TestCase):
         c = self.check(file_patch("pkg/api.py", ["a"], ["b"]) + file_patch("tests/test_new.py", [], ["def test_x(): pass"], new_file=True))
         self.assertEqual((self.rules(c), c.stripped["new_test_files"], c.files_changed), ([], 1, 1))
 
+    def test_canary_results_never_leave_the_grader(self):
+        c = grader.Canary({"tests/test_ab12cd34.py": "x"}, "test_c0123456789", "test_c9876543210", [])
+        for key in ("tests/test_ab12cd34.py::test_c0123456789", "pkg/rlmcab12cd34::test_c9876543210"):
+            self.assertTrue(grader.is_canary_key(key, c))
+        self.assertFalse(grader.is_canary_key("tests/test_api.py::test_c0123456789_more", c))
+        self.assertFalse(grader.is_canary_key("tests/test_api.py::test_create", c))
+
     def test_new_test_files_never_reach_the_run_in_any_language(self):
         # Go, Rust and Java compile every test file in scope (a Go init() would run), so a new one is dropped, not just unrun.
         for language, path in (("go", "pkg/evil_test.go"), ("rust", "tests/evil.rs"), ("java", "src/test/java/a/EvilTest.java"),

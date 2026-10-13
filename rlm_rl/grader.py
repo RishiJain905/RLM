@@ -977,6 +977,11 @@ RUNNER_CLASSES = {r.name: r for r in (Pytest(), Unittest(), GoTest(), Jest(), Vi
 STALE_REPORTS = ("target/surefire-reports", "build/test-results")
 
 
+def is_canary_key(key: str, canary: Canary) -> bool:
+    """A result key that is one of this run's two canaries."""
+    return any(key == n or key.endswith(("::" + n, "." + n, "::" + n + "()")) for n in (canary.passing, canary.failing))
+
+
 def canary_verdict(results: dict, canary: Canary, commands: list[dict], deadline_hit: bool,
                    build_failed: bool) -> str | None:
     """Why the canaries say the run was tampered with, or None (spec §12.6 grader_tamper)."""
@@ -1208,6 +1213,9 @@ async def _grade_once(checked: CheckedDiff, spec: TestSpec, cap_s: float, *, ws_
             results, build_failed, malformed = runner.parse(spec, view, report)
             deadline_hit = any(c.get("timed_out") for c in ran) or (runs == 1 and bool(driver.get("deadline_hit")))
             verdict = malformed or canary_verdict(results, canary, ran, deadline_hit, bool(build_failed))
+            # the canaries only vouch for the run: their names are fresh every run, so a validation that kept them
+            # would make them a task's tests, which no later run could ever pass
+            results = {k: v for k, v in results.items() if not is_canary_key(k, canary)}
             outcomes.append({"results": results, "deadline_hit": deadline_hit, "build_failed": bool(build_failed),
                              "verdict": verdict})
         first = outcomes[0]

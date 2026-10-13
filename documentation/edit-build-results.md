@@ -179,6 +179,8 @@ Each real PR has its own image (0.8-1.3 GB compressed, about 0.5 GB of it unique
 
 ---
 
+**Canary results leaked into validation (found and fixed 2026-10-13).** The grader kept the two canaries' results beside the real tests'. Canary names are fresh every run, so validation counted the gold run's must-pass canary as a fail-to-pass test: 12 Python, 61 Go, 8 Rust and 5 TypeScript results carried one. Where a task's real tests reported nothing, the canary was its only fail-to-pass test, and the task passed validation with nothing behind it (1 Go, 6 Rust, 5 TypeScript); in training, any task holding a stale canary name could never be solved. The grader now drops canary results once they have vouched for the run (`grader.is_canary_key`), and `decanary` removed the canary keys from the results already written (appended corrections; a task left with no fail-to-pass test fails). Python's 173 passing tasks were unaffected.
+
 ## 5a. The slow data drive: time, never the reward (Rishi, 2026-10-13)
 
 A slow drive may cost time but must never turn a good answer into a 0 or pause the run.
