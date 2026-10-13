@@ -1335,13 +1335,13 @@ def cmd_validate(args) -> int:
         stale = {r["id"] for r in results if language == "go" and not r["ok"]  # only Go's check changed
                  and r["why"].startswith("visible tests break")
                  and r.get("visible_check", 1) < 3}  # `go vet` dropped them (later versions: `revisible`)
-        infra = {r["id"] for r in results if not r["ok"] and r["why"].startswith("error: InfraError")}
+        infra = {r["id"] for r in results if not r["ok"] and r["why"].startswith("error:")}  # never the task's fault
         results = [r for r in results if r["id"] not in stale | infra]
         done = {r["id"] for r in results}
         if stale:
             print(f"{language}: {len(stale)} tasks dropped by an older visible-test check are validated again")
         if infra:
-            print(f"{language}: {len(infra)} tasks that hit an infra error are validated again")
+            print(f"{language}: {len(infra)} tasks whose validation hit an error are validated again")
         reg = registry()
         for c in cands:  # the derived image may have been rebuilt since the candidate was written
             c["image"] = reg[c["key"]]["tag"]

@@ -49,7 +49,7 @@ RUNNERS = ("pytest", "unittest", "go", "jest", "vitest", "mocha", "cargo", "mave
 LANGUAGES = ("python", "go", "typescript", "javascript", "rust", "java")
 REPORT_DIR = "/tmp/rlm-grade"
 # Beyond the tests' own cap: starting the grader container, which took minutes on the USB data drive under load.
-GRADER_START_SLACK_S = 600
+GRADER_START_SLACK_S = 1800
 PASSED, FAILED, ERROR, SKIPPED = "passed", "failed", "error", "skipped"
 
 
@@ -1245,12 +1245,14 @@ async def run_driver(job: dict, *, image: Any, grade_dir: Path, run_id: str, doc
         out, err = await asyncio.wait_for(proc.communicate(json.dumps(job).encode()), timeout)
     except asyncio.TimeoutError:
         await _docker(docker, "rm", "-f", name)
-        proc.kill()
+        with contextlib.suppress(ProcessLookupError):  # removing the container may already have ended it
+            proc.kill()
         await proc.wait()
         raise InfraError(f"the grader container ran past {timeout:.0f} s without reporting")
     finally:
         if proc.returncode is None:
-            proc.kill()
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
     oom = (await _docker(docker, "inspect", "--format", "{{.State.OOMKilled}}", name))[1].strip() == "true"
     await _docker(docker, "rm", "-f", name)
     prefix = f"{PREFIX}{job['nonce']} "
