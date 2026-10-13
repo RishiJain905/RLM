@@ -94,9 +94,20 @@ def repo_key(image: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.\-]", "-", name.replace("_1776_", "__")).lower()
 
 
-def _docker(*args: str, check: bool = True, input: bytes | None = None, timeout: float = 3600) -> subprocess.CompletedProcess:
-    return subprocess.run(["docker", *args], capture_output=True, check=check, input=input, env=docker_cli_env(),
-                          timeout=timeout)
+def _docker(*args: str, check: bool = True, input: bytes | None = None, timeout: float = 3600,
+            legacy: bool = False) -> subprocess.CompletedProcess:
+    env = dict(docker_cli_env(), DOCKER_BUILDKIT="0") if legacy else docker_cli_env()
+    return subprocess.run(["docker", *args], capture_output=True, check=check, input=input, env=env, timeout=timeout)
+
+
+def _build(*args: str, context: bytes) -> subprocess.CompletedProcess:
+    """`docker build` with BuildKit, and once more with the classic builder when BuildKit gave up committing the image
+    ("commit failed: context deadline exceeded": its commit has a deadline a big layer can run past on the loaded
+    data drive; the classic builder's has none)."""
+    out = _docker("build", *args, input=context, check=False, timeout=DERIVE_TIMEOUT_S)
+    if out.returncode and b"context deadline exceeded" in out.stderr:
+        out = _docker("build", *args, input=context, check=False, timeout=DERIVE_TIMEOUT_S, legacy=True)
+    return out
 
 
 # ----------------------------------------------------------------------------- derived images
@@ -238,8 +249,7 @@ def warm_image(source: str, warm: str, repo_dir: str = REPO_DIR, name: str | Non
         info = tarfile.TarInfo("Dockerfile")
         info.size = len(dockerfile.encode())
         tar.addfile(info, io.BytesIO(dockerfile.encode()))
-    out = _docker("build", "--pull=false", "-t", tag, "-", input=context.getvalue(), check=False,
-                  timeout=DERIVE_TIMEOUT_S)
+    out = _build("--pull=false", "-t", tag, "-", context=context.getvalue())
     if out.returncode:
         raise RuntimeError(f"warming {source} failed: {out.stderr.decode()[-800:]}")
     return tag
@@ -271,8 +281,7 @@ def derive(source: str, language: str, uid: int | None = None, gid: int | None =
         body = dockerfile.encode()
         info.size = len(body)
         tar.addfile(info, io.BytesIO(body))
-    out = _docker("build", "--network", "none", "--pull=false", "-t", tag, "-", input=context.getvalue(), check=False,
-                  timeout=DERIVE_TIMEOUT_S)
+    out = _build("--network", "none", "--pull=false", "-t", tag, "-", context=context.getvalue())
     if out.returncode:
         raise RuntimeError(f"deriving {source} failed: {out.stderr.decode()[-800:]}")
     return tag
