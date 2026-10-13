@@ -1,7 +1,9 @@
 """The live dashboard (plan step 9): the page's data, the secrets check and the publish loop, with no W&B call.
 
 A short production dry run (ticket stand-in, fake model and backend) gives a real results file, real
-training transcripts and real eval transcripts to build against.
+training transcripts and real eval transcripts to build against. The dry run needs the loop's own
+dependencies (openai, ART); where they aren't installed its tests skip. The edit-family tests (spec §12)
+build against tests/dash_fixture.py's synthetic run instead, which needs nothing but the standard library.
 
     python3 -m unittest -v tests.test_dashboard
 """
@@ -9,6 +11,7 @@ training transcripts and real eval transcripts to build against.
 import argparse
 import asyncio
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -18,9 +21,10 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from rlm_rl import config, dashboard
-from tests.dryrun import DryRun, Oracle
+from rlm_rl import dashboard
+from tests import dash_fixture
 
 REPO = Path(__file__).resolve().parents[1]
 RUN = "dash-test"
@@ -38,6 +42,13 @@ class DryRunCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        try:
+            from rlm_rl import config
+            from tests.dryrun import DryRun, Oracle
+        except ModuleNotFoundError as exc:
+            if (exc.name or "").split(".")[0] in ("rlm_rl", "tests"):
+                raise
+            raise unittest.SkipTest(f"the dry run needs {exc.name}, which isn't installed here")
         cls.tmp = tempfile.TemporaryDirectory()
         cls.results = Path(cls.tmp.name) / "results"
         cls.out = Path(cls.tmp.name) / "dashboard"
@@ -268,6 +279,197 @@ class WaitTest(DryRunCase):
         self.assertIn("heartbeat_age=", out)
         code, out = self.wait(ack=True, timeout=0.6)  # reported once, until the run writes again
         self.assertTrue(out.startswith("TIMEOUT"), out)
+
+
+EDIT_RUN = "dash-edit-test"
+
+
+class EditCase(unittest.TestCase):
+    """A 12-step synthetic production run with the edit families (spec §12), shared by the class."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.results = Path(cls.tmp.name) / "results"
+        cls.out = Path(cls.tmp.name) / "dashboard"
+        cls.source = dash_fixture.write_run(cls.results, EDIT_RUN, steps=12)
+        cls.cli = _cli()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def state(self) -> dict:
+        return copy.deepcopy(self.source)
+
+    def data(self, state: dict | None = None) -> dict:
+        return dashboard.page_data(self.state() if state is None else state, run_dir=self.results / EDIT_RUN, dry_run=True)
+
+
+class EditDataTest(EditCase):
+    def test_the_edit_block_passes_through(self):
+        source = self.state()["steps"][-1]["edit"]
+        row = self.data()["steps"][-1]["edit"]
+        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language", "tool_calls"})
+        for key in dashboard.EDIT_KEYS:
+            self.assertEqual(row[key], source[key], key)
+        self.assertEqual(row["tool_calls"], source["tool_calls"])
+        self.assertEqual(set(row["by_language"]), set(source["by_language"]))
+        for lang, g in source["by_language"].items():
+            self.assertEqual(row["by_language"][lang]["episodes"], g["episodes"])
+            self.assertAlmostEqual(row["by_language"][lang]["resolved"], g["resolved"], places=4)
+
+    def test_unknown_edit_keys_and_names_are_dropped(self):
+        state = self.state()
+        edit = state["steps"][-1]["edit"]
+        edit.update(repo="acme/headers", task_ids=["acme__headers-1234"], failing_tests={"tests/test_api.py::test_a": 1},
+                    note="see /work/repo", resolved="most")
+        edit["tool_calls"].update({"acme_helper": 3, "shell": "ls /work/repo"})
+        edit["by_language"].update({"acme__headers-1234": {"episodes": 4, "resolved": 0.5},
+                                    "/work/repo/src": {"episodes": 2, "resolved": 0.0},
+                                    "Python": {"episodes": 2, "resolved": 1.0}, "cobol": "lots"})
+        python = edit["by_language"]["python"]
+        state["steps"][-2]["edit"] = "not a block"
+        data = self.data(state)
+        row = data["steps"][-1]["edit"]
+        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language", "tool_calls"})
+        self.assertIsNone(row["resolved"])  # not a number
+        self.assertEqual(set(row["tool_calls"]), set(dashboard.TOOL_NAMES))  # only the seven tools, by name
+        self.assertIsNone(row["tool_calls"]["shell"])
+        self.assertEqual(row["by_language"]["other"], {"episodes": 6, "resolved": round(2 / 6, 4)})
+        self.assertEqual(row["by_language"]["python"]["episodes"], python["episodes"] + 2)  # names are matched in lower case
+        self.assertNotIn("edit", data["steps"][-2])
+        page = dashboard.render(data)
+        for leak in ("acme", "test_api.py", "/work/repo", "cobol", "Python"):
+            self.assertNotIn(leak, json.dumps(data["steps"]), leak)
+        self.assertTrue(dashboard.check(page)["ok"])
+
+    def test_old_records_without_an_edit_block_still_build(self):
+        state = self.state()
+        for r in state["steps"][:6]:
+            del r["edit"]
+        state["steps"][6]["edit"] = None
+        data = self.data(state)
+        self.assertTrue(all("edit" not in r for r in data["steps"][:7]))
+        self.assertTrue(all("edit" in r for r in data["steps"][7:]))
+        read_only = dash_fixture.state(steps=8, edit=False)
+        data = dashboard.page_data(read_only, dry_run=True)
+        self.assertTrue(all("edit" not in r for r in data["steps"]))
+        self.assertEqual(data["evals"][-1]["summary"]["by_language"], {})
+        self.assertTrue(dashboard.check(dashboard.render(data))["ok"])
+
+    def test_by_language_in_eval_summaries(self):
+        state = self.state()
+        source = state["evals"][-1]["summary"]["by_language"]
+        source["quillmark"] = {"n": 2, "accuracy": 0.5}
+        summary = self.data(state)["evals"][-1]["summary"]
+        self.assertEqual({k: v for k, v in summary["by_language"].items() if k != "other"},
+                         {k: v for k, v in source.items() if k != "quillmark"})
+        self.assertEqual(summary["by_language"]["other"], {"n": 2, "accuracy": 0.5})
+        self.assertIn("edit_real", summary["by_family"])
+        self.assertIn("edit_real/L1", summary["by_level"])
+
+    def test_the_edit_detectors_are_counted_per_rule(self):
+        state = self.state()
+        data = self.data(state)
+        for source, row in zip(state["steps"], data["steps"]):
+            self.assertEqual(row["reward"]["hacks"], source["reward"]["hacks"])
+        rules = set(data["steps"][-1]["reward"]["hacks"])
+        self.assertTrue({"test_tamper", "grader_tamper", "test_aware", "network_try"} <= rules)
+        self.assertTrue({"test_tamper", "network_try"} <= set(data["evals"][-1]["summary"]["hacks"]))
+        template = dashboard.TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn('network_try: ["network try (logged only)"', template)
+        for family in ("edit_real", "edit_synth"):
+            self.assertIn(family, data["run"]["config"]["mix"])
+            self.assertIn(family, data["controller"]["families"])
+            self.assertIn(family, data["steps"][-1]["families"])
+
+    def test_the_pot_matches_the_v2_split(self):
+        pot = self.data()["pot"]
+        self.assertEqual((pot["second_seed_usd"], pot["baselines_usd"], pot["production_usd"], pot["evals_usd"],
+                          pot["reserve_usd"]), (12.0, 9.0, 157.0, 30.0, 10.0))
+        self.assertEqual(sum(pot[k] for k in ("second_seed_usd", "baselines_usd", "production_usd", "evals_usd",
+                                              "reserve_usd")), pot["inference_left_usd"])
+
+    def test_edit_samples_show_no_gold_hidden_tests_or_paths(self):
+        cache: dict = {}
+        samples = dashboard.update_samples(cache, self.state(), self.results / EDIT_RUN)
+        edits = [s for s in samples if s["edit"]]
+        self.assertTrue(edits)
+        self.assertTrue(any(s["why"] == "flagged" for s in edits))
+        for s in edits:
+            self.assertEqual(s["gold"], "(hidden tests)")
+            self.assertEqual(s["language"], "go")
+            self.assertLessEqual(set(s["components"]), set(dashboard.EDIT_KEYS))
+            self.assertIn("f2p_pass", s["components"])
+            if s["why"] == "flagged":
+                self.assertEqual(s["hacks"], ["test_tamper"])  # the rule, not its detail
+        reads = [s for s in samples if not s["edit"]]
+        self.assertTrue(reads and all(s["gold"] == "37" and s["language"] is None for s in reads))
+        blob = json.dumps(samples)
+        for leak in ("TestQuotedComma", "test_hidden_case", "parse_test.go", "/work/repo", "acme__headers", "diff --git"):
+            self.assertNotIn(leak, blob, leak)
+
+
+class EditCheckTest(EditCase):
+    def planted(self, plant) -> str:
+        """A page whose data was changed after the allowlist, as a bug in it would."""
+        data = self.data()
+        plant(data)
+        return dashboard.render(data)
+
+    def test_the_build_passes_and_reads_the_edit_eval_names(self):
+        # Only the fixture's seeds: a checkout's own private/seeds would change the count.
+        with mock.patch.object(self.cli, "seed_roots", lambda results: [results / "private" / "seeds"]):
+            r = self.cli.build(EDIT_RUN, self.results, dry=True, out_dir=self.out)
+        self.assertTrue(r["ok"], r["findings"])
+        self.assertEqual(r["checked"], {"seeds": 2, "eval_tasks": 2, "prompts": 0, "task_ids": 1, "repos": 1})
+        page = (self.out / "page.html").read_text(encoding="utf-8")
+        data = dashboard.embedded_data(page)
+        self.assertEqual(data["steps"][-1]["edit"]["episodes"], self.source["steps"][-1]["edit"]["episodes"])
+        for leak in (dash_fixture.EVAL_TASK_ID, dash_fixture.EVAL_REPO, "ent/proj", "/work/repo", "acme__"):
+            self.assertNotIn(leak, page, leak)
+
+    def test_a_leaked_task_id_or_repo_path_is_caught(self):
+        for leak, finding in (("django__django-11099", "task id (owner__repo style)"),
+                              ("/work/repo/tests/test_api.py", "sandbox or repository path"),
+                              ("/testbed/src/app.py", "sandbox or repository path")):
+            page = self.planted(lambda d: d["steps"][-1]["edit"]["by_language"].update({leak: {"episodes": 1, "resolved": 0}}))
+            r = dashboard.check(page)
+            self.assertFalse(r["ok"], leak)
+            self.assertIn(finding, r["findings"])
+            self.assertNotIn(leak, json.dumps(r))  # counts, never the match
+
+    def test_an_edit_eval_task_id_or_repository_is_caught(self):
+        task_ids, repos = dashboard.eval_names(self.results / EDIT_RUN)
+        self.assertEqual((task_ids, repos), ({dash_fixture.EVAL_TASK_ID}, {dash_fixture.EVAL_REPO}))
+        page = self.planted(lambda d: d["evals"][-1]["summary"]["by_language"].update({dash_fixture.EVAL_TASK_ID: {"n": 1}}))
+        r = dashboard.check(page, task_ids=task_ids, repos=repos)
+        self.assertEqual(r["findings"], {"eval task id": 1})
+        page = self.planted(lambda d: d["notices"].append({"at": 1.0, "step": 1, "kind": "x", "text": "grader on quillmark"}))
+        self.assertEqual(dashboard.check(page, task_ids=task_ids, repos=repos)["findings"], {"eval repository name": 1})
+        # a training rollout may import a library that shares the name: transcripts aren't scanned for repositories
+        page = self.planted(lambda d: d["samples"].append({"turns": [{"code": "import quillmark"}]}))
+        self.assertTrue(dashboard.check(page, task_ids=task_ids, repos=repos)["ok"])
+        # whole words, case-sensitive: a chart title's "Quillmarks" is not the repository
+        page = self.planted(lambda d: d["notices"].append({"at": 1.0, "step": 1, "kind": "x", "text": "Quillmarks quillmarking"}))
+        self.assertTrue(dashboard.check(page, task_ids=task_ids, repos=repos)["ok"])
+
+    def test_an_edit_eval_task_is_caught_by_its_text(self):
+        items, unkeyed = dashboard.eval_items(self.results / EDIT_RUN)
+        self.assertIn((dash_fixture.EVAL_QUESTION[:150], ""), items)
+        self.assertFalse(unkeyed)
+        page = self.planted(lambda d: d["notices"].append({"at": 1.0, "step": 1, "kind": "x", "text": dash_fixture.EVAL_QUESTION}))
+        r = dashboard.check(page, items=items)
+        self.assertEqual(r["findings"], {"eval task (its question and context)": 1})
+
+    def test_scrub_removes_sandbox_paths_and_task_ids(self):
+        out = dashboard.scrub("open('/work/repo/src/x.py') in /testbed for psf__requests-1234 and "
+                              "getmoto__moto.694ce1f4.pr_5306, not __init__.py, __name__ or obj.__dict__")
+        for bad in ("/work/repo", "/testbed", "psf__requests", "getmoto__moto"):
+            self.assertNotIn(bad, out)
+        for kept in ("__init__.py", "__name__", "obj.__dict__"):
+            self.assertIn(kept, out)
 
 
 if __name__ == "__main__":

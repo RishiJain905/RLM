@@ -1,6 +1,6 @@
 # Production RL build plan
 
-> **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. **Updated 2026-10-11:** steps 1-7 are built, and decision 7c dropped cyber from the run (step 7). No W&B credit has been spent.
+> **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. **Updated 2026-10-11:** steps 1-7 are built, and decision 7c dropped cyber from the run (step 7). **Updated 2026-10-12:** code editing joins the run: build steps E1-E6 from [code-editing-plan.md](code-editing-plan.md) §13, spec v2 in [production-spec.md](production-spec.md) §12, and the split below (no E7 probe, reserve $10). No W&B credit has been spent.
 >
 > **Source of truth:** [rl-run-research.md](rl-run-research.md). Its html version says the same thing. Section numbers (§) below point into it. Anything marked *(mine)* is my recommendation, not the research's. Anything marked *(inferred)* hasn't been checked yet.
 >
@@ -43,12 +43,13 @@ The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverle
 | 7 | Data | PC + Design | H7, H8 | $0 | 7a, 7b, 7c |
 | 8 | Red-team | Claude agent | H11, re-checks H1-H4 | $0 | none |
 | 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c |
+| E1-E6 | Code editing build ([code-editing-plan.md](code-editing-plan.md) §13) | Design + PC | spec §12 | $0 | taken (E-a to E-g) |
 | 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | 10a, 10b, 10c |
-| 11 | Baselines | Spend | §8.2 | ~$5 | 11a |
-| 12 | Production run | Spend | §8.6 | up to ~$150 + ~$25 evals | 12a |
+| 11 | Baselines | Spend | §8.2 | ~$9 | 11a |
+| 12 | Production run | Spend | §8.6 | up to ~$157 + ~$30 evals | 12a |
 | 13 | Final eval off W&B | PC or GPU host | §7.4 | $0 on W&B | 13a, 13b |
 
-Inference adds up to ~$217 of the ~$218 left, counting a ~$25 reserve.
+Inference adds up to ~$218 of the ~$218 left, counting a ~$10 reserve.
 
 ---
 
@@ -537,12 +538,14 @@ There is no pilot, so this is the first run on the new environment. It catches p
 | Item | Inference |
 |---|---|
 | Second seed (this step) | ~$12 |
-| Baselines (step 11) | ~$5 |
-| Production ceiling (step 12) | ~$150 |
-| Selection-set evals during production | ~$25 |
-| Reserve | ~$25 |
+| Baselines (step 11) | ~$9 |
+| Production ceiling (step 12) | ~$157 |
+| Selection-set evals during production | ~$30 |
+| Reserve | ~$10 |
 | Final eval (step 13, off W&B) | $0 on W&B |
-| **Total** | **~$217 of ~$218** |
+| **Total** | **~$218 of ~$218** |
+
+Updated 2026-10-12 for code editing (Rishi: no E7 probe, reserve $25 to $10). Baselines add the 16 edit tasks, run twice; each selection eval costs ~$3.50 with edit tasks. Spec §12.11 holds the same table.
 
 - **Approve as is: recommended (research).**
 - **Change it,** and say which line.
@@ -559,15 +562,15 @@ There is no pilot, so this is the first run on the new environment. It catches p
 
 ## Step 11. Baselines
 
-**Type:** Spend · **Cost:** ~$5 · **Research:** §8.2
+**Type:** Spend · **Cost:** ~$9 · **Research:** §8.2
 
 ### What we run
 
-On the 64-task selection set, about 130 episodes:
-- **Base Qwen3.8-27B as an RLM** in environment v2. This is the step-0 number.
-- **The base model reading the context directly,** where it fits in 262K tokens.
+On the 64-task selection set (`selection-v2`, spec §12.10: 48 read tasks and 16 edit tasks), about 150 episodes:
+- **Base Qwen3.8-27B as an RLM** in environment v2, prompt v2. This is the step-0 number. The 16 edit tasks run twice, which also measures cost per edit episode, turn-cap hits and the base pass rate per tier before production (the dropped E7 probe's job).
+- **The base model reading the context directly,** where it fits in 262K tokens (read tasks only).
 
-The 20-step checkpoints (both seeds) are the research's third baseline. They are optional here, and not included in the ~$5.
+The 20-step checkpoints (both seeds) are the research's third baseline. They are optional here, and not included in the ~$9.
 
 ### Why it comes here
 
@@ -589,11 +592,11 @@ This is needed here because every eval from now on should use whichever model th
 
 ## Step 12. Production run
 
-**Type:** Spend · **Cost:** up to ~$150 + ~$25 evals; training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9
+**Type:** Spend · **Cost:** up to ~$157 + ~$30 evals; training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9
 
 ### What we run
 
-GRPO at 32 episodes per step, with every family starting at level 1. It runs until a stop rule fires or it reaches the $150 ceiling. The live dashboard (step 9) updates every step, so you and your friends can watch it. The learning rate is whatever the second seed decided. At 2e-5, entropy or reward-std collapse rolls the run back to the last good checkpoint and continues at 1e-5 (spec §5.2). That is ~80-180 steps, with ~120 a fair middle estimate. The selection set and capability check run every 10 steps, at ~$2.50 each.
+GRPO at 32 episodes per step, with every family starting at level 1. It runs until a stop rule fires or it reaches the $157 ceiling. The live dashboard (step 9) updates every step, so you and your friends can watch it. The learning rate is whatever the second seed decided. At 2e-5, entropy or reward-std collapse rolls the run back to the last good checkpoint and continues at 1e-5 (spec §5.2). With 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). The selection set and capability check run every 10 steps, at ~$3.50 each.
 
 **It keeps going while** the selection set has reached a new best in one of the last 3 evals, or a family has moved up a level in the last 30 steps.
 
@@ -619,7 +622,7 @@ A stop rule fires or the run reaches the ceiling, and the best checkpoint on the
 
 ### Decisions for this step
 
-**12a. The $25 reserve**
+**12a. The $10 reserve**
 - **I ask you before touching it: recommended (mine).** This follows your rule to ask before spending credit.
 - **Spend it automatically when the last 2 evals were both new bests, then ask** (the research's rule). This saves a round-trip if you're away when the run hits the ceiling.
 

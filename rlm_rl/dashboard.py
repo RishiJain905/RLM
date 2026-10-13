@@ -6,13 +6,15 @@ command line; this module only reads files and writes the page. It uses the stan
 alone, so it runs fast from Windows while the training loop runs in WSL.
 
 What goes on the page is an allowlist, never a copy of the state:
-- each step's metrics (spec §9), evals, stop rules, notices, spend and the controller's levels
+- each step's metrics (spec §9, and §12.9's `edit` block for the edit families), evals, stop rules,
+  notices, spend and the controller's levels
 - a few sampled training rollouts (decision 9c), cut short. Eval transcripts are never read.
 
 What never goes on it: keys, task seeds and eval seed lists (H3), eval and benchmark items,
-model and checkpoint names (they carry the W&B entity), and local file paths. `check()` scans
-every built page for all of these before it can be published, and reports counts only, so a
-finding never prints the secret it found.
+model and checkpoint names (they carry the W&B entity), local file paths, and for the edit
+families the gold patch, hidden test names, sandbox paths, eval task ids and the selection set's
+repositories. `check()` scans every built page for all of these before it can be published, and
+reports counts only, so a finding never prints the secret it found.
 """
 
 from __future__ import annotations
@@ -27,12 +29,16 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
+from .repl_tools import TOOL_NAMES
+
 SCHEMA = 1
 TEMPLATE = Path(__file__).with_name("dashboard_page.html")
 DATA_MARK = "/*__DASHBOARD_DATA__*/null"
 
-# The two W&B pots (plan "Where we start"). W&B's billing page is the truth for both.
-POT = {"inference_usd": 250.0, "inference_left_usd": 218.0, "reserve_usd": 25.0,
+# The two W&B pots (plan "Where we start"). W&B's billing page is the truth for both. The ~$218 left
+# is split by spec §12.11: second seed 12, baselines 9, production ceiling 157, evals 30, reserve 10.
+POT = {"inference_usd": 250.0, "inference_left_usd": 218.0, "second_seed_usd": 12.0, "baselines_usd": 9.0,
+       "production_usd": 157.0, "evals_usd": 30.0, "reserve_usd": 10.0,
        "gpu_usd": 1000.0, "gpu_left_usd": 992.0, "as_of": "2026-10-11"}
 
 # The 20-step run (documentation/archive/rlsd-vs-grpo-20-step-results.md): held-out accuracy over
@@ -52,6 +58,13 @@ CUT = {"question": 900, "context_head": 600, "plan": 600, "code": 1000, "observa
        "answer": 400, "subcall": 220, "turns_head": 3, "turns_tail": 3, "subcalls_shown": 3}
 
 STALE_AFTER_S = 300.0      # a running loop rewrites its state every 15 s (training.HEARTBEAT_S)
+
+# The edit families (spec §12). Their gold is the gold patch and the hidden tests, which never reach the page.
+EDIT_FAMILIES = ("edit_real", "edit_synth", "edit_synth_heldout")
+# Languages a by_language table may name (spec §12.9). Any other key, which could be a repository or a
+# task id, is pooled into "other" so its episodes still count but its name never reaches the page.
+LANGUAGES = ("python", "javascript", "typescript", "go", "rust", "java", "kotlin", "scala", "c", "cpp", "csharp",
+             "ruby", "php", "swift", "shell")
 
 
 # ----------------------------------------------------------------------------- reading the run
@@ -101,17 +114,23 @@ def heartbeat_age(state: dict, now: float | None = None) -> float | None:
 _URL_RE = re.compile(r"\b(?:https?|wandb-artifact|s3|gs|file)://\S+", re.I)
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:[\\/][^\s'\"<>|]*")
 _NIX_PATH_RE = re.compile(r"(?<![\w.])/(?:mnt|home|tmp|root|usr|opt|var|etc|proc|Users)/[^\s'\"<>|]*")
+# the edit sandbox's repository and the images' own checkouts (spec §12.4)
+_SANDBOX_PATH_RE = re.compile(r"(?<![\w.])/(?:work/repo|testbed|scratch)\b[^\s'\"<>|]*")
+# SWE-bench and SWE-smith instance ids, owner__repo-1234 or owner__repo.abc123.kind__x: they name the repository
+_TASK_ID_RE = re.compile(r"(?<![\w.\-])[A-Za-z0-9][A-Za-z0-9.\-]*[A-Za-z0-9]__[A-Za-z0-9][\w.\-]*")
 _TOKEN_RE = re.compile(r"\b[A-Za-z0-9_\-]{40,}\b")
 _MODEL_RE = re.compile(r"\b[\w.\-]+/[\w.\-]+/[\w.\-]+:step\d+\b")
 
 
 def scrub(text: Any, limit: int | None = None) -> str:
-    """Remove URLs, local paths, checkpoint names and long tokens from free text, then cut it."""
+    """Remove URLs, local and sandbox paths, checkpoint names, task ids and long tokens from free text, then cut it."""
     s = "" if text is None else str(text)
     s = _URL_RE.sub("[link removed]", s)
     s = _MODEL_RE.sub("[checkpoint]", s)
     s = _WIN_PATH_RE.sub("[path]", s)
     s = _NIX_PATH_RE.sub("[path]", s)
+    s = _SANDBOX_PATH_RE.sub("[path]", s)
+    s = _TASK_ID_RE.sub("[task id]", s)
     s = _TOKEN_RE.sub("[token removed]", s)
     if limit is not None and len(s) > limit:
         s = s[:limit].rstrip() + f" [... {len(s) - limit:,} more characters]"
@@ -136,6 +155,24 @@ def _counts(src: dict | None) -> dict:
     return out
 
 
+def _by_language(src: dict | None, count: str, rate: str) -> dict:
+    """{language: {count, rate}} with only LANGUAGES named. Any other key is pooled into "other", its rate
+    weighted by its count, so the totals still add up without the name reaching the page."""
+    pooled: dict[str, list] = {}
+    for name, g in (src or {}).items():
+        n = _num(g.get(count)) if isinstance(g, dict) else None
+        if not n:
+            continue
+        lang = str(name).lower() if str(name).lower() in LANGUAGES else "other"
+        r = _num(g.get(rate))
+        acc = pooled.setdefault(lang, [0, 0.0, True])
+        acc[0] += n
+        acc[1] += (r or 0) * n
+        acc[2] = acc[2] and r is not None
+    return {lang: {count: n, rate: round(total / n, 4) if known else None}
+            for lang, (n, total, known) in sorted(pooled.items())}
+
+
 # ----------------------------------------------------------------------------- the page's data
 
 PASS_KEYS = ("rate", "rate_with_infra", "groups", "trainable_groups", "all_zero_groups", "all_one_groups",
@@ -150,6 +187,20 @@ REQUEST_KEYS = ("attempts", "retries", "rate_limited", "server_errors", "timeout
 TOKEN_KEYS = ("root_prompt_tokens", "root_completion_tokens", "subcall_prompt_tokens", "subcall_completion_tokens",
               "root_calls", "subcalls")
 FAMILY_KEYS = ("level", "episodes", "scored", "pass_rate", "mean_reward", "window_pass_rate")
+# spec §12.9, over the step's edit episodes; by_language is read separately
+EDIT_KEYS = ("episodes", "resolved", "f2p_pass", "p2p_broken", "empty_diff", "submitted", "tested_before_submit",
+             "test_runs", "edit_cycles", "turns_to_first_edit", "diff_lines", "files_changed", "subcall_read_share",
+             "review_subcalls", "repeated_cells", "network_tries", "grader_s", "edit_errors", "raw_io_share",
+             "grader_retries")
+
+
+def edit_block(edit: Any) -> dict | None:
+    """A step's `edit` block (spec §12.9), allowlisted. None for old runs and steps without one."""
+    if not isinstance(edit, dict):
+        return None
+    calls = edit.get("tool_calls")
+    return {**_pick(edit, EDIT_KEYS), "tool_calls": _pick(calls if isinstance(calls, dict) else None, TOOL_NAMES),
+            "by_language": _by_language(edit.get("by_language"), "episodes", "resolved")}
 
 
 def step_row(r: dict) -> dict:
@@ -158,6 +209,7 @@ def step_row(r: dict) -> dict:
     reqs = infra.get("requests") or {}
     kl = pol.get("kl") or {}
     rtt = shape.get("root_transcript_tokens") or {}
+    edit = edit_block(r.get("edit"))
     return {
         "step": r.get("step"), "status": r.get("status") if r.get("status") in ("trained", "skipped", "rolled_out")
         else None, "branch": _num(r.get("branch")), "lr": _num(r.get("lr")),
@@ -183,6 +235,7 @@ def step_row(r: dict) -> dict:
         "cost": _pick(r.get("cost"), ("step_usd", "kl_usd", "spent_train_usd")),
         "time": _pick(r.get("time"), ("rollouts_s", "kl_s", "train_s", "total_s")),
         "tokens": _pick(r.get("tokens"), TOKEN_KEYS),
+        **({"edit": edit} if edit is not None else {}),  # absent, not null, so old steps add no CSV column
     }
 
 
@@ -202,7 +255,8 @@ def eval_entry(e: dict) -> dict:
             "branch": _num(e.get("branch")), "at": _num(e.get("at")), "cost_usd": _num(e.get("cost_usd")),
             "ran": _num(e.get("ran")), "summary": {**_pick(s, EVAL_KEYS), "hacks": _counts(s.get("hacks")),
                                                    "by_family": groups("by_family"), "by_level": groups("by_level"),
-                                                   "by_source": groups("by_source")}}
+                                                   "by_source": groups("by_source"),
+                                                   "by_language": _by_language(s.get("by_language"), "n", "accuracy")}}
 
 
 def _config(cfg: dict) -> dict:
@@ -327,19 +381,27 @@ def sample_record(rec: dict, why: str) -> dict:
     first_user = next((m.get("content") for m in rec.get("messages") or [] if m.get("role") == "user"), "") or ""
     context_head = first_user.split("The first 3 lines are:", 1)[1].strip() if "The first 3 lines are:" in first_user else ""
     subcalls = rec.get("subcalls") or []
+    edit = rec.get("family") in EDIT_FAMILIES
+    language = str(rec.get("language") or "").lower()
     return {
         "key": hashlib.sha1(str(rec.get("key")).encode()).hexdigest()[:12],
         "why": why, "step": _num(rec.get("step")), "family": scrub(rec.get("family"), 40), "level": _num(rec.get("level")),
+        "edit": edit, "language": language if edit and language in LANGUAGES else None,
         "question": scrub(rec.get("question"), CUT["question"]), "context_chars": _num(rec.get("context_chars")),
         "context_lines": _num(rec.get("context_lines")), "context_head": scrub(context_head, CUT["context_head"]),
-        "gold": scrub(json.dumps(rec.get("gold"), ensure_ascii=False) if not isinstance(rec.get("gold"), str)
-                      else rec.get("gold"), CUT["answer"]),
+        # an edit task's gold is its patch and hidden tests (spec §12.5): never shown
+        "gold": "(hidden tests)" if edit else scrub(json.dumps(rec.get("gold"), ensure_ascii=False)
+                                                    if not isinstance(rec.get("gold"), str) else rec.get("gold"),
+                                                    CUT["answer"]),
         "answer": scrub(json.dumps(rec.get("answer"), ensure_ascii=False) if not isinstance(rec.get("answer"), str)
                         else rec.get("answer"), CUT["answer"]) if rec.get("submitted") else None,
         "submitted": bool(rec.get("submitted")), "reward": _num(rec.get("reward")), "correct": bool(rec.get("correct")),
+        # edit components are limited to §12.9's names, so a per-test result keyed by a hidden test's name can't pass
         "components": {k: _num(v) for k, v in (rec.get("reward_components") or {}).items()
-                       if re.fullmatch(r"[a-z_]{1,30}", k)},
-        "hacks": [scrub(h, 40) for h in rec.get("hacks") or []],
+                       if re.fullmatch(r"[a-z][a-z0-9_]{0,29}", k) and (not edit or k in EDIT_KEYS)},
+        # rule names only: a detector's detail can quote a test file, a canary or a path (spec §12.6)
+        "hacks": [r for r in (h.get("rule") if isinstance(h, dict) else h for h in rec.get("hacks") or [])
+                  if isinstance(r, str) and re.fullmatch(r"[a-z_]{1,40}", r)],
         "infra_kind": scrub(rec.get("infra_kind"), 40) if rec.get("infra_error") else None,
         "turn_count": len(turns), "turns_omitted": max(0, len(turns) - len(shown)), "turns": [_turn(t) for t in shown],
         "subcalls_used": _num(rec.get("subcalls_used")), "timeouts": _num(rec.get("timeouts")),
@@ -443,6 +505,8 @@ KEY_PATTERNS = {
     "private key block": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     "checkpoint or artifact name": re.compile(r"wandb-artifact://|[\w.\-]+/[\w.\-]+/[\w.\-]+:step\d+"),
     "local file path": re.compile(r"\b[A-Za-z]:\\\\?(?:Users|Personal|RLM)|/mnt/[a-z]/|\.env\b"),
+    "sandbox or repository path": _SANDBOX_PATH_RE,
+    "task id (owner__repo style)": _TASK_ID_RE,
     "seed-sized integer (13+ digits)": re.compile(r"(?<![\d.\w])\d{13,}(?![\d.])"),
 }
 
@@ -502,17 +566,40 @@ def _context_head(messages: list | None) -> str:
 
 def eval_items(run_dir: Path) -> tuple[set[tuple[str, str]], set[str]]:
     """The eval tasks this run has logged (question and context head), and nothing else from them;
-    and nothing from the capability check, whose records don't carry prompts (deep_items does)."""
+    and nothing from the capability check, whose records don't carry prompts (deep_items does).
+
+    An edit task's first message has no context lines, and its task text isn't templated, so it is
+    keyed by the task text alone (an empty head is in every page)."""
     items: set[tuple[str, str]] = set()
     unkeyed = 0
     for path in Path(run_dir).glob("transcripts/val/**/*.jsonl"):
         for rec in _read_jsonl(path):
-            key = item_key(rec.get("question") or "", _context_head(rec.get("messages")))
+            if rec.get("family") in EDIT_FAMILIES:
+                q = scrub(rec.get("question") or "")[:150]
+                key = (q, "") if len(q) >= 20 else None
+            else:
+                key = item_key(rec.get("question") or "", _context_head(rec.get("messages")))
             if key:
                 items.add(key)
             else:
                 unkeyed += 1
     return items, ({f"{unkeyed} eval records had too short a question or context to key"} if unkeyed else set())
+
+
+def eval_names(run_dir: Path) -> tuple[set[str], set[str]]:
+    """The task ids and the repositories of the edit eval tasks this run has logged. A selection or
+    held-out repository is one training never sees, so its name, like its task ids, must never reach
+    the page."""
+    ids: set[str] = set()
+    repos: set[str] = set()
+    for path in Path(run_dir).glob("transcripts/val/**/*.jsonl"):
+        for rec in _read_jsonl(path):
+            if rec.get("family") in EDIT_FAMILIES:
+                if isinstance(rec.get("task_id"), str):
+                    ids.add(rec["task_id"])
+                if isinstance(rec.get("repo"), str):
+                    repos.add(rec["repo"])
+    return ids, repos
 
 
 def secret_env_values() -> list[str]:
@@ -521,14 +608,23 @@ def secret_env_values() -> list[str]:
     return [v for k, v in os.environ.items() if names.search(k) and len(v) >= 16]
 
 
+def _word_hits(words: list[str], text: str) -> int:
+    """How many of `words` appear in `text` as whole words, case-sensitively."""
+    return sum(1 for w in words if re.search(r"(?<![\w\-])" + re.escape(w) + r"(?![\w\-])", text))
+
+
 def check(page: str, *, seeds: set[int] = frozenset(), items: Iterable[tuple[str, str]] = (),
-          prompts: Iterable[str] = ()) -> dict:
+          prompts: Iterable[str] = (), task_ids: Iterable[str] = (), repos: Iterable[str] = ()) -> dict:
     """Scan a built page for anything secret. Returns counts per finding, never the matches.
 
     The raw HTML and the decoded strings of its embedded data are both scanned, so JSON escaping
-    can't hide a match.
+    can't hide a match. `task_ids` and `repos` are the edit eval tasks' (eval_names), matched as whole
+    words and case-sensitively. Repositories are looked for everywhere but the sampled training
+    transcripts: a training rollout can import a library that shares a held-out repository's name.
     """
     items, prompts = list(items), [p for p in prompts if p and len(p) >= 30]
+    task_ids = sorted({n for n in task_ids if n and len(n) >= 4})
+    repos = sorted({n for n in repos if n and len(n) >= 3})
     data = embedded_data(page)
     texts = [page] + list(_strings(data))
     joined = "\n".join(texts)
@@ -551,5 +647,13 @@ def check(page: str, *, seeds: set[int] = frozenset(), items: Iterable[tuple[str
     hit = sum(1 for p in prompts if scrub(p)[:150] in joined)
     if hit:
         findings["capability or benchmark prompt"] = hit
+    hit = _word_hits(task_ids, joined)
+    if hit:
+        findings["eval task id"] = hit
+    outside_samples = "\n".join(_strings({k: v for k, v in (data or {}).items() if k != "samples"}))
+    hit = _word_hits(repos, outside_samples)
+    if hit:
+        findings["eval repository name"] = hit
     return {"ok": not findings, "findings": findings, "bytes": len(page.encode("utf-8")),
-            "checked": {"seeds": len(seeds), "eval_tasks": len(items), "prompts": len(prompts)}}
+            "checked": {"seeds": len(seeds), "eval_tasks": len(items), "prompts": len(prompts),
+                        "task_ids": len(task_ids), "repos": len(repos)}}
