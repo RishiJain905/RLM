@@ -50,6 +50,9 @@ from .tasks import editreal
 EDIT_DIR = "edit"
 REPO_DIR = "/testbed"
 DERIVE_VERSION = 1
+# Copying a JavaScript project's node_modules (or a Rust target/) into a writable layer took over an hour on the USB data
+# drive under load; a build cut off at the old 1-hour limit starts again from nothing.
+DERIVE_TIMEOUT_S = 6 * 3600
 
 # Per language: the runner, a generic command for the visible tests, what the snapshot leaves out, the derived
 # image's offline settings and the cache folders the toolchain writes.
@@ -233,7 +236,8 @@ def derive(source: str, language: str, uid: int | None = None, gid: int | None =
         body = dockerfile.encode()
         info.size = len(body)
         tar.addfile(info, io.BytesIO(body))
-    out = _docker("build", "--network", "none", "--pull=false", "-t", tag, "-", input=context.getvalue(), check=False)
+    out = _docker("build", "--network", "none", "--pull=false", "-t", tag, "-", input=context.getvalue(), check=False,
+                  timeout=DERIVE_TIMEOUT_S)
     if out.returncode:
         raise RuntimeError(f"deriving {source} failed: {out.stderr.decode()[-800:]}")
     return tag
@@ -527,13 +531,17 @@ async def validate(record: dict, image: editbox.EditImage, runs: int = 3, run_id
     return Validation(True, "", f2p, p2p, flaky, gold_s, base.seconds)
 
 
+# Bumped when the visible-test check changes; a task dropped by an older check is validated again (validate stage).
+VISIBLE_CHECK_VERSION = 3  # 2: Go compiles tests instead of `go vet`; 3: and doesn't run TestMain (-exec /bin/true)
+
+
 async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str = "edit-validate") -> tuple[bool, str]:
     """Spec §12.8: removing the hidden test files doesn't break the visible tests (they still collect or compile)."""
     task = editreal.to_task(record, "edit_real")
     ws_dir = await asyncio.to_thread(task.workspace.ensure)
     language = record["language"]
     checks = {"python": ["python", "-m", "pytest", "-q", "--collect-only", "-p", "no:cacheprovider"],
-              "go": ["go", "test", "-count=1", "-run", "^$", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
+              "go": ["go", "test", "-count=1", "-run", "^$", "-exec", "/bin/true", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
               "java": ["mvn", "-o", "-q", "test-compile"]}
     argv = record.get("visible_check") or checks.get(language)
     if not argv:

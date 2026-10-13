@@ -867,7 +867,8 @@ async def _validate_all(records: list[dict], out_path: Path, jobs: int) -> None:
             except Exception as exc:  # recorded, so a resume doesn't retry it forever
                 v = editdata.Validation(False, f"error: {exc!r}"[:400])
             result = {"id": rec["id"], "ok": v.ok, "why": v.why, "f2p": v.f2p, "p2p": v.p2p, "flaky": v.flaky,
-                      "gold_s": round(v.gold_s, 1), "base_s": round(v.base_s, 1), "at": time.time()}
+                      "gold_s": round(v.gold_s, 1), "base_s": round(v.base_s, 1), "at": time.time(),
+                      "visible_check": editdata.VISIBLE_CHECK_VERSION}
             with open(out_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(result) + "\n")
             print(f"{'OK ' if v.ok else 'no '} {rec['id']:55s} f2p={len(v.f2p):3d} p2p={len(v.p2p):4d} "
@@ -883,7 +884,13 @@ def cmd_validate(args) -> int:
         out = editdata.edit_path("validated", f"{language}.jsonl")
         out.parent.mkdir(parents=True, exist_ok=True)
         results = [json.loads(l) for l in out.read_text(encoding="utf-8").splitlines()] if out.exists() else []
+        stale = {r["id"] for r in results if language == "go" and not r["ok"]  # only Go's check changed
+                 and r["why"].startswith("visible tests break")
+                 and r.get("visible_check", 1) < editdata.VISIBLE_CHECK_VERSION}  # an older, wrong check dropped them
+        results = [r for r in results if r["id"] not in stale]
         done = {r["id"] for r in results}
+        if stale:
+            print(f"{language}: {len(stale)} tasks dropped by an older visible-test check are validated again")
         reg = registry()
         for c in cands:  # the derived image may have been rebuilt since the candidate was written
             c["image"] = reg[c["key"]]["tag"]
