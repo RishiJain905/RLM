@@ -21,6 +21,7 @@ import collections
 import itertools
 import json
 import math
+import os
 import random
 import re
 import subprocess
@@ -1707,6 +1708,9 @@ def main() -> int:
     sub.add_parser("manifest")
     sub.add_parser("report")
     args = parser.parse_args()
+    if args.command in ("validate", "revisible"):
+        # validation chains run side by side: at most this many grader containers at once, all chains together
+        os.environ.setdefault(grader.GLOBAL_SLOTS_ENV, "5")
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
             "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "revisible": cmd_revisible, "retest": cmd_retest, "decanary": cmd_decanary, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 

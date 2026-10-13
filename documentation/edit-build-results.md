@@ -192,9 +192,10 @@ A slow drive may cost time but must never turn a good answer into a 0 or pause t
 | Grader cap | Per task: max(600 s, 4x the task's slowest gold run under load), stored in the index (`tests.timeout_s`, `editdata.grader_cap`). A run that hits it reruns once, alone (no other grader running), at double the cap; only a second timeout counts against the model. Waiting for a grader slot counts against nothing. `grader_retries` (mean per episode) is in each step's `edit` block |
 | Cell limit (300 s compute) | Per task when needed: if the gold change's own test command, run through `shell()` in the episode container under load, takes more than half the cell limit, the task's cell limit becomes twice that time, rounded up to 30 s (`editdata.cell_limit`), recorded in the episode's limits and quoted in its first message. No task is dropped for it |
 | Grader concurrency | `grader.set_grader_concurrency(n)` caps graders at once if the measurements show the disk thrashing |
+| Grader containers across processes | `grader.global_slot`: at most `RLM_GRADER_SLOTS` grader containers at once across every process (lock files under /tmp/rlm-grader-slots). The data build's validation chains set 5: run side by side, each with its own cap, they had started more containers than the drive could bring up before the grader's deadlines (Rishi, 2026-10-13: keep pacing on D:). Waiting for a slot counts against nothing. Unset in training |
 | Visible-test check (validation) | 1800 s, and once more at 3600 s if it runs out of time (`editdata.VISIBLE_TIMEOUT_S`); a second timeout is an infra error, which the next `validate` run tries again, never a dropped task. It was a fixed 300 s, and compiling every test target of a Go module or a Rust crate under load ran past it, so good tasks were dropped as "visible tests break". `revisible` gives the tasks an older check dropped the current check again, alone: their base and gold runs passed, so nothing else is repeated |
 
-Tests: `tests/test_slow_drive.py` (15).
+Tests: `tests/test_slow_drive.py` (17).
 
 **Measurements under load** (`build_edit_data.py measure --jobs 30`): *(filled in when the data build finishes)*.
 

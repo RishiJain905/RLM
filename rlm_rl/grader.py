@@ -1228,9 +1228,51 @@ async def _grade_once(checked: CheckedDiff, spec: TestSpec, cap_s: float, *, ws_
         editbox.remove_tree(scratch)
 
 
+GLOBAL_SLOTS_ENV = "RLM_GRADER_SLOTS"  # grader containers at once across processes (0 or unset: no limit)
+GLOBAL_SLOTS_DIR = Path("/tmp/rlm-grader-slots")
+GLOBAL_SLOT_POLL_S = 5.0
+
+
+@contextlib.asynccontextmanager
+async def global_slot():
+    """One of RLM_GRADER_SLOTS lock files, held while a grader container runs: the data build's validation chains run
+    side by side, each with its own GraderSlots, and together they ran more containers than the data drive could
+    start before the grader's deadlines."""
+    import fcntl
+
+    n = int(os.environ.get(GLOBAL_SLOTS_ENV) or 0)
+    if n <= 0:
+        yield
+        return
+    GLOBAL_SLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    while True:
+        for i in range(n):
+            f = open(GLOBAL_SLOTS_DIR / f"slot{i}", "w")
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                f.close()
+                continue
+            try:
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+                f.close()
+            return
+        await asyncio.sleep(GLOBAL_SLOT_POLL_S)
+
+
 async def run_driver(job: dict, *, image: Any, grade_dir: Path, run_id: str, docker: str, runtime: Path,
                      bundle: Path | None, limits: Any, timeout: float) -> dict:
-    """Run grader_driver.py in a fresh container and return its report. InfraError if it never reports."""
+    """Run grader_driver.py in a fresh container and return its report. InfraError if it never reports. The time
+    waiting for a global slot (global_slot) counts against nothing."""
+    async with global_slot():
+        return await _run_driver(job, image=image, grade_dir=grade_dir, run_id=run_id, docker=docker, runtime=runtime,
+                                 bundle=bundle, limits=limits, timeout=timeout)
+
+
+async def _run_driver(job: dict, *, image: Any, grade_dir: Path, run_id: str, docker: str, runtime: Path,
+                      bundle: Path | None, limits: Any, timeout: float) -> dict:
     from . import editbox, sandbox
 
     name = f"rlm-grade-{secrets.token_hex(8)}"

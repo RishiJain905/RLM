@@ -232,6 +232,38 @@ class SlowStartTest(AsyncCase):
         self.assertIsNone(ep.reward)  # never trained on as a 0
 
 
+class GlobalSlotTest(unittest.TestCase):
+    """Validation chains in separate processes share one limit on grader containers (lock files)."""
+
+    def test_a_second_holder_waits_for_the_first(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        order = []
+
+        async def hold(tag, seconds):
+            async with grader.global_slot():
+                order.append(f"{tag} in")
+                await asyncio.sleep(seconds)
+                order.append(f"{tag} out")
+
+        async def both():
+            first = asyncio.create_task(hold("a", 0.3))
+            await asyncio.sleep(0.05)
+            await hold("b", 0)
+            await first
+
+        with mock.patch.dict("os.environ", {grader.GLOBAL_SLOTS_ENV: "1"}),                 mock.patch.object(grader, "GLOBAL_SLOTS_DIR", tmp), mock.patch.object(grader, "GLOBAL_SLOT_POLL_S", 0.02):
+            asyncio.run(both())
+        self.assertEqual(order, ["a in", "a out", "b in", "b out"])
+
+    def test_no_limit_by_default(self):
+        async def go():
+            async with grader.global_slot():
+                return True
+        with mock.patch.dict("os.environ", {grader.GLOBAL_SLOTS_ENV: ""}):
+            self.assertTrue(asyncio.run(go()))
+
+
 class VisibleCheckTimeTest(unittest.TestCase):
     """Validation's visible-test check: running out of time is the drive's problem, never broken visible tests."""
 
