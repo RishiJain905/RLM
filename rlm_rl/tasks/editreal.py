@@ -158,6 +158,10 @@ def _build_workspace(record: dict, folder: Path) -> None:
             target.unlink()
         elif target.is_dir():
             shutil.rmtree(target)
+    for rel, text in (record.get("replace") or {}).items():  # Go: the test file without its hidden test functions
+        target = folder / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
     for rel, block in (record.get("tests") or {}).get("append", {}).items():
         target = folder / rel
         text = target.read_text(encoding="utf-8")
@@ -175,7 +179,7 @@ def to_task(record: dict, family: str, task_id: str | None = None) -> Task:
     from ..editbox import Workspace
 
     key_src = json.dumps({k: record.get(k) for k in ("id", "image", "snapshot", "snapshot_sha256", "break_patch",
-                                                     "remove")}, sort_keys=True)
+                                                     "remove", "replace")}, sort_keys=True)
     key = "real-" + hashlib.sha256((GENERATOR_VERSION + key_src).encode()).hexdigest()[:24]
     grading = {"type": "edit", "kind": record["kind"], "language": record["language"], "repo": record["repo"],
                "tests": record["tests"], "gold_patch": record.get("gold_patch"), "source": record.get("source"),

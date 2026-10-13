@@ -194,6 +194,21 @@ class FeatureTest(unittest.TestCase):
         self.assertIn('throw new Error("not implemented");', stubbed)
         self.assertTrue(stubbed.rstrip().endswith("}"))
 
+    def test_go_hides_test_functions_not_files(self):
+        test_file = ('package demo\n\nimport (\n\t"strings"\n\t"testing"\n)\n\n'
+                     'func helper(t *testing.T) string { return "x" }\n\n'
+                     '// TestJoin checks Join.\nfunc TestJoin(t *testing.T) {\n\tif Join([]string{"a"}, ",") != strings.ToUpper("a") {\n\t\tt.Fatal(helper(t))\n\t}\n}\n\n'
+                     'func TestOther(t *testing.T) {\n\t_ = helper(t)\n}\n')
+        stripped = editfeatures.strip_go_tests(test_file, mentions={"Join"})
+        self.assertNotIn("TestJoin", stripped)
+        self.assertNotIn("checks Join", stripped)  # its doc comment goes too
+        self.assertIn("func helper", stripped)  # helpers stay for the other tests
+        self.assertIn("func TestOther", stripped)
+        self.assertNotIn('"strings"', stripped)  # an import only the hidden test used
+        self.assertIn('"testing"', stripped)
+        self.assertEqual(editfeatures.strip_go_tests(test_file, names={"TestOther"}).count("func Test"), 1)
+        self.assertIsNone(editfeatures.strip_go_tests(test_file, mentions={"Nothing"}))
+
     def test_brace_scanner_skips_strings_and_comments(self):
         text = 'func F() {\n\ts := "}{"\n\t// } comment\n\tr := `}`\n\tc := \'}\'\n\treturn\n}\nafter'
         end = editfeatures._scan_braces(text, text.index("{"), "go")

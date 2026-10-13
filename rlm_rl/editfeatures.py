@@ -296,6 +296,38 @@ def functions(tree: Path, language: str, is_test) -> list[Function]:
     return out
 
 
+GO_TEST_FUNC = re.compile(r"^func (Test|Benchmark|Example|Fuzz)(\w*)\(", re.M)
+
+
+def strip_go_tests(text: str, mentions: set[str] = frozenset(), names: set[str] = frozenset()) -> str | None:
+    """A Go test file without the test functions that mention any of `mentions` (as a whole word) or are named in
+    `names`, keeping its helpers, types and other tests, with the imports it no longer uses dropped. Hiding whole test
+    files broke the package's other tests whenever a hidden file defined a helper they use. None if nothing matched."""
+    spans = []
+    for m in GO_TEST_FUNC.finditer(text):
+        name = m.group(1) + m.group(2)
+        brace = text.find("{", m.end())
+        end = _scan_braces(text, brace, "go") if brace >= 0 else None
+        if end is None:
+            continue
+        body = text[m.start():end]
+        if name in names or any(re.search(rf"(?<![\w]){re.escape(n)}(?![\w])", body) for n in mentions):
+            start = m.start()
+            lines_before = text[:start].split("\n")
+            while len(lines_before) > 1 and lines_before[-2].strip().startswith("//"):  # its doc comment too
+                lines_before.pop(-2)
+            start = len("\n".join(lines_before))
+            spans.append((start, end + 1 if text[end:end + 1] == "\n" else end))
+    if not spans:
+        return None
+    out, last = [], 0
+    for a, b in spans:
+        out.append(text[last:a])
+        last = b
+    out.append(text[last:])
+    return go_drop_unused_imports(re.sub(r"\n{3,}", "\n\n", "".join(out)))
+
+
 def test_mentions(tree: Path, language: str, is_test, names: set[str]) -> dict[str, list[str]]:
     """Test files that mention each name as a whole word."""
     mentions: dict[str, list[str]] = {n: [] for n in names}

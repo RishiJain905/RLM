@@ -582,6 +582,13 @@ def write_json(path: Path, value: Any) -> None:
     tmp.replace(path)
 
 
+def write_lines(path: Path, lines: list[str]) -> None:
+    """Replace a JSONL file in one rename, so a reader never sees half of it."""
+    tmp = path.with_name(path.name + f".tmp-{secrets.token_hex(3)}")
+    tmp.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    tmp.replace(path)
+
+
 def read_json(path: Path, default: Any = None) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))

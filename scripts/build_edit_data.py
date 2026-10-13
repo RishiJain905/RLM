@@ -640,6 +640,9 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
                 "feature": {"path": f.path, "name": f.name, "qualname": f.qualname, "signature": f.signature,
                             "doc": f.doc[:2000], "tests": tests},
             })
+            if language == "go":  # hide the test functions, not the files (shared test helpers)
+                out[-1] = go_strip(out[-1], {f.name}, set()) or out[-1]
+                out[-1]["id"] = rid
         return out
     finally:
         shutil.rmtree(tree, ignore_errors=True)
@@ -718,6 +721,9 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
                                           "signature": f.signature, "doc": f.doc[:2000], "tests": tests,
                                           "mutation": kind, "line": line},
             })
+            if language == "go":  # hide the test functions, not the files (shared test helpers)
+                out[-1] = go_strip(out[-1], {f.name}, set()) or out[-1]
+                out[-1]["id"] = rid
         return out
     finally:
         shutil.rmtree(tree, ignore_errors=True)
@@ -826,6 +832,73 @@ def cmd_bugtexts(args) -> int:
                 added += 1
         editdata.write_json(path, texts)
         print(f"{language}: {added} bug texts written ({len(texts)} texts in all)")
+    return 0
+
+
+def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
+    """A Go candidate that hides test functions instead of whole files: `replace` holds each hidden test file
+    without those functions (helpers kept), `remove` keeps only files left with nothing to show. The hidden texts stay
+    the full originals, which the grader writes back. None when no test function matched."""
+    from rlm_rl import editfeatures
+
+    replace, remove = {}, []
+    for path in rec["remove"]:
+        text = rec["tests"]["hidden"].get(path)
+        if text is None or not path.endswith("_test.go"):
+            remove.append(path)
+            continue
+        stripped = editfeatures.strip_go_tests(text, mentions, names)
+        if stripped is None:
+            remove.append(path)
+        else:
+            replace[path] = stripped
+    if not replace:
+        return None
+    return dict(rec, id=rec["id"][:77] + "-gs", remove=sorted(remove), replace=replace)
+
+
+def cmd_gostrip(args) -> int:
+    """Go candidates the visible-test check dropped (a hidden test file defined helpers the visible tests use),
+    rewritten to hide only their test functions, as new candidates (id + "-gs") for the next validation."""
+    path = editdata.edit_path("candidates", "go.jsonl")
+    cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    have = {c["id"] for c in cands}
+    vpath = editdata.edit_path("validated", "go.jsonl")
+    dropped = {r["id"] for r in (json.loads(l) for l in vpath.read_text(encoding="utf-8").splitlines())
+               if not r["ok"] and r["why"].startswith("visible tests break")}
+    added = 0
+    with open(path, "a", encoding="utf-8") as f:
+        for rec in cands:
+            if rec["id"] not in dropped or rec.get("replace"):
+                continue
+            if rec["kind"] == "feature" or rec["source"] == "generated":
+                new = go_strip(rec, {rec["feature"]["name"]}, set())
+            else:  # a SWE-smith bug: hide the failing tests by name
+                new = go_strip(rec, set(), {n.split("/")[0] for n in rec.get("smith_f2p") or []})
+            if new and new["id"] not in have:
+                f.write(json.dumps(new, ensure_ascii=False) + "\n")
+                have.add(new["id"])
+                added += 1
+    print(f"go: {added} candidates rewritten to hide test functions instead of files")
+    if args.pending:  # candidates with no validation result yet: rewritten in place, same ids
+        done = {json.loads(l)["id"] for l in vpath.read_text(encoding="utf-8").splitlines()}
+        cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+        changed = 0
+        for i, rec in enumerate(cands):
+            if rec["id"] in done or rec.get("replace"):
+                continue
+            if rec["kind"] == "feature" or rec["source"] == "generated":
+                new = go_strip(rec, {rec["feature"]["name"]}, set())
+            elif rec["kind"] == "real_pr":
+                new = None  # a real PR's hidden files are whole new versions of its test files
+            else:
+                new = go_strip(rec, set(), {n.split("/")[0] for n in rec.get("smith_f2p") or []})
+            if new:
+                new["id"] = rec["id"]
+                cands[i] = new
+                changed += 1
+        editdata.write_lines(path, [json.dumps(c, ensure_ascii=False) for c in cands])
+        print(f"go: {changed} pending candidates now hide test functions instead of files")
     return 0
 
 
@@ -1234,12 +1307,14 @@ def main() -> int:
     p.add_argument("--cell", type=int, default=1800, help="the cell limit while measuring, s")
     p.add_argument("--per-repo", type=int, default=0,
                    help="tasks per repository (0: all); index gives the rest the repository's slowest test command")
+    p = sub.add_parser("gostrip")
+    p.add_argument("--pending", action="store_true", help="also rewrite, in place, candidates not validated yet")
     sub.add_parser("index")
     sub.add_parser("manifest")
     sub.add_parser("report")
     args = parser.parse_args()
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
-            "rebench": cmd_rebench, "measure": cmd_measure, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
+            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 
 
 if __name__ == "__main__":
