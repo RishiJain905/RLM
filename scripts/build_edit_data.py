@@ -182,6 +182,8 @@ def cmd_pull(args) -> int:
 def cmd_derive(args) -> int:
     reg = registry()
     for language, split, repo in plan_repos(args.languages):
+        if args.only and not any(o.lower() in repo.lower() for o in args.only):
+            continue
         image = image_for(language, repo)
         key = editdata.repo_key(image)
         entry = reg.get(key, {})
@@ -1633,6 +1635,7 @@ def main() -> int:
             p.add_argument("--print", action="store_true", help="print the docker pull commands instead")
         if name == "derive":
             p.add_argument("--force", action="store_true")
+            p.add_argument("--only", nargs="+", help="only the planned repositories whose names contain one of these")
         if name in ("candidates", "features", "bugs"):
             p.add_argument("--seed", type=int, default=12)
         if name == "briefs":
