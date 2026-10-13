@@ -606,17 +606,20 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
                 break
             if f.path in used_files:
                 continue
-            text = (clean / f.path).read_text(encoding="utf-8")
+            source = _source_text(clean / f.path)
+            if source is None:
+                continue
+            text, newline = source
             stubbed = editfeatures.stub(text, f, language)
             work = tree / f"w{len(out)}"
             shutil.copytree(clean, work, symlinks=True)
-            (work / f.path).write_text(stubbed, encoding="utf-8")
+            _write_source(work / f.path, stubbed, newline)
             break_patch = _tree_diff(clean, work, [f.path])
             shutil.rmtree(work, ignore_errors=True)
             if not break_patch.strip():
                 continue
             gold = editdata.reverse_patch(break_patch, clean)
-            scope, cwd, tests = generated_scope(language, tests)
+            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language))
             if not scope:
                 continue
             hidden = editdata.snapshot_read(snapshot, tests)
@@ -647,14 +650,36 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
 
 
 def _tree_diff(a: Path, b: Path, paths: list[str]) -> str:
-    """A git diff of `paths` between two sibling trees, with a/ and b/ prefixes relative to the trees."""
+    """A git diff of `paths` between two sibling trees, with a/ and b/ prefixes relative to the trees. Bytes decoded
+    as they are: text mode would turn a CRLF file's \r\n into \n and the patch would no longer apply."""
     out = []
     for p in paths:
         r = subprocess.run(["git", "-c", "core.quotePath=false", "diff", "--no-index", "--no-color", "--full-index",
-                            "--", f"{a.name}/{p}", f"{b.name}/{p}"], cwd=a.parent, capture_output=True, text=True,
+                            "--", f"{a.name}/{p}", f"{b.name}/{p}"], cwd=a.parent, capture_output=True,
                            env=editbox.git_env(a.parent))
-        out.append(r.stdout.replace(f"a/{a.name}/", "a/").replace(f"b/{b.name}/", "b/"))
+        out.append(r.stdout.decode("utf-8").replace(f"a/{a.name}/", "a/").replace(f"b/{b.name}/", "b/"))
     return "".join(out)
+
+
+def _test_texts(tree: Path, tests: list[str], language: str) -> dict | None:
+    """The test files' contents, where generated_scope needs them (Java)."""
+    if language != "java":
+        return None
+    return {t: (tree / t).read_text(encoding="utf-8", errors="replace") for t in tests}
+
+
+def _source_text(path: Path) -> tuple[str, str] | None:
+    """A source file's text with \n line ends, and the line end to write it back with. None for a file that mixes
+    line ends (writing it back would change lines we didn't touch)."""
+    raw = path.read_bytes().decode("utf-8")
+    crlf = raw.count("\r\n")
+    if 0 < crlf < raw.count("\n"):
+        return None
+    return (raw.replace("\r\n", "\n"), "\r\n") if crlf else (raw, "\n")
+
+
+def _write_source(path: Path, text: str, newline: str) -> None:
+    path.write_bytes((text.replace("\n", newline) if newline != "\n" else text).encode("utf-8"))
 
 BUGS_PER_FUNCTION = 2  # injected bugs per function, on different lines (the first ones spread over functions first)
 BUG_MAX_TEST_FILES = 8  # a function that more test files mention is too central to make a fair single bug
@@ -679,28 +704,31 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
         pool = [(f, mentions[f.name]) for f in fns if 1 <= len(mentions.get(f.name) or []) <= BUG_MAX_TEST_FILES]
         rng.shuffle(pool)
         out, used = [], set()
-        jobs = []  # (function, tests, mutated text, kind, line): up to BUGS_PER_FUNCTION mutants per function
+        jobs = []  # (function, tests, mutated text, kind, line, line end): up to BUGS_PER_FUNCTION per function
         for f, tests in pool:
-            text = (clean / f.path).read_text(encoding="utf-8")
+            source = _source_text(clean / f.path)
+            if source is None:
+                continue
+            text, newline = source
             for mutated, kind, line in editfeatures.mutations(text, f, language, rng, limit=BUGS_PER_FUNCTION):
-                jobs.append((f, tests, mutated, kind, line))
+                jobs.append((f, tests, mutated, kind, line, newline))
         # one mutant per function first, then the second ones, so the bugs spread over as many functions as possible
         firsts, seconds, seen = [], [], set()
         for job in jobs:
             (seconds if (job[0].path, job[0].name) in seen else firsts).append(job)
             seen.add((job[0].path, job[0].name))
-        for f, tests, mutated, kind, line in firsts + seconds:
+        for f, tests, mutated, kind, line, newline in firsts + seconds:
             if len(out) >= want:
                 break
             if (f.path, f.name, line) in used:
                 continue
             work = tree / f"w{len(out)}"
             shutil.copytree(clean, work, symlinks=True)
-            (work / f.path).write_text(mutated, encoding="utf-8")
+            _write_source(work / f.path, mutated, newline)
             break_patch = _tree_diff(clean, work, [f.path])
             shutil.rmtree(work, ignore_errors=True)
             gold = editdata.reverse_patch(break_patch, clean)
-            scope, cwd, tests = generated_scope(language, tests)
+            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language))
             if not scope:
                 continue
             used.add((f.path, f.name, line))
@@ -728,6 +756,16 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
         shutil.rmtree(tree, ignore_errors=True)
 
 
+def generated_keys(path: Path, kind: str) -> set[str]:
+    """Repositories that already have generated candidates of this kind. The stages that write them skip those, so a
+    rerun after more repositories are derived doesn't add a second, differently drawn set (the random draws are shared
+    across repositories in order)."""
+    if not path.exists():
+        return set()
+    recs = (json.loads(l) for l in path.read_text(encoding="utf-8").splitlines())
+    return {r["key"] for r in recs if r["source"] == "generated" and r["kind"] == kind}
+
+
 def cmd_bugs(args) -> int:
     reg = registry()
     rng = random.Random(args.seed + 1)
@@ -735,11 +773,12 @@ def cmd_bugs(args) -> int:
         path = editdata.edit_path("candidates", f"{language}.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         have = {json.loads(l)["id"] for l in path.read_text(encoding="utf-8").splitlines()} if path.exists() else set()
+        done = generated_keys(path, "bug")
         added = 0
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
                 if (entry["language"] != language or not entry.get("permissive") or entry["split"] != "train"
-                        or entry.get("kind") == "real_pr"):
+                        or entry.get("kind") == "real_pr" or key in done):
                     continue
                 want = round(WANT["train"][language] * (1 - FEATURE_SHARE) * OVERSAMPLE * 1.3)
                 for rec in bugs_for(language, key, entry, want, rng):
@@ -834,10 +873,15 @@ def cmd_bugtexts(args) -> int:
     return 0
 
 
-def generated_scope(language: str, tests: list[str]) -> tuple[list, str, list[str]]:
+JAVA_TEST_MARK = re.compile(r"@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b|\bextends\s+TestCase\b")
+
+
+def generated_scope(language: str, tests: list[str], texts: dict | None = None) -> tuple[list, str, list[str]]:
     """The runner scope and working folder for a generated task's hidden test files: (scope, cwd, the test files used).
     Go runs packages; Rust `--test <name>` per integration test file (or `--lib` for a src/**/tests.rs module) in the
-    crate that holds them; Java test classes in their module; Python, JavaScript and TypeScript the files themselves."""
+    crate that holds them; Java test classes in their module; Python, JavaScript and TypeScript the files themselves.
+    `texts` (path -> content), for Java: a file without a test in it is a helper the visible tests share, so it stays
+    visible (hiding it would break their build) and out of the scope."""
     if language == "go":
         return (sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
                         for t in tests}), ".", sorted(tests))
@@ -866,6 +910,8 @@ def generated_scope(language: str, tests: list[str]) -> tuple[list, str, list[st
         by_module: dict[str, list] = collections.defaultdict(list)
         for t in tests:
             if "src/test/java/" in t and t.endswith(".java"):
+                if texts is not None and not JAVA_TEST_MARK.search(texts.get(t, "")):
+                    continue
                 module, cls = t.split("src/test/java/", 1)
                 by_module[module.rstrip("/") or "."].append((cls[:-5].replace("/", "."), t))
         if not by_module:
@@ -899,7 +945,8 @@ def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
 
 def cmd_fixscope(args) -> int:
     """Generated Rust and Java candidates written with file paths as their scope (Cargo wants `--test <name>`, Maven
-    test classes): rewritten in place, and the results that wrong scope caused forgotten so they're validated again."""
+    test classes), or (Java) hiding a test helper with the tests: rewritten in place, and the results the old scope
+    caused forgotten so they're validated again."""
     for language in args.languages:
         path = editdata.edit_path("candidates", f"{language}.jsonl")
         cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
@@ -907,10 +954,16 @@ def cmd_fixscope(args) -> int:
         for rec in cands:
             if rec["source"] != "generated":
                 continue
-            files = sorted(rec["tests"]["hidden"])
-            scope, cwd, used = generated_scope(language, files)
-            if scope and (scope != rec["tests"]["scope"] or cwd != rec["tests"].get("cwd", ".")):
+            hidden = rec["tests"]["hidden"]
+            scope, cwd, used = generated_scope(language, sorted(hidden), hidden)
+            helpers = language == "java" and used != sorted(hidden)
+            if scope and (scope != rec["tests"]["scope"] or cwd != rec["tests"].get("cwd", ".") or helpers):
                 rec["tests"] = dict(rec["tests"], scope=scope, cwd=cwd)
+                if helpers:  # the helpers go back into the repository
+                    rec["tests"]["hidden"] = {t: hidden[t] for t in used}
+                    rec["remove"] = used
+                    if rec.get("feature"):
+                        rec["feature"]["tests"] = [t for t in rec["feature"]["tests"] if t in used]
                 changed += 1
                 ids.add(rec["id"])
         editdata.write_lines(path, [json.dumps(c, ensure_ascii=False) for c in cands])
@@ -977,10 +1030,12 @@ def cmd_features(args) -> int:
         path = editdata.edit_path("candidates", f"{language}.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         have = {json.loads(l)["id"] for l in path.read_text(encoding="utf-8").splitlines()} if path.exists() else set()
+        done = generated_keys(path, "feature")
         added = 0
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
-                if entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr":
+                if (entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr"
+                        or key in done):
                     continue
                 want = max(2, round(WANT[entry["split"]][language] * FEATURE_SHARE * OVERSAMPLE))
                 for rec in features_for(language, key, entry, want, rng):

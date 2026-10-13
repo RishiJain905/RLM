@@ -1,5 +1,6 @@
 """The edit_real data builder's pure parts (plan step E4): licences, derived images, feature removal, mutations, leaks."""
 
+import json
 import random
 import unittest
 
@@ -265,6 +266,66 @@ class EvalSplitTest(unittest.TestCase):
         self.assertEqual(per_lang["rust"], 6)  # a small language gives everything it has
         self.assertEqual(build.balance(records, 40, 15), picked)  # fixed for a given set
         self.assertEqual(len(build.balance(records[:5], 10, 3)), 5)
+
+    def test_reruns_skip_repositories_that_have_generated_tasks(self):
+        import importlib.util
+        import tempfile
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "build_edit_data", Path(__file__).resolve().parents[1] / "scripts" / "build_edit_data.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        rows = [{"id": "a1", "key": "a", "kind": "feature", "source": "generated"},
+                {"id": "b1", "key": "b", "kind": "bug", "source": "generated"},
+                {"id": "c1", "key": "c", "kind": "bug", "source": "swe-smith-go"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "go.jsonl"
+            self.assertEqual(build.generated_keys(path, "bug"), set())
+            path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+            self.assertEqual((build.generated_keys(path, "feature"), build.generated_keys(path, "bug")), ({"a"}, {"b"}))
+
+    def test_a_crlf_file_keeps_its_line_ends_and_its_patch_applies(self):
+        import importlib.util
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "build_edit_data", Path(__file__).resolve().parents[1] / "scripts" / "build_edit_data.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        with tempfile.TemporaryDirectory() as tmp:
+            clean = Path(tmp) / "clean"
+            (clean / "src").mkdir(parents=True)
+            (clean / "src" / "A.java").write_bytes(b"class A {\r\n  int f() {\r\n    return 1;\r\n  }\r\n}\r\n")
+            (clean / "src" / "Mixed.java").write_bytes(b"class M {\r\n}\n")
+            self.assertIsNone(build._source_text(clean / "src" / "Mixed.java"))
+            text, newline = build._source_text(clean / "src" / "A.java")
+            self.assertEqual((text.count("\r"), newline), (0, "\r\n"))
+            work = Path(tmp) / "w0"
+            shutil.copytree(clean, work)
+            build._write_source(work / "src" / "A.java", text.replace("return 1", "return 2"), newline)
+            patch = build._tree_diff(clean, work, ["src/A.java"])
+            self.assertEqual(sum(l.startswith(("+", "-")) and not l.startswith(("+++", "---")) for l in patch.split("\n")), 2)
+            gold = editdata.reverse_patch(patch, clean)
+            self.assertIn("+    return 1;\r\n", gold)
+
+    def test_java_helpers_stay_visible(self):
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "build_edit_data", Path(__file__).resolve().parents[1] / "scripts" / "build_edit_data.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        texts = {"core/src/test/java/a/ParseTest.java": "class ParseTest { @Test void p() {} }",
+                 "core/src/test/java/a/TestUtils.java": "class TestUtils { static int f() { return 1; } }",
+                 "core/src/test/java/a/OldTest.java": "class OldTest extends TestCase { void testX() {} }"}
+        self.assertEqual(build.generated_scope("java", sorted(texts), texts),
+                         (["a.OldTest", "a.ParseTest"], "core",
+                          ["core/src/test/java/a/OldTest.java", "core/src/test/java/a/ParseTest.java"]))
+        self.assertEqual(len(build.generated_scope("java", sorted(texts))[2]), 3)  # without texts: every file
 
 
 if __name__ == "__main__":
