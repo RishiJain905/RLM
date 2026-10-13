@@ -533,7 +533,7 @@ async def visible_tests_run(record: dict, image: editbox.EditImage, run_id: str 
     ws_dir = await asyncio.to_thread(task.workspace.ensure)
     language = record["language"]
     checks = {"python": ["python", "-m", "pytest", "-q", "--collect-only", "-p", "no:cacheprovider"],
-              "go": ["go", "vet", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
+              "go": ["go", "test", "-count=1", "-run", "^$", "./..."], "rust": ["cargo", "test", "--no-run", "--offline"],
               "java": ["mvn", "-o", "-q", "test-compile"]}
     argv = record.get("visible_check") or checks.get(language)
     if not argv:

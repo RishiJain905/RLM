@@ -655,6 +655,10 @@ def _tree_diff(a: Path, b: Path, paths: list[str]) -> str:
         out.append(r.stdout.replace(f"a/{a.name}/", "a/").replace(f"b/{b.name}/", "b/"))
     return "".join(out)
 
+BUGS_PER_FUNCTION = 2  # injected bugs per function, on different lines (the first ones spread over functions first)
+BUG_MAX_TEST_FILES = 8  # a function that more test files mention is too central to make a fair single bug
+
+
 def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random) -> list[dict]:
     """Our own injected bugs in one repository (editfeatures.mutations): one mutant per function. Texts come later."""
     import shutil
@@ -671,19 +675,24 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
         clean = tree / "clean"
         fns = editfeatures.functions(clean, language, grader.is_test_path)
         mentions = editfeatures.test_mentions(clean, language, grader.is_test_path, {f.name for f in fns})
-        pool = [(f, mentions[f.name]) for f in fns if 1 <= len(mentions.get(f.name) or []) <= 4]
+        pool = [(f, mentions[f.name]) for f in fns if 1 <= len(mentions.get(f.name) or []) <= BUG_MAX_TEST_FILES]
         rng.shuffle(pool)
         out, used = [], set()
+        jobs = []  # (function, tests, mutated text, kind, line): up to BUGS_PER_FUNCTION mutants per function
         for f, tests in pool:
+            text = (clean / f.path).read_text(encoding="utf-8")
+            for mutated, kind, line in editfeatures.mutations(text, f, language, rng, limit=BUGS_PER_FUNCTION):
+                jobs.append((f, tests, mutated, kind, line))
+        # one mutant per function first, then the second ones, so the bugs spread over as many functions as possible
+        firsts, seconds, seen = [], [], set()
+        for job in jobs:
+            (seconds if (job[0].path, job[0].name) in seen else firsts).append(job)
+            seen.add((job[0].path, job[0].name))
+        for f, tests, mutated, kind, line in firsts + seconds:
             if len(out) >= want:
                 break
-            if (f.path, f.name) in used:
+            if (f.path, f.name, line) in used:
                 continue
-            text = (clean / f.path).read_text(encoding="utf-8")
-            mutants = editfeatures.mutations(text, f, language, rng, limit=1)
-            if not mutants:
-                continue
-            mutated, kind, line = mutants[0]
             work = tree / f"w{len(out)}"
             shutil.copytree(clean, work, symlinks=True)
             (work / f.path).write_text(mutated, encoding="utf-8")
@@ -692,7 +701,7 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
             gold = editdata.reverse_patch(break_patch, clean)
             scope = (sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
                              for t in tests}) if language == "go" else sorted(tests))
-            used.add((f.path, f.name))
+            used.add((f.path, f.name, line))
             rid = f"{language[:2]}-{entry['repo'].split('/')[1]}-bug-{f.name}-{line}".lower()[:80]
             out.append({
                 "id": rid, "split": entry["split"], "language": language, "repo": entry["repo"], "key": key,
@@ -1040,13 +1049,19 @@ def cmd_measure(args) -> int:
     index = editdata.read_json(editdata.edit_path("index.json"), {"tasks": []})["tasks"]
     out_path = editdata.edit_path("measured.json")
     out = editdata.read_json(out_path, {})
-    todo, per_lang = [], collections.Counter()
-    for rec in index:
+    todo, per_lang, per_repo = [], collections.Counter(), collections.Counter()
+    for rec in out.values():
+        if "error" not in rec:
+            per_repo[rec.get("repo")] += 1
+    for rec in sorted(index, key=lambda r: r["id"]):
         if rec["id"] in out and "error" not in out[rec["id"]]:
             continue
         if args.limit and per_lang[rec["language"]] >= args.limit:
             continue
+        if args.per_repo and per_repo[rec["repo"]] >= args.per_repo:
+            continue  # the test command is the repository's own: a few tasks stand for the rest
         per_lang[rec["language"]] += 1
+        per_repo[rec["repo"]] += 1
         todo.append(rec)
     random.Random(5).shuffle(todo)  # languages mixed, so the load is like training's
     print(f"measuring {len(todo)} tasks, {args.jobs} at a time", flush=True)
@@ -1081,6 +1096,10 @@ def cmd_index(args) -> int:
             results[r["id"]] = r
         texts = editdata.read_json(editdata.edit_path("issues", f"{language}.json"), {})
         measured = editdata.read_json(editdata.edit_path("measured.json"), {})  # `measure`: timings under load
+        repo_test: dict[str, float] = {}  # the slowest measured test command per repository, for unmeasured tasks
+        for m in measured.values():
+            if m.get("test_s") is not None and "error" not in m:
+                repo_test[m["repo"]] = max(repo_test.get(m["repo"], 0.0), float(m["test_s"]))
         per_repo = collections.Counter()
         for rid, rec in sorted(cands.items()):
             v = results.get(rid)
@@ -1098,7 +1117,9 @@ def cmd_index(args) -> int:
             if cap and per_repo[(rec["key"], rec["split"])] >= cap and not rec.get("kind") == "feature":
                 continue
             per_repo[(rec["key"], rec["split"])] += 1
-            loaded = measured.get(rid) or {}
+            loaded = dict(measured.get(rid) or {})
+            if loaded.get("test_s") is None and rec["repo"] in repo_test:
+                loaded["test_s"], loaded["test_from_repo"] = repo_test[rec["repo"]], True
             slowest = max(v.get("gold_s") or 0.0, loaded.get("grade_s") or 0.0)
             rec = dict(rec, tests=dict(rec["tests"], f2p=v["f2p"], p2p=v["p2p"],
                                        timeout_s=editdata.grader_cap(slowest)), validated=v)
@@ -1204,6 +1225,8 @@ def main() -> int:
     p.add_argument("--jobs", type=int, default=30, help="tasks at once (training runs ~30 episodes in flight)")
     p.add_argument("--limit", type=int, default=0, help="tasks per language (0: every indexed task)")
     p.add_argument("--cell", type=int, default=1800, help="the cell limit while measuring, s")
+    p.add_argument("--per-repo", type=int, default=0,
+                   help="tasks per repository (0: all); index gives the rest the repository's slowest test command")
     sub.add_parser("index")
     sub.add_parser("manifest")
     sub.add_parser("report")
