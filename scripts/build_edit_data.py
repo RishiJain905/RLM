@@ -1195,10 +1195,13 @@ def cmd_revisible(args) -> int:
                  .read_text(encoding="utf-8").splitlines()}
         out = editdata.edit_path("validated", f"{language}.jsonl")
         reg = registry()
+        replaced = {i[:-3] for i in cands if i.endswith("-gs")}  # originals gostrip replaced: their break was real
         todo = []
         for r in read_results(out):
             if (not r["ok"] and r["why"].startswith("visible tests break") and r["id"] in cands
-                    and r.get("visible_check", 1) < editdata.VISIBLE_CHECK_VERSION):
+                    and r.get("visible_check", 1) < editdata.VISIBLE_CHECK_VERSION
+                    and (r["id"].endswith("-gs") or r["id"][:77] not in replaced)
+                    and cands[r["id"]]["repo"] not in UNUSABLE):
                 rec = dict(cands[r["id"]], image=reg[cands[r["id"]]["key"]]["tag"])
                 todo.append((rec, r))
         print(f"{language}: checking the visible tests of {len(todo)} tasks again", flush=True)
