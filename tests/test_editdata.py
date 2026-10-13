@@ -268,6 +268,14 @@ class LeakAndLevelTest(unittest.TestCase):
         self.assertEqual(editreal.level_of(4, 60), 4)
         self.assertEqual(editreal.level_of(3, 150), 5)
 
+    def test_patches_without_git_headers_get_them(self):
+        bare = "--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,2 +1,2 @@\n x\n-y\n+z\n--- /dev/null\n+++ b/src/n.ts\n@@ -0,0 +1 @@\n+w\n"
+        fixed = editdata.with_git_headers(bare)
+        self.assertEqual(editdata.patch_size(bare), (0, 0))
+        self.assertEqual(editdata.patch_size(fixed), (2, 3))
+        self.assertIn("diff --git a/src/n.ts b/src/n.ts\nnew file mode 100644\n", fixed)
+        self.assertEqual(editdata.with_git_headers(fixed), fixed)
+
     def test_patch_size(self):
         patch = ("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,2 +1,2 @@\n-x\n+y\n z\n"
                  "diff --git a/b.bin b/b.bin\nindex 1..2 100644\nBinary files a/b.bin and b/b.bin differ\n")

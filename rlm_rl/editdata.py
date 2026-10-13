@@ -448,6 +448,25 @@ def reverse_patch(patch: str, tree: Path) -> str:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def with_git_headers(patch: str) -> str:
+    """A unified diff whose files have no `diff --git` line (SWE-smith's TypeScript rows start each file at `--- a/`),
+    with those lines added, so the patch parser sees the files. git apply takes either."""
+    if ("\n" + patch).find("\ndiff --git ") >= 0:
+        return patch
+    lines, out = patch.split("\n"), []
+    for i, line in enumerate(lines):
+        if line.startswith("--- ") and i + 1 < len(lines) and lines[i + 1].startswith("+++ "):
+            a, b = line[4:].split("\t")[0], lines[i + 1][4:].split("\t")[0]
+            pa, pb = a[2:] if a.startswith("a/") else None, b[2:] if b.startswith("b/") else None
+            out.append(f"diff --git a/{pa or pb} b/{pb or pa}")
+            if a == "/dev/null":
+                out.append("new file mode 100644")
+            elif b == "/dev/null":
+                out.append("deleted file mode 100644")
+        out.append(line)
+    return "\n".join(out)
+
+
 def patch_size(patch: str) -> tuple[int, int]:
     files = [fp for fp in grader.parse_patch(patch) if not fp.binary]
     return len(files), sum(fp.added + fp.removed for fp in files)

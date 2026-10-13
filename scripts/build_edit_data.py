@@ -236,6 +236,7 @@ def candidates_for(language: str, key: str, entry: dict, want: int, rng: random.
         tar.extractall(tree, filter="tar")
     pool = []
     for r in rows:
+        r = dict(r, patch=editdata.with_git_headers(r["patch"]))
         issue = (r.get("problem_statement") or "").strip()
         if not issue or not r["FAIL_TO_PASS"] or len(r["FAIL_TO_PASS"]) > 25:
             continue
@@ -368,6 +369,9 @@ def scope_other(language: str, f2p: list[str], files: dict, snapshot: Path, cach
             cache.update(editdata.snapshot_read(snapshot, tests))
         remove = set()
         for t in f2p:
+            if t.partition("::")[2] in files:  # SWE-smith's TypeScript rows name the failing file: "suite::<file>"
+                remove.add(t.partition("::")[2])
+                continue
             leaf = t.split(" > ")[-1]
             hits = [p for p, text in cache.items() if leaf in text]
             if not hits or len(hits) > 3:
@@ -603,7 +607,7 @@ def cmd_candidates(args) -> int:
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
                 if (entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr"
-                        or key in done):
+                        or key in done or entry.get("runner") == "unsupported"):
                     continue
                 if entry["split"] == "train" and language not in SMITH_TRAIN:
                     continue  # this dataset's rows are eval-only (no licence on its card)
@@ -825,7 +829,7 @@ def cmd_bugs(args) -> int:
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
                 if (entry["language"] != language or not entry.get("permissive") or entry["split"] != "train"
-                        or entry.get("kind") == "real_pr" or key in done):
+                        or entry.get("kind") == "real_pr" or key in done or entry.get("runner") == "unsupported"):
                     continue
                 want = round(WANT["train"][language] * (1 - FEATURE_SHARE) * OVERSAMPLE * 1.3)
                 for rec in bugs_for(language, key, entry, want, rng):
@@ -1136,7 +1140,7 @@ def cmd_features(args) -> int:
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
                 if (entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr"
-                        or key in done):
+                        or key in done or entry.get("runner") == "unsupported"):
                     continue
                 want = max(2, round(WANT[entry["split"]][language] * FEATURE_SHARE * OVERSAMPLE))
                 for rec in features_for(language, key, entry, want, rng):
