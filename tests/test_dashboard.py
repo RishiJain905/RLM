@@ -310,9 +310,10 @@ class EditDataTest(EditCase):
     def test_the_edit_block_passes_through(self):
         source = self.state()["steps"][-1]["edit"]
         row = self.data()["steps"][-1]["edit"]
-        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language"})
+        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language", "tool_calls"})
         for key in dashboard.EDIT_KEYS:
             self.assertEqual(row[key], source[key], key)
+        self.assertEqual(row["tool_calls"], source["tool_calls"])
         self.assertEqual(set(row["by_language"]), set(source["by_language"]))
         for lang, g in source["by_language"].items():
             self.assertEqual(row["by_language"][lang]["episodes"], g["episodes"])
@@ -323,6 +324,7 @@ class EditDataTest(EditCase):
         edit = state["steps"][-1]["edit"]
         edit.update(repo="acme/headers", task_ids=["acme__headers-1234"], failing_tests={"tests/test_api.py::test_a": 1},
                     note="see /work/repo", resolved="most")
+        edit["tool_calls"].update({"acme_helper": 3, "shell": "ls /work/repo"})
         edit["by_language"].update({"acme__headers-1234": {"episodes": 4, "resolved": 0.5},
                                     "/work/repo/src": {"episodes": 2, "resolved": 0.0},
                                     "Python": {"episodes": 2, "resolved": 1.0}, "cobol": "lots"})
@@ -330,8 +332,10 @@ class EditDataTest(EditCase):
         state["steps"][-2]["edit"] = "not a block"
         data = self.data(state)
         row = data["steps"][-1]["edit"]
-        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language"})
+        self.assertEqual(set(row), set(dashboard.EDIT_KEYS) | {"by_language", "tool_calls"})
         self.assertIsNone(row["resolved"])  # not a number
+        self.assertEqual(set(row["tool_calls"]), set(dashboard.TOOL_NAMES))  # only the seven tools, by name
+        self.assertIsNone(row["tool_calls"]["shell"])
         self.assertEqual(row["by_language"]["other"], {"episodes": 6, "resolved": round(2 / 6, 4)})
         self.assertEqual(row["by_language"]["python"]["episodes"], python["episodes"] + 2)  # names are matched in lower case
         self.assertNotIn("edit", data["steps"][-2])

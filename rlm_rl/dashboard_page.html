@@ -238,7 +238,7 @@ footer p { margin: 0; max-width: 92ch; }
     </section>
 
     <section class="panel" id="editing" data-comment-target hidden>
-      <div class="phead"><div><div class="eyebrow">rlm/edit · spec §12.9</div><h2>Editing</h2><p>Edit episodes (edit real and edit synth) change a repository, and hidden tests grade the diff: the reward is 1 only when every fail-to-pass and pass-to-pass test passes. They run with 20 turns, 30 sub-calls, 4,096 tokens a turn and 300 s cells. None of the behaviour below is rewarded; it shows whether the gains come the RLM way.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/edit · spec §12.9</div><h2>Editing</h2><p>Edit episodes (edit real and edit synth) change a repository, and hidden tests grade the diff: the reward is 1 only when every fail-to-pass and pass-to-pass test passes. They run with 20 turns, 30 sub-calls, 4,096 tokens a turn and 300 s cells, and the REPL gives them seven coding tools: read_file, find_files, grep, edit_file, write_file, shell and diff. None of the behaviour below is rewarded; it shows whether the gains come the RLM way.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="edit-charts"></div>
       <div id="edit-langs"></div>
     </section>
@@ -830,6 +830,15 @@ footer p { margin: 0; max-width: 92ch; }
                 note: "Mean test commands, and edit-then-test cycles, per episode. Healthy: at least one of each; many cycles with no gain in resolved is flailing." });
     chart(eh, { title: "Turn of the first edit", fmt: F.num, yMin: 0, yMaxAtLeast: 4, series: [es("turns to first edit", "var(--c1)", "turns_to_first_edit")],
                 note: "Mean turn of the first write to the repository, out of 20. Healthy: a few turns of exploring first, well before the cap." });
+    var TOOLS = ["read_file", "find_files", "grep", "edit_file", "write_file", "shell", "diff"];
+    var lastCalls = (lastE.edit && lastE.edit.tool_calls) || {}, totalCalls = TOOLS.reduce(function (n, t) { return isNum(lastCalls[t]) ? (n || 0) + lastCalls[t] : n; }, null);
+    chart(eh, { title: "Tool calls per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, headline: isNum(totalCalls) ? F.num(totalCalls) : null,
+                series: TOOLS.map(function (t, i) { return series(t, "var(--c" + (i + 1) + ")", function (r) { var c = r.edit && r.edit.episodes !== 0 && r.edit.tool_calls; return c && isNum(c[t]) ? c[t] : null; }); }),
+                note: "Mean calls of each of the seven REPL tools per episode; the headline is all seven together at the latest step. Healthy: search and read early, edits followed by shell runs, and diff before submit." });
+    chart(eh, { title: "Edits that failed per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("failed edits", "var(--c1)", "edit_errors")],
+                note: "edit_file calls that raised because the old text wasn't found or wasn't unique; the file is left untouched. Healthy: falling as it learns to copy exact text." });
+    chart(eh, { title: "Plain Python instead of the tools", fmt: F.pct, yMin: 0, yMax: 1, series: [es("raw open or subprocess", "var(--c1)", "raw_io_share")],
+                note: "Share of repository writes and commands made with open or subprocess rather than the tools. Not penalised; it shows which way the root prefers to work." });
     chart(eh, { title: "Lines changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 10, series: [es("diff lines", "var(--c1)", "diff_lines")],
                 note: "Mean changed lines in the submitted diff; the grader refuses over 2,000. Healthy: near the tasks' patch sizes, not ballooning." });
     chart(eh, { title: "Files changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 2, series: [es("files changed", "var(--c1)", "files_changed")],
@@ -843,7 +852,9 @@ footer p { margin: 0; max-width: 92ch; }
     chart(eh, { title: "Blocked network attempts per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("network tries", "var(--c1)", "network_tries")],
                 note: "Logged only: network try never zeroes the reward. Healthy: near 0; a rise means it keeps trying to install or download." });
     chart(eh, { title: "Grader time per episode", fmt: F.secs, tickFmt: function (v) { return v + " s"; }, yMin: 0, yMaxAtLeast: 30, series: [es("grader seconds", "var(--c1)", "grader_s")],
-                note: "Mean seconds the hidden-test run took, against a 600 s cap. Healthy: steady and far below the cap." });
+                note: "Mean seconds the hidden-test run took. Each task's cap is at least 600 s, and higher for tasks whose tests run slowly. Healthy: steady and far below the cap." });
+    chart(eh, { title: "Grader re-runs per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, series: [es("grader re-runs", "var(--c1)", "grader_retries")],
+                note: "A grader that hits its cap runs once more, alone, with double the cap, so a slow disk can't fail a good answer; only a second timeout counts against the model. Healthy: near 0; a climb means the drive is struggling with the run's load." });
     // resolved by language, pooled over steps and weighted by episodes
     var host = $("edit-langs"), cut = editSteps.length > 10 ? editSteps[editSteps.length - 10].step : -Infinity, run10 = {}, all = {};
     editSteps.forEach(function (r) {

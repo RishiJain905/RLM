@@ -354,16 +354,32 @@ Not ported: `sdpo.py`, `shaping.py` and `tasks.py`. The README Layout section ge
 
 > Added for [code-editing-plan.md](code-editing-plan.md), approved by Rishi on 2026-10-12 with every recommended option (E-a to E-g), the E7 probe dropped and the reserve cut to $10. Everything in §1-§11 still holds for the read families. This section pins what changes for the two edit families, `edit_real` and `edit_synth`, and is the contract the edit sandbox, the grader, the generators, the training loop and the dashboard are coded against.
 
-### 12.1 Bridge API: unchanged
+### 12.1 Bridge API unchanged; coding tools added
 
-The bridge stays v1: `context`, `llm`, `llm_batch`, `submit`, with the same budget, prompt cut and wire protocol (§1). Editing needs no new function, because the REPL is plain Python: files are read and written with `open`, and builds and tests run with `subprocess`.
+The bridge stays v1: `context`, `llm`, `llm_batch`, `submit`, with the same budget, prompt cut and wire protocol (§1). Nothing new crosses it.
 
 - `context` holds the task text (the issue, or the feature to build) and the repository's file list with sizes. The files themselves are on disk.
 - `submit(answer)` ends the episode as before. Any value the read families accept is fine; a one-line summary is expected. **What gets graded is the diff of the repository against its base commit, not the submitted value.**
 
+Edit episodes also get seven coding tools (Rishi, 2026-10-12; code-editing-plan.md §5.6), modelled on what Claude Code, Codex CLI, DeepSeek Harness and Qwen Code give their models. They are Python functions in `rlm_rl/repl_tools.py`, standard library only, which the container mounts read-only at `/opt/rlm` and the edit REPL loads into its namespace before turn 1. They run inside the container, so the sandbox bounds them as it bounds `open` and `subprocess`, which keep working. The edit REPL's working directory is `/work/repo`, and relative paths in the tools start there. Read episodes don't get the tools.
+
+| Tool | Behaviour |
+|---|---|
+| `read_file(path, start=1, n=40) -> str` | `n` lines from line `start`, numbered, lines over 300 characters cut, ending with how many lines follow and the call that reads them. Raises for a missing or binary file or a start past the end |
+| `find_files(pattern, path=".") -> list[str]` | Files under `path` matching a glob (`*` within a folder, `**` across folders, `{a,b}`), sorted, relative to the repository. Skips what `.gitignore` excludes (git's own file list), or common dependency and cache folders where there is no git |
+| `grep(pattern, path=".", glob=None, ignore_case=False, files_only=False) -> list[str]` | Python-regex matches as `"path:line: text"`, or each matching file once. `glob` without a `/` matches file names at any depth, as ripgrep does. Skips binary files, files over 2 MB and ignored files; stops after 10,000 matches with a last entry saying so |
+| `edit_file(path, old, new, replace_all=False) -> str` | Exact replacement. `old` must occur once unless `replace_all=True`; otherwise it raises with the count and the file is untouched. Keeps CRLF line endings |
+| `write_file(path, text) -> str` | Creates or overwrites a file, making folders |
+| `shell(cmd, timeout=120) -> ShellResult` | `sh -c` in the repository, stdout and stderr together. `.code` and `.out` (its last 1,000,000 characters); printing shows the exit code and the last 1,500 characters. A timeout kills the process group and returns code 124 with the output so far. Capped at the cell's remaining time |
+| `diff() -> str` | `git diff` of the working tree, new files included, against the base commit, staged through a copy of the index so the repository's own index is untouched. A commit by the model doesn't hide its change |
+
+`TOOLS_VERSION = "t1"`: names, signatures and docstrings freeze with prompt v2. `tests/test_repl_tools.py` pins them, every checkpoint records the tools version next to the prompt version (§8), and the Part 2 harness imports the same file (H10). Web tools, sub-agents with their own tools, a todo tool and `apply_patch` are left to Part 2.
+
+The REPL wires them in with `repl_tools.configure(root, base, time_left, on_call)` and `namespace()`. `on_call(tool, ok, seconds, target)` feeds the metrics in §12.9, and `repl_tools.active()` tells the audit hook that a file write or a process came from a tool.
+
 ### 12.2 Prompt v2
 
-`PROMPT_VERSION = "v2"`. One system prompt for every family (H10 still diffs it against the harness). Two changes from v1: the limits move into each task's first message, and one paragraph covers coding tasks.
+`PROMPT_VERSION = "v2"`. One system prompt for every family (H10 still diffs it against the harness). Two changes from v1: the limits move into each task's first message, and one section covers coding tasks and lists the tools (§12.1).
 
 ```text
 You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
@@ -380,7 +396,16 @@ The REPL has only the Python standard library.
 
 Your turn and sub-call limits are given with the task. Look at the structure of the input before processing it, decompose the work, use code for exact filtering and arithmetic, and use sub-calls for judgments that need reading comprehension. Call `submit()` once you are confident.
 
-For coding tasks: explore the repository with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and `llm` to draft or review a change. Make the change by writing the files, then run the relevant build or tests with `subprocess` before you submit. Your changes to the repository are what gets graded, by tests you cannot see, so do not change existing tests or test configuration. There is no network.
+For coding tasks, the REPL starts in the repository and also has these tools. They return values; print what you need to see.
+- `read_file(path, start=1, n=40) -> str`: numbered lines of a file
+- `find_files(pattern, path=".") -> list[str]`: files matching a glob such as "src/**/*.py"
+- `grep(pattern, path=".", glob=None, ignore_case=False, files_only=False) -> list[str]`: regex matches as "path:line: text"
+- `edit_file(path, old, new, replace_all=False) -> str`: replace exact text that occurs once (or every time with replace_all=True); raises otherwise
+- `write_file(path, text) -> str`: create or overwrite a file
+- `shell(cmd, timeout=120)`: run a shell command; the result has `.code` and `.out` and prints as the exit code and the end of the output
+- `diff() -> str`: your changes so far, as they will be graded
+
+Explore with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and `llm` to draft or review a change. Run the relevant build or tests with `shell` before you submit. Your changes to the repository are what gets graded, by tests you cannot see, so do not change existing tests or test configuration. There is no network.
 ```
 
 First user message, read families (the v1 template plus one limits line):
@@ -408,6 +433,8 @@ When your change is ready, call submit() with a one-line summary. You have at mo
 
 The timeout and crash messages (§4) gain the cell limit as a value, and for edit episodes add one sentence: `Your files in /work/repo are unchanged.`
 
+The second seed (step 10) keeps prompt v1, so it repeats the setup steps 5 and 6 tested (decision E-g), and its checkpoints record v1 (§8). The baselines and production use v2.
+
 ### 12.3 Episode limits
 
 | Limit | Read families (§4) | Edit families |
@@ -419,21 +446,30 @@ The timeout and crash messages (§4) gain the cell limit as a value, and for edi
 | REPL output shown | 2,000 chars | 2,000 chars |
 | Cell timeout (compute) | 120 s | 300 s |
 | Container | 1 CPU, 512 MB, 64 pids | 2 CPUs, 4 GB, 256 pids |
-| Grader timeout | none | 600 s |
+| Grader timeout | none | Per task: 600 s, or 4x its slowest gold run if longer |
 
 Limits are looked up per family (`bridge.limits(family)`), and each episode records the limits it ran under.
+
+**A slow disk never fails a good answer** (Rishi, 2026-10-13). The images live on a USB drive, so time spent waiting on the disk costs wall-clock time, never reward:
+- Container start-up waits are long (300 s for a read sandbox, 600 s for an edit sandbox, 600 s of extra slack for a grader). A launch that runs out is retried once, and a second miss is `infra_error`, never 0.
+- An edit task whose own test command, run through `shell()` under load, takes more than half the cell limit gets its own `cell_timeout_s`: twice that time, rounded up to 30 s. It is not dropped, and the episode's first message, timeout text and recorded limits use the task's value.
+- A grader that hits its cap runs once more, alone, with double the cap. Only a second timeout is the model's (§12.5).
+- Timings for these rules come from `build_edit_data.py measure --jobs 30`, which times every indexed task in real containers 30 at a time (container start, repo copy, gold test command, grader), not from an idle drive. The index reads its results for each task's grader cap (`tests.timeout_s`) and cell limit. Graders may queue for a slot, and queued time counts against no limit.
 
 ### 12.4 The edit sandbox
 
 Read episodes are unchanged (§10, step 3). Edit episodes differ in five ways:
 
-1. **Image.** `edit_synth` uses `rlm-sandbox`. Each `edit_real` repository uses a derived image, `rlm-edit-<repo>:<hash>`, built once from its source image: the image's own copy of the repository is deleted (for injected bugs it is the answer), caches and any other installed copy of the package are removed, and `/work/repo` points at the path the image's environment expects (for example `/testbed`). Every image is pulled and built with the network on, then only ever run `--network none`.
+1. **Image.** `edit_synth` uses `rlm-sandbox`. Each `edit_real` repository uses a derived image, `rlm-edit-<repo>:<hash>`, built once from its source image: the image's own copy of the repository is deleted (for injected bugs it is the answer), caches and any other installed copy of the package are removed, and `/work/repo` points at the path the image's environment expects (for example `/testbed`). Every image is pulled and built with the network on, then only ever run `--network none`. Every edit image has `git`, which `diff()` and the model's own `git status` need. A source image without it gets it in its derived image, and `edit_synth` gets it the same way from `rlm-sandbox`.
 2. **The REPL runs on our own Python**, a standalone CPython 3.12 build mounted read-only at `/opt/rlm/python`, so it works in any image whatever language or Python version the repository uses. The repository's own toolchain runs through `subprocess`.
 3. **Writable repository.** `/work/repo` is a writable bind mount of a per-episode host directory with a random name, holding a copy of the repository at the task's base: a fresh `git init` with one commit, no other history, branches, tags, reflog or remotes. It survives a REPL restart. Hidden test files are never in it.
 4. **Processes are allowed** inside the container: Landlock keeps reads and writes to the image, `/work/repo`, `/scratch` and `/opt/rlm`, but lets the image's programs run. The audit hook still logs and blocks network and host-file attempts; a blocked network attempt in an edit episode is logged as `network_try` and doesn't zero the reward (§12.6).
 5. **Limits** are §12.3's.
 
-Everything else from step 3 holds: `--network none`, read-only root, no capabilities, non-root user, `env -i`, the bridge socket as the only way out, and the infra rules for failures the model didn't cause.
+Everything else from step 3 holds: `--network none`, no capabilities, a non-root user, `env -i`, the bridge socket as the only way out, and the infra rules for failures the model didn't cause. Two points differ, as built in E2 (2026-10-12):
+
+- **A writable layer, not a read-only root.** Go, Cargo, Maven and Gradle need warm, writable caches, so each edit container gets its own writable layer, which Landlock confines (point 4) and which is deleted with the container.
+- **The user is the host user's own non-root uid**, not the read sandbox's fixed one.
 
 ### 12.5 The grader
 
@@ -441,7 +477,7 @@ Everything else from step 3 holds: `--network none`, read-only root, no capabili
 2. **Diff checks:** text files only, inside the repository, at most 2,000 changed lines *(mine)*. Changes to existing test files, any `conftest.py`, and test configuration (`pytest.ini`, `tox.ini`, the test sections of `setup.cfg` and `pyproject.toml`, `jest`/`vitest` configs, `go test` flags files) are stripped and fire `test_tamper`. New test files are kept but never run.
 3. A fresh grader container starts from the same image, `--network none`, with the same limits: a clean copy of the repository at base, the diff applied, the full test suite restored including hidden tests, and two canary tests with names drawn fresh per episode (one must pass, one must fail).
 4. It runs the task's fail-to-pass and pass-to-pass tests plus the canaries, with a 600 s cap, and reads per-test results from the runner's own report: JUnit XML (pytest, Maven Surefire, Gradle), `go test -json`, Jest, Vitest or Mocha JSON, and `cargo test`'s per-test lines. Results are keyed by file or package plus test name. A test missing from the report counts as failed.
-5. A grader that can't start, or a container killed from outside, is `infra_error` (§3). A test run that hits the 600 s cap is the model's: every task's gold patch was validated well inside it (§12.8).
+5. A grader that can't start, or a container killed from outside, is `infra_error` (§3). A test run that hits its cap (§12.3) runs once more, alone, with double the cap, and only a second timeout is the model's: every task's gold patch was validated well inside the cap under load (§12.8).
 
 ### 12.6 Reward and detectors
 
@@ -479,13 +515,13 @@ New detector rules (§7 keeps its four):
 `production_mix()` today splits a domain's share evenly among its families; editing's 25/15 split needs the family shares set directly. `allocate_step` is unchanged and keeps every family within one task of its share (exact every 5 steps at 8 tasks: 10/4/4/6/10/6 per 40 tasks).
 
 - **`edit_synth`** (generated from `synthcode` and `behaviours`): three kinds, fix-the-symptom, change-and-update-callers, add-a-feature; levels 1-5 from ~20K to ~200K characters, 1 to 4 files to change; hidden property tests with inputs drawn on the host per seed. `edit_synth_heldout` is eval-only.
-- **`edit_real`**: real repositories in five language groups (code-editing-plan.md §4.1): Python ~90 training tasks, Go ~60, TypeScript and JavaScript ~60, Rust ~45, Java ~35, from SWE-smith's per-language datasets, plus ~24 real pull requests (Python, Go, TypeScript) from SWE-rebench V2. Three kinds: bug fix, feature implementation (generated by removing a covered feature) and real pull request. Repositories used by SWE-bench Pro, DeepSWE v1.1 or SWE-bench Multilingual are excluded, and every image must pass its tests with `--network none`. Levels by the gold patch: 1 = one file and up to ~10 lines; 2 = one file up to ~40 lines; 3 = two files; 4 = three or more files; 5 = multi-file features of ~100+ lines. Each task records its `language`.
+- **`edit_real`**: real repositories in five language groups (code-editing-plan.md §4.1): Python ~90 training tasks, Go ~60, TypeScript and JavaScript ~60, Rust ~45, Java ~35, on SWE-smith's per-repository images, plus ~24 real pull requests (Python, Go, TypeScript) from SWE-rebench V2. Training uses SWE-smith's own task rows only for Python and Go, whose datasets are MIT. The JavaScript, TypeScript, Rust and Java datasets state no licence, so those four languages train only on tasks we generate on the permissive repositories (feature removals and our own injected bugs), and SWE-smith's rows for them are eval-only (Rishi, 2026-10-12). Three kinds: bug fix, feature implementation (generated by removing a covered feature) and real pull request. Repositories used by SWE-bench Pro, DeepSWE v1.1 or SWE-bench Multilingual are excluded, and every image must pass its tests with `--network none`. Levels by the gold patch: 1 = one file and up to ~10 lines; 2 = one file up to ~40 lines; 3 = two files; 4 = three or more files; 5 = multi-file features of ~100+ lines. Each task records its `language`.
 - **Retirement:** a task whose group came back all-0 twice, or all-1 once, isn't drawn again. Retirement state is saved with the checkpoint, so a resume keeps it.
 - The licence bar (7b) applies: every training repository has a permissive licence, checked by `tasks.check_mix()`.
 
 ### 12.8 Validation before a real task enters the pool
 
-In our grader: the gold patch passes every fail-to-pass and pass-to-pass test three runs in a row; the empty patch fails every fail-to-pass test; removing the hidden test files doesn't break the visible tests; the gold run finishes under half the grader cap; the task text doesn't quote the gold patch or a hidden test's name. Validation costs PC time only.
+In our grader: the gold patch passes every fail-to-pass and pass-to-pass test three runs in a row; the empty patch fails every fail-to-pass test; removing the hidden test files doesn't break the visible tests; the gold run finishes under half the grader cap, timed under production load; the task text doesn't quote the gold patch or a hidden test's name. Validation costs PC time only.
 
 ### 12.9 Logged every step (adds to §9)
 
@@ -509,9 +545,13 @@ Each step record gains an `edit` block, over that step's edit episodes:
 | `repeated_cells` | Mean cells identical to an earlier cell in the episode (the loop signal) |
 | `network_tries` | Mean blocked network attempts |
 | `grader_s` | Mean grader seconds |
+| `tool_calls` | `{tool: mean calls per episode}` for the seven tools (§12.1) |
+| `edit_errors` | Mean `edit_file` calls per episode that raised |
+| `raw_io_share` | Share of writes to `/work/repo` and commands made with plain `open` or `subprocess` rather than the tools |
+| `grader_retries` | Mean grader re-runs per episode after hitting the cap (the slow-disk signal) |
 | `by_language` | `{language: {"episodes", "resolved"}}` |
 
-The edit detectors appear in the existing per-rule hack counts. Eval summaries gain `by_language` next to `by_family` and `by_level`.
+A test command counts for `test_runs`, `tested_before_submit` and `edit_cycles` whether it ran through `shell` or `subprocess`, and an edit counts whether it came from a tool or `open`. The edit detectors appear in the existing per-rule hack counts. Eval summaries gain `by_language` next to `by_family` and `by_level`.
 
 ### 12.10 Evals
 
@@ -536,6 +576,7 @@ The edit detectors appear in the existing per-rule hack counts. Eval summaries g
 | Path | Holds |
 |---|---|
 | `rlm_rl/editbox.py` | The edit sandbox (§12.4): derived images, the writable repository mount, the standalone Python mount |
+| `rlm_rl/repl_tools.py` | The seven coding tools (§12.1), standard library only, mounted into edit containers and imported by the Part 2 harness |
 | `rlm_rl/grader.py` | The grader (§12.5) and per-language report parsers |
 | `rlm_rl/tasks/editsynth.py` | `edit_synth` and `edit_synth_heldout` |
 | `rlm_rl/tasks/editreal.py` | `edit_real` and its eval-only splits, reading the validated task index |

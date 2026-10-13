@@ -74,6 +74,13 @@ def edit_block(rng: random.Random, t: float, episodes: int) -> dict:
         "repeated_cells": _r(max(0, 0.7 - 0.4 * t + rng.gauss(0, 0.08)), 2),
         "network_tries": _r(max(0, 0.32 - 0.25 * t + rng.gauss(0, 0.04)), 2),
         "grader_s": _r(52 + 18 * t + rng.gauss(0, 5), 1),
+        "edit_errors": _r(max(0, 0.9 - 0.6 * t + rng.gauss(0, 0.08)), 2),
+        "raw_io_share": _r(_clip(0.3 - 0.2 * t + rng.gauss(0, 0.03))),
+        "grader_retries": _r(max(0, 0.02 + rng.gauss(0, 0.01)), 3),
+        "tool_calls": {"read_file": _r(6.5 - 2 * t + rng.gauss(0, 0.4), 2), "find_files": _r(1.6 + rng.gauss(0, 0.2), 2),
+                       "grep": _r(3.1 + 1.2 * t + rng.gauss(0, 0.3), 2), "edit_file": _r(2.2 + 0.6 * t + rng.gauss(0, 0.2), 2),
+                       "write_file": _r(0.5 + rng.gauss(0, 0.08), 2), "shell": _r(1.9 + 1.8 * t + rng.gauss(0, 0.2), 2),
+                       "diff": _r(0.3 + 0.9 * t + rng.gauss(0, 0.1), 2)},
         "by_language": by_language,
     }
 

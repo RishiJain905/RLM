@@ -1,6 +1,6 @@
 # Code editing plan
 
-> **Approved, being built.** Written 2026-10-12 at Rishi's request: add real code writing and editing to the RL run, so the root gets better at engineering and better at doing it the RLM way (REPL and sub-calls). Rishi approved it the same day with every recommended option in §15, dropped the E7 probe, cut the reserve to $10, and asked for real repositories in several languages, not only Python. [production-spec.md](production-spec.md) §12 turns it into the build contract and wins where the two differ. No W&B credit has been spent on it.
+> **Approved, being built.** Written 2026-10-12 at Rishi's request: add real code writing and editing to the RL run, so the root gets better at engineering and better at doing it the RLM way (REPL and sub-calls). Rishi approved it the same day with every recommended option in §15, dropped the E7 probe, cut the reserve to $10, and asked for real repositories in several languages, not only Python. [production-spec.md](production-spec.md) §12 turns it into the build contract and wins where the two differ. No W&B credit has been spent on it. §5.6, the REPL tools, was added later the same day at Rishi's request, and he approved it at 23:34 UTC.
 >
 > **Sources:** [production-spec.md](production-spec.md), [production-build-plan.md](production-build-plan.md), [step-3-sandbox-results.md](step-3-sandbox-results.md), [step-5-results.md](step-5-results.md), [step-7-results.md](step-7-results.md), [step-8-results.md](step-8-results.md), the code in `rlm_rl/`, and the open SWE RL recipes in §2 (links in Sources). Anything marked *(mine)* is my choice, not a source's. Anything marked *(inferred)* hasn't been measured; step 11's baselines measure the important ones.
 
@@ -119,7 +119,7 @@ The plan takes its training recipe from the first, its grading safeguards from t
 
   That covers all four of SWE-bench Pro's languages. Each language group also gets held-out repositories that training never sees, for `selection-v2` and `heldout-test-v2` (§12). C++ is left out: builds are slow and its test runners vary too much for the grader.
 - **Repository bar.** Kept only when all of these hold:
-  - the repository's licence is permissive (MIT, BSD, Apache-2.0 or similar), read from its own licence file in the image. SWE-smith only required a licence allowing non-proprietary use, so this is a real filter. Only the Python and Go dataset cards carry a licence tag (MIT); the JS, TS, Rust and Java cards carry none *(unverified)*, though the toolkit that made them is MIT. E4 checks each card's text and reports any card without a licence statement to Rishi before its tasks are used
+  - the repository's licence is permissive (MIT, BSD, Apache-2.0 or similar), read from its own licence file in the image. SWE-smith only required a licence allowing non-proprietary use, so this is a real filter. Only the Python and Go dataset cards carry a licence (MIT); the JS, TS, Rust and Java cards carry no licence tag and no card text (checked 2026-10-12), though the toolkit that made them is MIT. **Decided by Rishi, 2026-10-12:** those four languages train only on tasks we generate on the permissive repositories (feature removals and our own injected bugs, validated like every task), and SWE-smith's rows for them are eval-only
   - not used by an eval we report: SWE-bench Pro, DeepSWE v1.1, and SWE-bench Multilingual (which shares caddy, gin, babel, axios, ripgrep and gson with SWE-smith)
   - the tests run with `--network none`: every image is smoke-tested offline once (Java's Maven and Gradle plugins are the usual failure)
   - the relevant tests run in under ~60 s inside a 2-CPU, 4 GB container
@@ -173,7 +173,7 @@ The step 3 sandbox stays the boundary. Editing needs five changes, and only edit
 ### 5.2 What the root sees
 
 - `context` holds the issue and the repository's file list with sizes. The files themselves are on disk in `/work/repo`, which is how the Part 2 harness will see Rishi's own repositories *(mine; the alternative, the whole repository as one string, would leave a stale copy once files change)*.
-- The bridge API stays v1: `context`, `llm`, `llm_batch`, `submit`. Nothing new is added. Files are read and written with plain Python, and tests run through `subprocess`.
+- The bridge API stays v1: `context`, `llm`, `llm_batch`, `submit`. The REPL also has seven coding tools that run inside the container (§5.6), and plain `open` and `subprocess` still work.
 - `submit(summary)` ends the episode. The graded output is the diff of `/work/repo` against the base, not the submitted value.
 
 ### 5.3 The grader
@@ -199,6 +199,58 @@ This costs PC time, not W&B credit.
 - **Disk:** every image and downloaded dataset lives on the D: drive (Rishi, 2026-10-12): Docker Desktop's disk image location must be on D: before the first pull, and task metadata goes to `D:\RLM-data`. Pulling needs the network once; if the Remote Control permission check refuses a bulk pull, Rishi runs the pull script himself, as with the step 7 data.
 - **Memory:** a step runs about 8 real and 5 synthetic edit episodes. At 4 GB each that is up to ~50 GB if they all run at once, so E2 measures the PC and caps how many edit containers run together *(inferred)*.
 - **Time:** edit episodes are longer, so a step should take ~10-20 minutes instead of ~3-6, and ~75 steps take about a day *(inferred)*. Resume covers interruptions.
+
+### 5.6 REPL tools (approved by Rishi 2026-10-12)
+
+Rishi asked (22:55 UTC) for the tools a real coding harness gives its model, in the training environment now and in the Part 2 harness later. Plain `open` and `subprocess` can do everything, but every harness below gives the model a small set of named tools instead, and the model we deploy should arrive already trained on the ones it will have.
+
+**What the harnesses ship.**
+
+| Job | Claude Code | Codex CLI | DeepSeek Harness | Qwen Code (the model's own family) |
+|---|---|---|---|---|
+| Read a file | `Read`: numbered lines, offset and limit | `read_file` | `str_replace_editor` (view) | `read_file` |
+| Find files by name | `Glob` | `glob_file_search`, `list_dir` | file search | listing and search tools |
+| Search contents | `Grep` (ripgrep) | `rg` | file search | listing and search tools |
+| Edit a file | `Edit`: exact text that must occur once, or `replace_all` | `apply_patch` (its own patch format) | `str_replace_editor` | `edit` |
+| Create a file | `Write` | `apply_patch` (Add File) | `str_replace_editor` (create) | `write_file` |
+| Run a command | `Bash`: 2 min default, 10 max | `shell_command`: 120 s default | `bash` (persistent shell) | `run_shell_command` |
+| Plan | `TaskCreate` and friends (was `TodoWrite`) | `update_plan` | planning | `todo_write` |
+| Sub-agents | `Agent` | `spawn_agent` and friends | subagents | `agent` |
+| Web | `WebFetch`, `WebSearch` | `web_search` | web search | `web_fetch`, `web_search` |
+
+DeepSeek Harness's "code mode" goes furthest the RLM way: the model writes one program against generated bindings instead of calling tools one at a time. Our root already works like that, so our tools are Python functions it calls from code.
+
+**Seven functions in the REPL** (Rishi picked this set at 23:34 UTC). Each returns a Python value the root can filter, count, slice or pass to `llm`, exactly as it handles `context` today; it sees only what it prints, still cut at 2,000 characters.
+
+| Tool | What it does | Modelled on |
+|---|---|---|
+| `read_file(path, start=1, n=40) -> str` | `n` lines from line `start`, numbered, long lines cut at 300 characters, ending with how many lines follow. 40 lines fit one printed turn *(mine)*. Raises for a missing or binary file | `Read`, `read_file` |
+| `find_files(pattern, path=".") -> list[str]` | Paths matching a glob such as `"src/**/*.go"`, sorted, skipping `.git` and dependency or build folders (`node_modules`, `target`, `.venv` and so on) | `Glob`, `glob_file_search` |
+| `grep(pattern, path=".", glob=None, ignore_case=False, files_only=False) -> list[str]` | Regex matches (Python `re`) as `"path:line: text"`, or only the paths; skips binary files and the same folders | `Grep`, `rg` |
+| `edit_file(path, old, new, replace_all=False) -> str` | Replaces `old` with `new`. `old` must occur exactly once unless `replace_all=True`; otherwise it raises with the count found and leaves the file untouched. Keeps the file's line endings | `Edit`, `str_replace_editor`, `edit` |
+| `write_file(path, text) -> str` | Creates or overwrites a file, making folders as needed | `Write`, `write_file` |
+| `shell(cmd, timeout=120) -> Result` | Runs `cmd` with `sh -c` in the repository. `.code` is the exit code and `.out` holds stdout and stderr together; printing it shows the exit code and the last 1,500 characters, where test failures are. A timeout kills the command and returns what it printed, with code 124. Never longer than the cell's remaining time | `Bash`, `shell_command`, `bash` |
+| `diff() -> str` | The change so far against the base commit, new files included, the same diff the grader takes. For checking work and for review sub-calls: `llm("Review this change against the task:\n" + diff())` | `git diff` through the shell |
+
+The names follow Qwen Code and Codex where they can, and avoid names a model often rebinds by accident: `run` would be replaced by `from subprocess import run`, and `glob` by `import glob` *(mine)*. One way to edit (`edit_file`, which Claude Code, DeepSeek Harness and Qwen Code all use) keeps edits measurable; several edits are a loop *(mine)*.
+
+**Where they run.** Inside the episode container, as one standard-library module, `rlm_rl/repl_tools.py`, mounted read-only at `/opt/rlm` next to the standalone Python and loaded into the REPL before turn 1 of an edit episode. Nothing new crosses the bridge: it stays v1 (`context`, `llm`, `llm_batch`, `submit`), so the host's attack surface doesn't change, and Landlock and `--network none` bound the tools as they bound `open` and `subprocess`. Those two keep working; the tools are the easy path, not the only one. Read episodes don't get the tools, since they have no repository on disk. `diff()` needs `git` in the image: SWE-smith's images have it, and the `edit_synth` image gets it if it's missing.
+
+**The same code in Part 2.** The Part 2 harness imports the same module, so the deployed model calls the functions it trained on. Their names, signatures and docstrings freeze with prompt v2: `TOOLS_VERSION = "t1"` is recorded in every checkpoint next to the prompt version, and the H10 check diffs them against the harness's copy as it already does the bridge.
+
+**Left out of training, added in Part 2:**
+- **Web fetch and search.** Training has no network. The harness adds them through its bridge.
+- **Sub-agents with their own tools** (Claude Code's `Agent`, Codex's `spawn_agent`). In an RLM that is a recursive call: a sub-RLM with its own REPL. It would multiply the cost of an episode beyond the budget, so in training `llm` and `llm_batch` stay as they are, and Part 2 adds `rlm()`.
+- **A plan or todo tool.** The prompt already asks for a short plan every turn, and a Python list keeps one across turns. The harness can add one later.
+- **`apply_patch`, language servers, images, notebooks, background commands.** One way to edit is enough to train; the images have no language servers and the tasks no pictures.
+
+**What changes.**
+- **Spec:** §12.1 gets the tool table; §12.2's coding paragraph lists the tools, which grows the one system prompt from 1,527 to 2,270 characters (nothing has run on v2 yet, so this costs nothing); §12.4 requires `git` in every edit image; §12.12 adds `rlm_rl/repl_tools.py`.
+- **Logged, not rewarded** (§12.9): `tool_calls` (mean calls per episode, per tool), `edit_errors` (mean `edit_file` calls that raised), and `raw_io_share` (share of file writes and commands made with `open` or `subprocess` instead of the tools). `test_runs`, `tested_before_submit` and `edit_cycles` read the tool calls directly and still count `open` and `subprocess`.
+- **Dashboard and overview:** the Editing panel gains a tool-use row; the overview's edit chapter lists the tools, each hover-defined.
+- **Unchanged:** reward, grader and detectors. What gets graded is still the diff and the hidden tests.
+- **Red-team brief** (E6) adds: shadowing or patching the tool functions, editing `.git` to change what `diff()` or the host's diff sees, and paths outside the repository.
+- **Build:** `rlm_rl/repl_tools.py` and `tests/test_repl_tools.py` are written and tested in the cloud (22 tests, Python 3.12 and 3.13). The PC session loads the module into the edit REPL, adds the metrics and switches the bridge to the new prompt after E4. No W&B credit.
 
 ---
 
@@ -290,7 +342,7 @@ Characters sent to sub-calls against characters printed to the root, sub-calls u
 
 One system prompt for every family (H10 still diffs it against the harness):
 - The limits move from the system prompt into each task's first message, because edit episodes get different limits (§9).
-- One new paragraph for code tasks: the repository is at `/work/repo`, tests run with `subprocess`, there is no network, the changes to the repository are what gets graded, existing tests and test configuration must not be changed, and the steps in §8.1 as advice.
+- One new section for code tasks: the seven tools (§5.6), tests run with `shell`, there is no network, the changes to the repository are what gets graded, existing tests and test configuration must not be changed, and the steps in §8.1 as advice.
 
 Nothing has been trained on v1 yet, so changing it now costs nothing. The second seed runs now on v1 (E-g), since it only replicates the 20-step run; production, baselines and every eval from step 11 on use v2. The text is in production-spec.md §12.2.
 
@@ -436,7 +488,7 @@ All of them run on Rishi's PC through Remote Control threads, like steps 3-9, ex
 | E5 | Reward, detectors, evals, dashboard | §6, §7.2, `selection-v2`, `heldout-test-v2`, the dashboard's Editing panel, the overview page | $0 | Unit tests per detector; the dry run fills every new panel |
 | E6 | Red-team brief | `documentation/edit-red-team-brief.md` (§7.4), written last; Rishi runs it in a separate session | $0 | Brief delivered; after Rishi's run, no working exploit left |
 
-E3 and E4 can run side by side once E2 is done.
+E3 and E4 can run side by side once E2 is done. The REPL tools (§5.6) are written and tested in the cloud; the PC session loads them into the edit REPL and adds their metrics after E4.
 
 ---
 
@@ -517,6 +569,13 @@ Rishi took the recommended option on every one. The alternatives stay here for t
 - Kimi-Dev: [code](https://github.com/MoonshotAI/Kimi-Dev)
 - SWE-RL (Meta): [paper](https://arxiv.org/html/2502.18449v2)
 - mini-SWE-agent: [code](https://github.com/SWE-agent/mini-swe-agent)
+
+**Harness tools (§5.6)**
+- Claude Code: [tools reference](https://code.claude.com/docs/en/tools-reference)
+- Codex CLI: [built-in tool surface](https://codex.danielvaughan.com/2026/06/03/codex-cli-built-in-tool-surface-complete-reference-shell-file-search-image-multi-agent/)
+- DeepSeek Harness: [overview](https://www.digitalapplied.com/blog/deepseek-harness-open-source-agent-framework-2026), [runtime write-up](https://medium.com/@vignarajj/deepseek-harness-dsh-the-open-source-agent-runtime-that-finally-lets-you-own-the-stack-bcad91e05d74)
+- Qwen Code: [tools](https://qwenlm.github.io/qwen-code-docs/en/developers/tools/introduction/)
+- What an agent harness is: [freeCodeCamp](https://www.freecodecamp.org/news/what-is-an-agent-harness/)
 
 **Reward hacking**
 - SWE-bench git history leak: [issue #465](https://github.com/SWE-bench/SWE-bench/issues/465)

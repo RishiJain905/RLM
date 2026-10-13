@@ -151,11 +151,8 @@ class EditEpisodeTest(EditEnvCase):
         eps = [await self.episode(LOOK, gold + "\n" + TESTS, SUBMIT), await self.episode(LOOK, SUBMIT)]
         block = editmetrics.step_block(eps)
         self.assertEqual(set(block), set(editmetrics.EDIT_KEYS) | {"by_language", "tool_calls"})
-        # the dashboard reads these names (spec §12.9). The cloud adds the coding tools' two scalars and grader_retries
-        # to its copy of dashboard.py; until that copy lands here, only those three may be missing from it.
-        self.assertLessEqual(set(dashboard.EDIT_KEYS), set(editmetrics.EDIT_KEYS))
-        self.assertLessEqual(set(editmetrics.EDIT_KEYS) - set(dashboard.EDIT_KEYS),
-                             {"edit_errors", "raw_io_share", "grader_retries"})
+        self.assertEqual(editmetrics.EDIT_KEYS, dashboard.EDIT_KEYS)  # the dashboard reads these names (spec §12.9)
+        self.assertEqual(dashboard.TOOL_NAMES, repl_tools.TOOL_NAMES)  # and tool_calls by these
         self.assertEqual(set(block["tool_calls"]), set(repl_tools.TOOL_NAMES))
         self.assertEqual(block["by_language"], {"python": {"episodes": 2, "resolved": 0.5}})
         self.assertEqual((block["episodes"], block["resolved"], block["submitted"], block["empty_diff"]), (2, 0.5, 1.0, 0.5))

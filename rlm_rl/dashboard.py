@@ -29,6 +29,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
+from .repl_tools import TOOL_NAMES
+
 SCHEMA = 1
 TEMPLATE = Path(__file__).with_name("dashboard_page.html")
 DATA_MARK = "/*__DASHBOARD_DATA__*/null"
@@ -188,14 +190,17 @@ FAMILY_KEYS = ("level", "episodes", "scored", "pass_rate", "mean_reward", "windo
 # spec §12.9, over the step's edit episodes; by_language is read separately
 EDIT_KEYS = ("episodes", "resolved", "f2p_pass", "p2p_broken", "empty_diff", "submitted", "tested_before_submit",
              "test_runs", "edit_cycles", "turns_to_first_edit", "diff_lines", "files_changed", "subcall_read_share",
-             "review_subcalls", "repeated_cells", "network_tries", "grader_s")
+             "review_subcalls", "repeated_cells", "network_tries", "grader_s", "edit_errors", "raw_io_share",
+             "grader_retries")
 
 
 def edit_block(edit: Any) -> dict | None:
     """A step's `edit` block (spec §12.9), allowlisted. None for old runs and steps without one."""
     if not isinstance(edit, dict):
         return None
-    return {**_pick(edit, EDIT_KEYS), "by_language": _by_language(edit.get("by_language"), "episodes", "resolved")}
+    calls = edit.get("tool_calls")
+    return {**_pick(edit, EDIT_KEYS), "tool_calls": _pick(calls if isinstance(calls, dict) else None, TOOL_NAMES),
+            "by_language": _by_language(edit.get("by_language"), "episodes", "resolved")}
 
 
 def step_row(r: dict) -> dict:
