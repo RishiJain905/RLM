@@ -174,6 +174,7 @@ class DeriveTest(unittest.TestCase):
         self.assertIn("find /testbed -mindepth 1 \\( -type d -name node_modules -prune \\) -o \\( ! -type d -exec rm -f {} + \\)",
                       text)  # every checkout file goes, node_modules stay
         self.assertIn("ln -s /testbed /opt/rlm-deps", text)
+        self.assertIn("chown 1000:1000 /testbed/node_modules/.cache /testbed/node_modules/.vite", text)  # caches only
         self.assertNotIn("mv /testbed", text)  # no copy of node_modules
         self.assertNotIn("ln -s /work/repo /testbed", text)
         self.assertNotIn("/opt/rlm-deps", text.split("chown -R 1000:1000")[1].split("\n")[0])  # never re-owned (a copy)

@@ -177,9 +177,13 @@ def derive_dockerfile(source: str, language: str, uid: int, gid: int, repo_dir: 
     sandbox user, which the tests only read."""
     cfg = LANGS[language]
     if deps:
+        # Tools write caches into node_modules (jest-preview into .cache/, Vite and Vitest into .vite/ and .vitest/):
+        # those folders, empty, are the sandbox user's; re-owning only them copies nothing.
+        caches = [f"{repo_dir}/{d}/{c}" for d in deps for c in (".cache", ".vite", ".vitest")]
         steps = [f"rm -rf {repo_dir}/.git /root/setup_env.sh",
                  f"find {repo_dir} -mindepth 1 \\( -type d -name node_modules -prune \\) -o \\( ! -type d -exec rm -f {{}} + \\)",
-                 "mkdir -p /work /opt/rlm /scratch /episode /opt/rlm-cache", f"ln -s {repo_dir} /opt/rlm-deps"]
+                 "mkdir -p /work /opt/rlm /scratch /episode /opt/rlm-cache " + " ".join(caches),
+                 f"chown {uid}:{gid} " + " ".join(caches), f"ln -s {repo_dir} /opt/rlm-deps"]
         chown = ["/opt/rlm-cache"]
     else:
         steps = [f"rm -rf {repo_dir} /root/setup_env.sh",
