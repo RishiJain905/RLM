@@ -1130,12 +1130,62 @@ def cmd_revisible(args) -> int:
     return 0
 
 
-async def _validate_all(records: list[dict], out_path: Path, jobs: int) -> None:
+EVAL_SPARE = 1  # per language and eval split beyond its even share, so a split still fills if a language comes up short
+
+
+def eval_need(split: str) -> tuple[int, int]:
+    """(tasks, feature tasks) one language must pass for an eval split to be full: its even share of the split
+    (balance() takes them round-robin over the languages) and a spare."""
+    total, features = EVAL_SIZES[split]
+    n = len(editdata.LANGS)
+    return math.ceil(total / n) + EVAL_SPARE, math.ceil(features / n)
+
+
+class EvalQuota:
+    """A language's passing selection and test tasks. Once a split is full, its remaining candidates are spare and not
+    validated (Rishi, 2026-10-13: skip the spare evals); training, selection and test tasks keep every check."""
+
+    def __init__(self, results: list[dict], cands: dict[str, dict]):
+        self.passed = collections.defaultdict(lambda: {"all": 0, "feature": 0})
+        for r in results:
+            if r["ok"] and r["id"] in cands:
+                self.add(cands[r["id"]])
+
+    def add(self, rec: dict) -> None:
+        if rec["split"] in EVAL_SIZES:
+            self.passed[rec["split"]]["all"] += 1
+            self.passed[rec["split"]]["feature"] += rec["kind"] == "feature"
+
+    def full(self, rec: dict) -> bool:
+        if rec["split"] not in EVAL_SIZES:
+            return False
+        total, features = eval_need(rec["split"])
+        p = self.passed[rec["split"]]
+        if rec["kind"] == "feature":
+            return p["feature"] >= features and p["all"] >= total
+        return p["all"] - min(p["feature"], features) >= total - features  # the other slots are taken
+
+
+def write_spare(language: str, skipped: list[str]) -> None:
+    """validated/<language>.spare.json: eval candidates left unvalidated because their split was full. They stay in
+    candidates/ and can still be validated later (drop them from this file)."""
+    path = editdata.edit_path("validated", f"{language}.spare.json")
+    done = {r["id"] for r in read_results(editdata.edit_path("validated", f"{language}.jsonl"))}
+    ids = sorted((set(editdata.read_json(path, [])) | set(skipped)) - done)
+    editdata.write_json(path, ids)
+
+
+async def _validate_all(records: list[dict], out_path: Path, jobs: int, quota: EvalQuota | None = None,
+                        skipped: list[str] | None = None) -> None:
     gate = asyncio.Semaphore(jobs)
     images: dict[str, editbox.EditImage] = {}
 
     async def one(rec):
         async with gate:
+            if quota is not None and quota.full(rec):  # decided when its turn comes, with the results so far
+                skipped.append(rec["id"])
+                print(f"--  {rec['id']:55s} spare: its {rec['split']} split is full", flush=True)
+                return
             image = images.setdefault(rec["image"], editbox.EditImage.derived(rec["image"]))
             t = time.time()
             try:
@@ -1150,6 +1200,8 @@ async def _validate_all(records: list[dict], out_path: Path, jobs: int) -> None:
                       "visible_check": editdata.VISIBLE_CHECK_VERSION}
             with open(out_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(result) + "\n")
+            if v.ok and quota is not None:
+                quota.add(rec)
             print(f"{'OK ' if v.ok else 'no '} {rec['id']:55s} f2p={len(v.f2p):3d} p2p={len(v.p2p):4d} "
                   f"{time.time() - t:5.0f}s {v.why[:120]}", flush=True)
 
@@ -1199,10 +1251,17 @@ def cmd_validate(args) -> int:
                 picked.append(q[:need + (need + 5) // 6 if need else 0])
             interleaved = [c for row in itertools.zip_longest(*picked) for c in row if c is not None]
             todo = rest + interleaved
+        # training first, then the eval splits' features (they count toward both of a split's needs), then their bugs
+        todo.sort(key=lambda c: (c["split"] in EVAL_SIZES, c["split"] in EVAL_SIZES and c["kind"] != "feature"))
         if args.limit:
             todo = todo[:args.limit]
+        quota = None if args.all_evals else EvalQuota(results, {c["id"]: c for c in cands})
+        skipped: list[str] = []
         print(f"{language}: validating {len(todo)} ({len(done)} done)", flush=True)
-        asyncio.run(_validate_all(todo, out, args.jobs))
+        asyncio.run(_validate_all(todo, out, args.jobs, quota, skipped))
+        write_spare(language, skipped)
+        if skipped:
+            print(f"{language}: {len(skipped)} spare eval candidates left unvalidated (validated/{language}.spare.json)")
     return 0
 
 
@@ -1516,6 +1575,8 @@ def main() -> int:
             p.add_argument("--split", choices=("train", "select", "test"))
             p.add_argument("--per-repo", type=int, default=0,
                            help="validate training bug tasks only until this many per repository have passed")
+            p.add_argument("--all-evals", action="store_true",
+                           help="also validate eval candidates beyond what the selection and test splits need")
     p = sub.add_parser("measure")
     p.add_argument("--jobs", type=int, default=30, help="tasks at once (training runs ~30 episodes in flight)")
     p.add_argument("--limit", type=int, default=0, help="tasks per language (0: every indexed task)")

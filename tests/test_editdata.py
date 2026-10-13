@@ -295,6 +295,26 @@ class EvalSplitTest(unittest.TestCase):
         self.assertEqual(build.balance(records, 40, 15), picked)  # fixed for a given set
         self.assertEqual(len(build.balance(records[:5], 10, 3)), 5)
 
+    def test_spare_eval_candidates_are_skipped_once_a_split_is_full(self):
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "build_edit_data", Path(__file__).resolve().parents[1] / "scripts" / "build_edit_data.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        self.assertEqual((build.eval_need("test"), build.eval_need("select")), ((8, 3), (3, 1)))  # 40/6 + 1, 15/6
+        cands = {f"t{i}": {"id": f"t{i}", "split": "test", "kind": "bug"} for i in range(7)}
+        cands.update({f"f{i}": {"id": f"f{i}", "split": "test", "kind": "feature"} for i in range(2)})
+        q = build.EvalQuota([{"id": k, "ok": True} for k in cands], cands)
+        bug, feature = {"split": "test", "kind": "bug"}, {"split": "test", "kind": "feature"}
+        self.assertTrue(q.full(bug))  # 7 bugs fill the 5 non-feature slots
+        self.assertFalse(q.full(feature))  # 2 of the 3 features
+        q.add(feature)
+        self.assertTrue(q.full(feature))
+        self.assertFalse(q.full({"split": "train", "kind": "bug"}))  # training is never spare
+        self.assertFalse(q.full({"split": "select", "kind": "bug"}))
+
     def test_reruns_skip_repositories_that_have_generated_tasks(self):
         import importlib.util
         import tempfile
