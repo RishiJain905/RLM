@@ -150,6 +150,24 @@ class DeriveTest(unittest.TestCase):
         self.assertLess(rust.index("mv /testbed/target /opt/rlm-cache/target"), rust.index("rm -rf /testbed"))
         self.assertIn('LABEL rlm.edit.writable="/opt/rlm-cache"', go)
 
+    def test_a_module_its_runner_cant_build_is_dropped_before_any_container(self):
+        import asyncio
+        import tempfile
+        import types
+        from pathlib import Path
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "tree" / "codegen").mkdir(parents=True)
+            (Path(tmp) / "tree" / "codegen" / "build.gradle").write_text("", encoding="utf-8")
+            task = types.SimpleNamespace(workspace=types.SimpleNamespace(ensure=lambda: Path(tmp)))
+            record = {"tests": {"runner": "maven", "scope": ["a.BTest"], "cwd": "codegen", "language": "java"}}
+            with mock.patch.object(editdata.editreal, "to_task", lambda rec, family: task), \
+                    mock.patch.object(grader, "grade", side_effect=AssertionError("no container")):
+                v = asyncio.run(editdata.validate(record, image=None))
+        self.assertFalse(v.ok)
+        self.assertIn("no pom.xml in codegen", v.why)
+
     def test_node_modules_stay_where_the_image_installed_them(self):
         text = editdata.derive_dockerfile("src:img", "typescript", 1000, 1000, deps=["node_modules", "pkg/a/node_modules"])
         self.assertIn("rm -rf /testbed/.git", text)
@@ -336,6 +354,13 @@ class EvalSplitTest(unittest.TestCase):
                          (["a.OldTest", "a.ParseTest"], "core",
                           ["core/src/test/java/a/OldTest.java", "core/src/test/java/a/ParseTest.java"]))
         self.assertEqual(len(build.generated_scope("java", sorted(texts))[2]), 3)  # without texts: every file
+        tests = ["packages/rx/spec/a-spec.ts", "apps/site/src/b.spec.ts"]  # a monorepo's tests run from one package
+        self.assertEqual(build.generated_scope("typescript", tests, test_cwd="packages/rx"),
+                         (["spec/a-spec.ts"], "packages/rx", ["packages/rx/spec/a-spec.ts"]))
+        self.assertTrue(all(build.REPO_TESTS[r]["runner"] in grader.RUNNERS for r in build.REPO_TESTS))
+        js = {"packages/rx/spec/a-spec.ts": "describe('a', () => { it('works', () => {}); });",
+              "packages/rx/spec/helpers/marbles.ts": "export function hot(m: string) { return cold(m); }"}
+        self.assertEqual(build.generated_scope("typescript", sorted(js), js, "packages/rx")[2], ["packages/rx/spec/a-spec.ts"])
 
 
 if __name__ == "__main__":

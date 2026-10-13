@@ -766,8 +766,9 @@ class Jest(Runner):
         first = next((s for s in spec.scope if "." in posixpath.basename(s)), "rlm.test.js")
         folder, base = posixpath.dirname(first), posixpath.basename(first)
         name = f"rlm{tag}" + base[base.index("."):] if "." in base else f"rlm{tag}.test.js"
-        path = posixpath.join(folder, name) if folder else name
-        return Canary({path: self._canary_text(p, f, path)}, p, f, [path])
+        path = posixpath.join(folder, name) if folder else name  # as the runner sees it, from the task's folder
+        at = posixpath.normpath(posixpath.join(spec.cwd or ".", path))  # where prepare() writes it, from the root
+        return Canary({at: self._canary_text(p, f, path)}, p, f, [path])
 
     def _canary_text(self, p, f, path):
         return f"test('{p}', () => {{}});\ntest('{f}', () => {{ throw new Error('canary'); }});\n"

@@ -95,8 +95,24 @@ def update_registry(key: str, entry: dict) -> None:
         editdata.write_json(path, reg)
 
 
+# How a repository's tests run when the derive stage's guess (from the files and packages it finds) is wrong: monorepos
+# whose tests run from one package with their own configuration. `test_cwd` is that package, relative to the root.
+REPO_TESTS = {
+    # Vitest is installed, but the library's specs (`*-spec.ts`) run with mocha from packages/rxjs; apps/rxjs.dev's
+    # specs need Karma and a browser, so its functions aren't used.
+    "ReactiveX/rxjs": {"runner": "mocha", "bin": ["mocha"], "args": ["--config", "spec/support/.mocharc.js"],
+                       "env": {"TS_NODE_PROJECT": "tsconfig.mocha.json"}, "test_cwd": "packages/rxjs",
+                       "test_hint": "cd packages/rxjs && TS_NODE_PROJECT=tsconfig.mocha.json npx mocha "
+                                    "--config spec/support/.mocharc.js 'spec/**/*-spec.ts'"},
+}
+
+
 def registry() -> dict:
-    return editdata.read_json(registry_path(), {})
+    """repos.json, with REPO_TESTS laid over the entries it names."""
+    reg = editdata.read_json(registry_path(), {})
+    for entry in reg.values():
+        entry.update(REPO_TESTS.get(entry.get("repo"), {}))
+    return reg
 
 
 def plan_repos(languages):
@@ -557,10 +573,12 @@ def cmd_candidates(args) -> int:
         path = editdata.edit_path("candidates", f"{language}.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         have = {json.loads(l)["id"] for l in path.read_text(encoding="utf-8").splitlines()} if path.exists() else set()
+        done = generated_keys(path, "bug", source=SOURCE_NAMES[language])
         added = 0
         with open(path, "a", encoding="utf-8") as f:
             for key, entry in sorted(reg.items()):
-                if entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr":
+                if (entry["language"] != language or not entry.get("permissive") or entry.get("kind") == "real_pr"
+                        or key in done):
                     continue
                 if entry["split"] == "train" and language not in SMITH_TRAIN:
                     continue  # this dataset's rows are eval-only (no licence on its card)
@@ -619,7 +637,7 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
             if not break_patch.strip():
                 continue
             gold = editdata.reverse_patch(break_patch, clean)
-            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language))
+            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language), entry.get("test_cwd"))
             if not scope:
                 continue
             hidden = editdata.snapshot_read(snapshot, tests)
@@ -634,7 +652,8 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
                                          f2p=[], p2p=[], language=language, hidden=hidden, cwd=cwd,
-                                         bin=entry.get("bin") or [], junit=entry.get("junit")).as_dict(),
+                                         bin=entry.get("bin") or [], junit=entry.get("junit"),
+                                         args=entry.get("args") or [], env=entry.get("env") or {}).as_dict(),
                 "test_hint": entry.get("test_hint") or editdata.LANGS[language]["test_hint"],
                 "level": editreal.level_of(nfiles, nlines),
                 "gold_files": nfiles, "gold_lines": nlines, "files": [],
@@ -662,8 +681,8 @@ def _tree_diff(a: Path, b: Path, paths: list[str]) -> str:
 
 
 def _test_texts(tree: Path, tests: list[str], language: str) -> dict | None:
-    """The test files' contents, where generated_scope needs them (Java)."""
-    if language != "java":
+    """The test files' contents, where generated_scope needs them (Java, JavaScript, TypeScript)."""
+    if language not in ("java", "javascript", "typescript"):
         return None
     return {t: (tree / t).read_text(encoding="utf-8", errors="replace") for t in tests}
 
@@ -728,7 +747,7 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
             break_patch = _tree_diff(clean, work, [f.path])
             shutil.rmtree(work, ignore_errors=True)
             gold = editdata.reverse_patch(break_patch, clean)
-            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language))
+            scope, cwd, tests = generated_scope(language, tests, _test_texts(clean, tests, language), entry.get("test_cwd"))
             if not scope:
                 continue
             used.add((f.path, f.name, line))
@@ -741,7 +760,8 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
                                          f2p=[], p2p=[], language=language, hidden=editdata.snapshot_read(snapshot, tests),
-                                         cwd=cwd, bin=entry.get("bin") or [], junit=entry.get("junit")).as_dict(),
+                                         cwd=cwd, bin=entry.get("bin") or [], junit=entry.get("junit"),
+                                         args=entry.get("args") or [], env=entry.get("env") or {}).as_dict(),
                 "test_hint": entry.get("test_hint") or editdata.LANGS[language]["test_hint"], "level": 1,
                 "gold_files": 1, "gold_lines": 2,
                 "files": [], "feature": {"path": f.path, "name": f.name, "qualname": f.qualname,
@@ -756,14 +776,14 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
         shutil.rmtree(tree, ignore_errors=True)
 
 
-def generated_keys(path: Path, kind: str) -> set[str]:
-    """Repositories that already have generated candidates of this kind. The stages that write them skip those, so a
-    rerun after more repositories are derived doesn't add a second, differently drawn set (the random draws are shared
-    across repositories in order)."""
+def generated_keys(path: Path, kind: str, source: str = "generated") -> set[str]:
+    """Repositories that already have candidates of this kind from this source. The stages that write them skip those,
+    so a rerun after more repositories are derived doesn't add a second, differently drawn set (the random draws are
+    shared across repositories in order)."""
     if not path.exists():
         return set()
     recs = (json.loads(l) for l in path.read_text(encoding="utf-8").splitlines())
-    return {r["key"] for r in recs if r["source"] == "generated" and r["kind"] == kind}
+    return {r["key"] for r in recs if r["source"] == source and r["kind"] == kind}
 
 
 def cmd_bugs(args) -> int:
@@ -874,14 +894,17 @@ def cmd_bugtexts(args) -> int:
 
 
 JAVA_TEST_MARK = re.compile(r"@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b|\bextends\s+TestCase\b")
+JS_TEST_MARK = re.compile(r"(?<![\w.$])(?:it|test|describe)(?:\.\w+)?\s*\(")
 
 
-def generated_scope(language: str, tests: list[str], texts: dict | None = None) -> tuple[list, str, list[str]]:
+def generated_scope(language: str, tests: list[str], texts: dict | None = None,
+                    test_cwd: str | None = None) -> tuple[list, str, list[str]]:
     """The runner scope and working folder for a generated task's hidden test files: (scope, cwd, the test files used).
     Go runs packages; Rust `--test <name>` per integration test file (or `--lib` for a src/**/tests.rs module) in the
     crate that holds them; Java test classes in their module; Python, JavaScript and TypeScript the files themselves.
-    `texts` (path -> content), for Java: a file without a test in it is a helper the visible tests share, so it stays
-    visible (hiding it would break their build) and out of the scope."""
+    `texts` (path -> content), for Java, JavaScript and TypeScript: a file without a test in it is a helper the
+    visible tests share, so it stays visible (hiding it would break them) and out of the scope. `test_cwd` (REPO_TESTS, JavaScript and
+    TypeScript): the tests run from that folder, so only test files under it are used, named from it."""
     if language == "go":
         return (sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
                         for t in tests}), ".", sorted(tests))
@@ -918,6 +941,11 @@ def generated_scope(language: str, tests: list[str], texts: dict | None = None) 
             return [], ".", []
         module, items = max(by_module.items(), key=lambda kv: len(kv[1]))
         return sorted(c for c, _ in items), module, sorted(t for _, t in items)
+    if texts is not None and language in ("javascript", "typescript"):
+        tests = [t for t in tests if JS_TEST_MARK.search(texts.get(t, ""))]
+    if test_cwd and language in ("javascript", "typescript"):
+        under = sorted(t for t in tests if t.startswith(test_cwd.rstrip("/") + "/"))
+        return [t[len(test_cwd.rstrip("/")) + 1:] for t in under], test_cwd, under
     return sorted(tests), ".", sorted(tests)
 
 
@@ -955,8 +983,9 @@ def cmd_fixscope(args) -> int:
             if rec["source"] != "generated":
                 continue
             hidden = rec["tests"]["hidden"]
-            scope, cwd, used = generated_scope(language, sorted(hidden), hidden)
-            helpers = language == "java" and used != sorted(hidden)
+            test_cwd = rec["tests"].get("cwd") if rec["tests"].get("cwd", ".") != "." else None
+            scope, cwd, used = generated_scope(language, sorted(hidden), hidden, test_cwd)
+            helpers = language in ("java", "javascript", "typescript") and used != sorted(hidden)
             if scope and (scope != rec["tests"]["scope"] or cwd != rec["tests"].get("cwd", ".") or helpers):
                 rec["tests"] = dict(rec["tests"], scope=scope, cwd=cwd)
                 if helpers:  # the helpers go back into the repository

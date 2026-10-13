@@ -459,6 +459,7 @@ def leaks(issue: str, gold_patch: str, test_names: Iterable[str]) -> list[str]:
 # ----------------------------------------------------------------------------- validation
 
 
+BUILD_FILES = {"maven": ("pom.xml",), "gradle": ("build.gradle", "build.gradle.kts")}  # in the module's folder
 GOLD_MAX_S = 900  # a gold run slower than this (under load) makes a task too slow to train on
 CAP_FACTOR = 4  # a task's grader cap: max(the spec's 600 s, CAP_FACTOR x its slowest gold run under load)
 
@@ -493,6 +494,10 @@ async def validate(record: dict, image: editbox.EditImage, runs: int = 3, run_id
     task = editreal.to_task(record, "edit_real")
     ws_dir = await asyncio.to_thread(task.workspace.ensure)
     spec = grader.TestSpec.from_dict({**record["tests"], "f2p": [], "p2p": []})
+    build_files = BUILD_FILES.get(spec.runner)
+    if build_files and not any((ws_dir / "tree" / spec.cwd / f).exists() for f in build_files):
+        # e.g. picocli: Maven builds only the root project, its other modules are Gradle's
+        return Validation(False, f"no {' or '.join(build_files)} in {spec.cwd}: {spec.runner} can't run this module")
     base = await grader.grade("", spec, ws_dir=ws_dir, image=image, run_id=run_id, keep_all=True)
     if any(h["rule"] == "grader_tamper" for h in base.hacks):
         return Validation(False, f"canaries failed on the base: {base.hacks}")

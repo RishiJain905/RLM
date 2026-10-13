@@ -337,6 +337,10 @@ class CanaryTest(unittest.TestCase):
         module = TestSpec(runner="gradle", scope=["com.ex.ATest"], f2p=[], p2p=[], cwd="core", bin=["./gradlew"])
         cmds, _ = grader.RUNNER_CLASSES["gradle"].commands(module, module.scope, "", None)
         self.assertEqual((cmds[0]["argv"][0], cmds[0]["cwd"]), ("/work/repo/gradlew", "/work/repo/core"))  # root wrapper
+        mocha = grader.RUNNER_CLASSES["mocha"].canary(TestSpec(runner="mocha", scope=["spec/a-spec.ts"], f2p=[], p2p=[],
+                                                               cwd="packages/rx"))
+        self.assertEqual(list(mocha.files)[0], "packages/rx/" + mocha.scope[0])  # written from the root, run from cwd
+        self.assertTrue(mocha.scope[0].startswith("spec/rlm"))
         jest = grader.RUNNER_CLASSES["jest"].canary(TestSpec(runner="jest", scope=["src/x/a.spec.tsx"], f2p=[], p2p=[]))
         self.assertTrue(list(jest.files)[0].startswith("src/x/rlm") and list(jest.files)[0].endswith(".spec.tsx"))
         go = grader.RUNNER_CLASSES["go"].canary(TestSpec(runner="go", scope=["./a"], f2p=["m/a::TestX"], p2p=[]))
