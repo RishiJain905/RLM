@@ -241,7 +241,15 @@ For `documentation/edit-red-team-brief.md` (the coordinator writes it). Line num
 
 ## 7. This round: Python, Go and JavaScript (Rishi, 2026-10-13 2:12 pm ET: "Python and Go today")
 
-Validation stopped at 6 pm ET on 2026-10-13 so the build could finish the same day. Training uses every Python, Go and JavaScript task that passed with real tests by then; the index is built with `index --languages python go javascript`. Final counts: *(filled in at the stop)*.
+Validation stopped at 2:25 pm ET on 2026-10-13 (Rishi: finish step 9.5 now) so the build could finish the same day. Training uses every Python, Go and JavaScript task that passed with real tests by then; the index is built with `index --languages python go javascript`.
+
+| Language | Passed validation (train / test / select) | In the index's training split |
+|---|---|---|
+| Python | 173 (149 / 19 / 5) | 86 (55 bug, 31 feature: the per-repository caps and the 90 target) |
+| Go | 38 (17 + 2 real PRs / 15 / 4) | 16 (4 bug, 10 feature, 2 real PRs) |
+| JavaScript | 18 (5 / 9 / 4) | 5 (feature) |
+
+The eval splits are filled from all three languages: selection 10 of 13 passing, test 40 of 43 passing (about 8 feature tasks). The first index left them short (6 and 24) because a per-repository cap meant for training bug tasks also applied to the eval splits and counted feature tasks; it now applies to training only.
 
 **Known gaps in this round:**
 - **Go training is under its 60-task target** (the slow drive left most Go candidates unvalidated; our own injected Go bugs are in the pool for the next round).
