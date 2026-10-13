@@ -616,11 +616,9 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
             if not break_patch.strip():
                 continue
             gold = editdata.reverse_patch(break_patch, clean)
-            if language == "go":
-                scope = sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
-                                for t in tests})
-            else:
-                scope = sorted(tests)
+            scope, cwd, tests = generated_scope(language, tests)
+            if not scope:
+                continue
             hidden = editdata.snapshot_read(snapshot, tests)
             nfiles, nlines = editdata.patch_size(gold)
             used_files.add(f.path)
@@ -632,7 +630,7 @@ def features_for(language: str, key: str, entry: dict, want: int, rng: random.Ra
                 "break_patch": break_patch, "gold_patch": gold, "remove": sorted(tests), "issue": "",
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
-                                         f2p=[], p2p=[], language=language, hidden=hidden, cwd=".",
+                                         f2p=[], p2p=[], language=language, hidden=hidden, cwd=cwd,
                                          bin=entry.get("bin") or [], junit=entry.get("junit")).as_dict(),
                 "test_hint": entry.get("test_hint") or editdata.LANGS[language]["test_hint"],
                 "level": editreal.level_of(nfiles, nlines),
@@ -702,8 +700,9 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
             break_patch = _tree_diff(clean, work, [f.path])
             shutil.rmtree(work, ignore_errors=True)
             gold = editdata.reverse_patch(break_patch, clean)
-            scope = (sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
-                             for t in tests}) if language == "go" else sorted(tests))
+            scope, cwd, tests = generated_scope(language, tests)
+            if not scope:
+                continue
             used.add((f.path, f.name, line))
             rid = f"{language[:2]}-{entry['repo'].split('/')[1]}-bug-{f.name}-{line}".lower()[:80]
             out.append({
@@ -714,7 +713,7 @@ def bugs_for(language: str, key: str, entry: dict, want: int, rng: random.Random
                 "node_modules": entry.get("node_modules", []),
                 "tests": grader.TestSpec(runner=entry.get("runner") or editdata.LANGS[language]["runner"], scope=scope,
                                          f2p=[], p2p=[], language=language, hidden=editdata.snapshot_read(snapshot, tests),
-                                         cwd=".", bin=entry.get("bin") or [], junit=entry.get("junit")).as_dict(),
+                                         cwd=cwd, bin=entry.get("bin") or [], junit=entry.get("junit")).as_dict(),
                 "test_hint": entry.get("test_hint") or editdata.LANGS[language]["test_hint"], "level": 1,
                 "gold_files": 1, "gold_lines": 2,
                 "files": [], "feature": {"path": f.path, "name": f.name, "qualname": f.qualname,
@@ -835,6 +834,47 @@ def cmd_bugtexts(args) -> int:
     return 0
 
 
+def generated_scope(language: str, tests: list[str]) -> tuple[list, str, list[str]]:
+    """The runner scope and working folder for a generated task's hidden test files: (scope, cwd, the test files used).
+    Go runs packages; Rust `--test <name>` per integration test file (or `--lib` for a src/**/tests.rs module) in the
+    crate that holds them; Java test classes in their module; Python, JavaScript and TypeScript the files themselves."""
+    if language == "go":
+        return (sorted({"./" + str(Path(t).parent).replace("\\", "/") if str(Path(t).parent) != "." else "."
+                        for t in tests}), ".", sorted(tests))
+    if language == "rust":
+        by_crate: dict[str, list] = collections.defaultdict(list)
+        for t in tests:
+            parts = t.split("/")
+            if "tests" in parts[:-1]:  # <crate>/tests/<name>.rs or <crate>/tests/<name>/main.rs
+                i = parts.index("tests")
+                crate = "/".join(parts[:i]) or "."
+                name = parts[i + 1].removesuffix(".rs") if len(parts) > i + 2 else Path(parts[-1]).stem
+                by_crate[crate].append((["--test", name], t))
+            elif "src" in parts:  # an inline test module file, src/**/tests.rs
+                crate = "/".join(parts[:parts.index("src")]) or "."
+                by_crate[crate].append((["--lib"], t))
+        if not by_crate:
+            return [], ".", []
+        crate, items = max(by_crate.items(), key=lambda kv: len(kv[1]))  # the crate with the most of them
+        scope, seen = [], set()
+        for args, _ in items:
+            if tuple(args) not in seen:
+                seen.add(tuple(args))
+                scope += args
+        return scope, crate, sorted(t for _, t in items)
+    if language == "java":
+        by_module: dict[str, list] = collections.defaultdict(list)
+        for t in tests:
+            if "src/test/java/" in t and t.endswith(".java"):
+                module, cls = t.split("src/test/java/", 1)
+                by_module[module.rstrip("/") or "."].append((cls[:-5].replace("/", "."), t))
+        if not by_module:
+            return [], ".", []
+        module, items = max(by_module.items(), key=lambda kv: len(kv[1]))
+        return sorted(c for c, _ in items), module, sorted(t for _, t in items)
+    return sorted(tests), ".", sorted(tests)
+
+
 def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
     """A Go candidate that hides test functions instead of whole files: `replace` holds each hidden test file
     without those functions (helpers kept), `remove` keeps only files left with nothing to show. The hidden texts stay
@@ -855,6 +895,34 @@ def go_strip(rec: dict, mentions: set[str], names: set[str]) -> dict | None:
     if not replace:
         return None
     return dict(rec, id=rec["id"][:77] + "-gs", remove=sorted(remove), replace=replace)
+
+
+def cmd_fixscope(args) -> int:
+    """Generated Rust and Java candidates written with file paths as their scope (Cargo wants `--test <name>`, Maven
+    test classes): rewritten in place, and the results that wrong scope caused forgotten so they're validated again."""
+    for language in args.languages:
+        path = editdata.edit_path("candidates", f"{language}.jsonl")
+        cands = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+        changed, ids = 0, set()
+        for rec in cands:
+            if rec["source"] != "generated":
+                continue
+            files = sorted(rec["tests"]["hidden"])
+            scope, cwd, used = generated_scope(language, files)
+            if scope and (scope != rec["tests"]["scope"] or cwd != rec["tests"].get("cwd", ".")):
+                rec["tests"] = dict(rec["tests"], scope=scope, cwd=cwd)
+                changed += 1
+                ids.add(rec["id"])
+        editdata.write_lines(path, [json.dumps(c, ensure_ascii=False) for c in cands])
+        vpath = editdata.edit_path("validated", f"{language}.jsonl")
+        dropped = 0
+        if vpath.exists():
+            rows = vpath.read_text(encoding="utf-8").splitlines()
+            keep = [l for l in rows if json.loads(l)["id"] not in ids]
+            dropped = len(rows) - len(keep)
+            editdata.write_lines(vpath, keep)
+        print(f"{language}: {changed} generated candidates rescoped; {dropped} results forgotten")
+    return 0
 
 
 def cmd_gostrip(args) -> int:
@@ -967,7 +1035,10 @@ def cmd_validate(args) -> int:
         reg = registry()
         for c in cands:  # the derived image may have been rebuilt since the candidate was written
             c["image"] = reg[c["key"]]["tag"]
-        todo = [c for c in cands if c["id"] not in done and (not args.split or c["split"] == args.split)]
+        # a Go candidate rewritten by gostrip (id + "-gs") replaces its original, which is never validated again
+        replaced = {c["id"][:-3] for c in cands if c["id"].endswith("-gs")}
+        todo = [c for c in cands if c["id"] not in done and (not args.split or c["split"] == args.split)
+                and not (not c["id"].endswith("-gs") and c["id"][:77] in replaced)]
         if args.per_repo:
             # Training bug tasks beyond what the index can take are not worth a validation on a slow drive: per
             # repository, stop once `per_repo` have passed (counting earlier runs). Features, real PRs and the eval
@@ -1284,7 +1355,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("runtime")
-    for name in ("pull", "derive", "candidates", "features", "bugs", "bugtexts", "briefs", "validate", "rebench", "prune"):
+    for name in ("pull", "derive", "candidates", "features", "bugs", "bugtexts", "briefs", "validate", "rebench", "prune",
+                 "fixscope"):
         p = sub.add_parser(name)
         p.add_argument("languages", nargs="+", choices=sorted(editdata.LANGS))
         if name in ("pull", "rebench"):
@@ -1314,7 +1386,7 @@ def main() -> int:
     sub.add_parser("report")
     args = parser.parse_args()
     return {"runtime": cmd_runtime, "pull": cmd_pull, "derive": cmd_derive, "candidates": cmd_candidates, "features": cmd_features, "bugs": cmd_bugs, "briefs": cmd_briefs, "bugtexts": cmd_bugtexts,
-            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
+            "rebench": cmd_rebench, "measure": cmd_measure, "gostrip": cmd_gostrip, "fixscope": cmd_fixscope, "prune": cmd_prune, "validate": cmd_validate, "index": cmd_index, "manifest": cmd_manifest, "report": cmd_report}[args.command](args)
 
 
 if __name__ == "__main__":
