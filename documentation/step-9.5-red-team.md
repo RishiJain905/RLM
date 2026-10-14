@@ -1,6 +1,6 @@
-# Step 9.5: red-team brief for the edit environment
+# Edit environment: red-team brief
 
-> **Step 9.5's red-team, E6 of [code-editing-plan.md](code-editing-plan.md)** (§7.4). It is the gate before any W&B credit is spent on edit tasks (the baselines in step 11 and production in step 12).
+> **Step E6 of [code-editing-plan.md](code-editing-plan.md)** (§7.4). It is the gate before any W&B credit is spent on edit tasks (the baselines in step 11 and production in step 12).
 >
 > **What this is.** A defensive QA plan for *our own* code-editing environment: the edit sandbox, the host-side diff, the grader and the edit detectors that step 9.5 built. The question is the one step 8 asked of the read families: **can reward be earned without solving the task?** It turns the security notes the build left ([edit-build-results.md](edit-build-results.md) §5b) and the points gathered during the build into an ordered checklist. Part A is a read-only code review. Part B is a small set of live checks on Rishi's PC.
 >
@@ -9,6 +9,8 @@
 > **Cost.** Everything here is **$0**: local, against the fake model (`tests/fake_model.py`) and the real sandbox and grader in Docker. Nothing calls W&B.
 >
 > **Status when you start:** step 9.5 is finished. Branch `claude/project-thread-9nnh3n` at `65d04ec` or later; the suite is 400 tests, 399 pass and 1 skip. The task index is `D:\RLM-data\edit\index.json` (`/mnt/d/RLM-data/edit/index.json` from WSL): 157 tasks in Python, Go and JavaScript (training 107, selection 10, test 40). Rust, TypeScript and Java wait for a later round; §9 lists what to check when they arrive.
+>
+> **Where this file lives.** On the PC branch `claude/project-thread-9nnh3n` as `documentation/step-9.5-red-team.md` (committed at Rishi's request, 2026-10-14). It was first written on the cloud branch as `edit-red-team-brief.md`.
 
 Line numbers below are as of `65d04ec`; function names are the stable reference.
 
@@ -227,7 +229,7 @@ Write `documentation/step-9.5-red-team-results.md`. Keep any transcripts or grad
 ```markdown
 # Step 9.5 red-team results
 
-> Step 9.5's red-team (E6 of code-editing-plan.md). Run <date> on Rishi's PC, WSL + Docker.
+> Step E6 of code-editing-plan.md. Run <date> on Rishi's PC, WSL + Docker.
 > No W&B credit. .env never opened. Nothing on D: changed. Nothing committed until Rishi approves.
 
 ## Summary
