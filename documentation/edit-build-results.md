@@ -242,7 +242,7 @@ Tests: `tests/test_slow_drive.py` (17).
 
 ## 5b. Security notes for the red team (as built)
 
-For `documentation/edit-red-team-brief.md` (the coordinator writes it). Line numbers are as of this build.
+For [step-9.5-red-team.md](step-9.5-red-team.md), the red-team brief built from these notes. Line numbers are as of this build.
 
 **The graded diff never comes from the episode's `.git`.** Each task's base is committed once into a host cache with a private git directory (`_commit_base`, `rlm_rl/editbox.py:191`); the episode gets a copy (`materialize`, `:218`). After the last turn the host diffs the episode's work tree (`diff`, `:224`) against the base commit with a throwaway bare git directory whose objects come from the host cache through `alternates`, under `git_env` (`:124`: no system or global config) and `GIT_SAFE` (`:133`: no fsmonitor, hooks, attributes file or untracked cache), and `--no-ext-diff --no-textconv --no-renames --full-index`. The episode's `.git` (object store, refs, index, config, hooks) is never read, so tampering with it changes nothing that is graded. What the model can still influence: a `.gitignore` in the work tree hides its own new files from the diff (it only loses its own changes; tracked files stay tracked), and a `.gitattributes` marking files binary makes them "Binary files differ", which the grader strips (again only its own loss). Test `tests/test_editbox.py` plants an fsmonitor, a diff driver and a clean filter in the episode's `.git/config` and checks none runs on the host.
 
