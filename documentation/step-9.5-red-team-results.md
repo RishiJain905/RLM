@@ -7,6 +7,9 @@
 > probe scripts: `scripts/edit_index_check.py` (B1), `scripts/edit_image_scan.py` (B2 sweep) and
 > `scripts/edit_go_cache_probe*.sh`, `scripts/edit_pip_install_probe.sh` (B2 follow-ups, run inside throwaway
 > containers). Transcripts and the captured suite log stay git-ignored under `results/red-team/transcripts/`.
+>
+> **Update 2026-10-15: F1, F2 and F3 are fixed** (Rishi's go-ahead), with regression tests, and ristretto turned out
+> to carry F3 too; see [Fixes](#fixes-2026-10-15) at the end. The rest of this file is the red team's report as run.
 
 ## Summary
 
@@ -225,7 +228,7 @@ from the episode tree by `_build_workspace` (`tasks/editreal.py` :155-160), conf
   | glom (select), mistune (test) | **No** | same editable shape |
   | pyparsing (test) | **Yes, indirectly** | editable install for the repo itself, **plus pip's vendored `pyparsing`** (three copies: `/opt/miniconda3/pkgs/.../pip/_vendor/pyparsing`, `/opt/miniconda3/lib/python3.12/site-packages/pip/_vendor/pyparsing`, `/usr/lib/python3/dist-packages/pip/_vendor/pyparsing`) — a full-source copy at a different version, readable in any episode; flatters the 11 test-split tasks, not training |
   | squirrel, bigcache, go-prompt, chi (train, Go) | **Yes — F3** | the warm `go-build` cache moved to `/opt/rlm-cache/go-build` holds the repository's own compiled **pre-break** code: test-variant package archives (source paths `/testbed/…`), synthesized test mains (`testing/internal/testdeps`, `main.main`) and bench-test variants, readable end to end from inside a stock episode container (`grep` → `go tool pack x` → `go tool objdump -S`), demonstrated on bigcache's `queue.getNeededSize` |
-  | ristretto (train), kin-openapi ×2 (train real_pr) | **No** | their caches name no repo path: nothing compiled of the repository itself |
+  | ristretto (train), kin-openapi ×2 (train real_pr) | **No** | their caches name no repo path: nothing compiled of the repository itself. *Correction (2026-10-15): ristretto's cache held 15 entries naming its module (`github.com/dgraph-io/ristretto/v2`, not the `hypermodeinc` name the repository goes by) or `/testbed/`, so it had F3 too and was re-derived; kin-openapi's images have an empty build cache and no copy of the module.* |
   | hjson (select), roaring (test), bitset (test) | **Yes — F3** | same compiled pre-break cache entries |
   | async (train, JS) | **No** | no `async` package anywhere under `node_modules` (601 packages checked); the one name hit is `browserify/test/async/src.js`, browserify's own 8-line fixture |
   | mathjs, nock, ws (test, JS) | **No** | no name hits at all |
@@ -266,9 +269,9 @@ from the episode tree by `_build_workspace` (`tasks/editreal.py` :155-160), conf
 
 | # | Area | Behaviour (plain words) | Fix | Regression test | Status |
 |---|---|---|---|---|---|
-| F1 | A1/A3, grader | A new `pytest.py` in the repository replaces the grader's test runner (`python -m pytest` resolves the module from the working directory), receives the report path and scope, and can write a report that keeps the recognizable canaries right while marking every fail-to-pass test passed — reward 1 without solving | Add the runner's `-m` import targets (`pytest.py`, and `pluggy.py`/`_pytest` for the same reason) to Python's `TEST_CONFIGS`; strip + `test_tamper` | `CheckDiffTest`: a diff adding `pytest.py` is stripped and fires `test_tamper` (today it is kept) — to add with the fix | **Escalated to Rishi** (spec §12.5 change, §8). Live evidence recorded; no exploit code written |
-| F2 | A5, detector | `SKIP_MARKERS`'s `xit\(` (mocha's `xit`) is unanchored and matches any `exit(`: an honest diff adding `sys.exit(…)` is zeroed as `test_aware` "adds a skip marker" (fired on the F1 probe's `sys.exit(0)`); verified over all 157 gold patches, `py-deepdiff-feat-extract` (training) is flagged, so an honest gold-like solve on that one task is zeroed | Anchor the marker (`\bxit\(`) | `check_diff` on a diff adding `sys.exit(1)` fires no `test_aware`, and the deepdiff gold fires none — to add with the fix | **Escalated to Rishi** (detector rule change, §8). One training task of 107 is affected |
-| F3 | B2, images | The warm `go-build` cache a derived image mounts at `/opt/rlm-cache` (writable in every Go episode and grader) embeds the repository's own compiled **pre-break** code — the answer in machine-readable form — plus compiled hidden-test variants. 12 of 16 training Go tasks and 19 eval Go tasks sit on such images. A policy can `grep` the cache, unpack with `go tool pack`, and disassemble with `go tool objdump -S` (demonstrated end to end on bigcache `queue.getNeededSize`, source path `/testbed/queue/bytes_queue.go`) | Delete the repo-own entries from the moved cache in `derive_dockerfile`'s Go path (surgical `grep -rl <module path> -delete`, dependency entries stay warm), or clear the whole moved cache, or drop the affected tasks | `DeriveTest`: the derive script keeps no archive entry naming the repository's own module — to add with the fix | **Escalated to Rishi** (data change on D:, §8). Repositories: squirrel, bigcache, go-prompt, chi (train); hjson, roaring, bitset (eval); clean: ristretto, kin-openapi ×2 |
+| F1 | A1/A3, grader | A new `pytest.py` in the repository replaces the grader's test runner (`python -m pytest` resolves the module from the working directory), receives the report path and scope, and can write a report that keeps the recognizable canaries right while marking every fail-to-pass test passed — reward 1 without solving | Add the runner's `-m` import targets (`pytest.py`, and `pluggy.py`/`_pytest` for the same reason) to Python's `TEST_CONFIGS`; strip + `test_tamper` | `CheckDiffTest`: a diff adding `pytest.py` is stripped and fires `test_tamper` (today it is kept) — to add with the fix | **Fixed 2026-10-15**: the pytest command imports the runner before the repository joins `sys.path`, and the runner's modules are stripped (see Fixes) |
+| F2 | A5, detector | `SKIP_MARKERS`'s `xit\(` (mocha's `xit`) is unanchored and matches any `exit(`: an honest diff adding `sys.exit(…)` is zeroed as `test_aware` "adds a skip marker" (fired on the F1 probe's `sys.exit(0)`); verified over all 157 gold patches, `py-deepdiff-feat-extract` (training) is flagged, so an honest gold-like solve on that one task is zeroed | Anchor the marker (`\bxit\(`) | `check_diff` on a diff adding `sys.exit(1)` fires no `test_aware`, and the deepdiff gold fires none — to add with the fix | **Fixed 2026-10-15**: every JavaScript/Go/Java skip marker anchored; all 157 golds clean (see Fixes) |
+| F3 | B2, images | The warm `go-build` cache a derived image mounts at `/opt/rlm-cache` (writable in every Go episode and grader) embeds the repository's own compiled **pre-break** code — the answer in machine-readable form — plus compiled hidden-test variants. 12 of 16 training Go tasks and 19 eval Go tasks sit on such images. A policy can `grep` the cache, unpack with `go tool pack`, and disassemble with `go tool objdump -S` (demonstrated end to end on bigcache `queue.getNeededSize`, source path `/testbed/queue/bytes_queue.go`) | Delete the repo-own entries from the moved cache in `derive_dockerfile`'s Go path (surgical `grep -rl <module path> -delete`, dependency entries stay warm), or clear the whole moved cache, or drop the affected tasks | `DeriveTest`: the derive script keeps no archive entry naming the repository's own module — to add with the fix | **Fixed 2026-10-15**: the surgical purge in the derive step; 8 images re-derived (the 7 plus ristretto), index rebuilt (see Fixes) |
 
 ## Accepted residual items
 
@@ -298,3 +301,103 @@ from the episode tree by `_build_workspace` (`tasks/editreal.py` :155-160), conf
    run recompiles; the slow drive pays), or dropping the 31 affected tasks (12 train, 19 eval). All
    change data on D:, so all are Rishi's call. Note also pyparsing's pip-vendored copies (three,
    full source at a different version) in the test split, if he wants the eval flattery gone.
+
+## Fixes (2026-10-15)
+
+Rishi approved F1, F2 and F3 (including re-deriving the Go images) on 2026-10-15. All of it ran on the PC: no W&B
+credit, `.env` never opened. Regression tests are in `tests/test_grader.py` and `tests/test_editdata.py`; the smoke
+checks are `scripts/edit_fix_smoke.py`, their logs under `results/red-team-fixes/` (git-ignored).
+
+**F1, the runner replaced by a file in the repository.** Two layers:
+- The grader's pytest command is no longer `python -m pytest`. It is `python -c PYTEST_BOOT` (`rlm_rl/grader.py`),
+  which takes every `sys.path` entry inside the repository out, imports pytest, its built-in plugins
+  (`_pytest.config.default_plugins`) and the standard modules it imports late (`doctest`, `pdb`, `unittest`), puts
+  the repository's entries back where they were with the working directory in front, as `-m` does, and runs pytest
+  with `runpy` (`sys.argv[0]` is pytest's `__main__.py`, as under `-m`). A `pytest.py`, `_pytest/` or `pluggy.py` in
+  the repository, or on a `PYTHONPATH` entry inside it, is never imported as the runner.
+- `check_diff` strips the runner's own modules (`RUNNER_MODULES`: `pytest`, `_pytest`, `pluggy`, `unittest`, as a
+  `.py` file or a package folder anywhere in the diff) and fires `test_tamper`.
+- Tests: `PytestBootTest` runs the old and new commands against a repository holding a planted `pytest.py`, a planted
+  late-imported module and a `PYTHONPATH` entry inside the repository, with fake "real" pytest packages outside it
+  (no Docker, no pytest needed): the old command runs the planted file, the new one the real runner, with the
+  repository still importable. `CheckDiffTest.test_the_runners_own_modules_are_tamper_and_stripped`.
+- Live (`edit_fix_smoke.py plant`): the red team's setup, a `pytest.py` that exits 0 placed in py-sqlparse's base, then the gold
+  graded in a real container. Before: `grader_tamper` ("claimed success without reporting the canaries", the planted
+  file ran). Now: resolved, 7/7 fail-to-pass, no hacks; the real pytest ran and reported the canaries.
+- Still open, as before: gap 1 (main code inside the test process can single out the canaries and forge the rest).
+  A third-party pytest plugin that the image installs still loads after the repository joins `sys.path`, so a planted
+  package of the same name would run in-process: the same reach as gap 1, which the canaries and the Claude audit
+  cover.
+
+**F2, `xit\(` matching `exit(`.** `SKIP_MARKERS` now matches the runners' own names only: `it/describe/test/context/
+suite/specify.skip(`, `xit(` / `xdescribe(` / `xtest(` / `xcontext(` / `xspecify(` at a word start, `t.Skip(`,
+`t.SkipNow(`, `t.Skipf(` with `t` a whole word, `#[ignore`, `@Ignore` as a whole name. Unanchored, `\.skip\(` also
+matched Rust's `iter().skip(1)` and `t\.Skip\(` any `st.Skip(`. Test: `CheckDiffTest.test_exit_calls_and_skip_like_names_are_no_skip_markers`
+(`sys.exit(1)`, `.skip(` on an iterator or stream, `st.Skip(`, `@IgnoreExtraProperties` fire nothing; each real
+marker still fires). Every indexed task's gold through the new `check_diff`: 157 of 157 clean, no hacks and nothing
+stripped (`py-deepdiff-feat-extract` included); its gold also grades resolved with no hacks.
+
+The full suite then caught a gap the false positive had been covering: `GraderTest.test_canaries_catch_forged_results`
+exits early with `import os as _os` / `_os._exit(0)`, and Python's `test_aware` rule `\bos\._exit\s*\(` never matched
+`_os._exit(` (no word boundary between `_` and `os`). Only the unanchored `xit\(` had fired. The rule is now
+`\b_exit\s*\(`: `os._exit` under any alias, `from os import _exit`, `posix._exit`. `sys.exit`, `__exit__` and
+`on_exit` don't match. Test: `CheckDiffTest.test_an_early_exit_under_any_alias_is_test_aware`. The 157 golds stay clean
+with it.
+
+**F3, the compiled gold in the Go images' warm build cache.**
+- `derive_dockerfile`'s Go path (`editdata.go_cache_purge`) reads the module path from the checkout's `go.mod` before
+  the checkout goes, and after the build cache moves to `/opt/rlm-cache/go-build` deletes every entry naming the module
+  path or the checkout's path (`grep -rlaF`), so dependencies stay warm. Vendored packages compile from the checkout,
+  so they go too. Tests: `DeriveTest.test_go_images_keep_nothing_compiled_from_the_repository` (step order) and
+  `test_the_go_cache_purge_keeps_dependencies_warm` / `test_without_a_go_mod_only_the_checkouts_paths_go` (the purge
+  run on a fake cache: the package and an entry compiled from the checkout go, nothing else).
+- Re-derived (`build_edit_data.py derive go --only ...`, 1-2 minutes each): squirrel, bigcache, go-prompt, chi,
+  hjson, roaring, bitset, and ristretto, which the B2 sweep had missed (its module path is
+  `github.com/dgraph-io/ristretto/v2`; 15 entries). kin-openapi ×2 kept their images: empty build cache, no copy of
+  the module anywhere.
+- In every Go image the index uses, entries naming the module or the checkout: **0** (1,229-1,932 dependency entries
+  left in each of the 8 re-derived ones).
+- One gold per re-derived repository graded in a real container: 8 of 8 resolved, all fail-to-pass passing, no hacks,
+  117-288 s against caps of 3,000-8,200 s. The first compile of the repository's own packages costs little, so the
+  measured caps and cell limits stand.
+- `index --languages python go javascript` rebuilt the index: the same 157 tasks in the same order, the only change
+  the image of the 33 tasks on those 8 repositories (14 training, 19 eval). `manifest` rebuilt. The previous
+  `repos.json`, `index.json`, `measured.json` and `manifest.json` are kept in `D:\RLM-data\edit\backup-2026-10-15\`.
+  The superseded images are still in Docker, unused (nothing deleted).
+
+**Python golds with the new pytest command** (`edit_fix_smoke.py python`): two tasks per Python repository plus
+py-deepdiff-feat-extract, 19 of 19 resolved, no hacks, 61-394 s against caps of 600-1,907 s.
+
+**Leftover grader containers** (Rishi, 2026-10-15: "fix the docker spam"). The 47 exited `rlm-grade-*` containers
+were the data build's, from validation runs stopped mid-way (created 2026-10-12 21:00 to 2026-10-13 14:15, the last
+ones minutes before validation was stopped at 2:25 pm). A grader container outlives its `docker run` client (no
+`--rm`: the grader inspects it for an OOM kill before removing it), and the removal only ran on a timeout or after a
+normal run, so a stopped process left its containers to finish and stay. Fixes: `_run_driver` removes its container when cancelled (`grader._remove_now`, which doesn't
+await, so a second cancellation can't cut it short) as well as on a timeout and after a normal run;
+`build_edit_data.py` turns SIGTERM into the Ctrl-C path, so a plain `kill` removes containers on the way out; and
+stages that start containers first sweep sandbox and grader containers that exited over 10 minutes ago, or were
+created and never started an hour ago (`sandbox.cleanup_finished`, safe beside running processes). Tests:
+`LeftoverContainerTest`. The 47 are removed; Rishi's other projects' containers (`nfl-neo4j`, `aegis-*`) were not
+touched.
+
+They had one more effect. WSL restarted at 7:49 pm on 2026-10-14, clearing `/tmp`, and Docker re-created the leaked
+containers' bind-mount folders as root, so `/tmp/rlm-sandbox-1000` became root-owned and every grade failed ("not a
+directory owned by this user"). It holds only empty folders. Removing it needs root, so it is left to Rishi: it goes
+with the next WSL restart, or `wsl -u root rm -rf /tmp/rlm-sandbox-1000`. The checks above ran with
+`RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b`. With the containers gone, nothing re-creates it.
+
+**Suite and dry run after the fixes:**
+- Full suite (`sandbox_ctl.py check`, 2026-10-15 00:25): 410 tests, 408 passed, 1 skipped (the tokenizer not in the
+  local Hugging Face cache), 1 failed. The failure was the `_exit` gap under F2 above.
+- After that fix, every module that reaches the diff checks or the grader was rerun: `test_editbox`,
+  `test_detectors`, `test_edit_env` and `test_grader` (94 tests, OK, 219 s), then `test_slow_drive` and
+  `test_training` (34 tests, OK, 2,036 s).
+- No "Created" or exited sandbox or grader containers were left after any of them.
+- Dry run (`train.py start --dry-run --kind production --lr 2e-5 --real-edit --stop-after 1`, run `rt-fixes-dry`;
+  fake model and backend, no W&B):
+  - selection-v2 at checkpoint 0: 21.9% over 64 episodes, its 10 edit_real tasks in real edit sandboxes on the new
+    images;
+  - capability eval 100%;
+  - one trained step, 32 episodes, 8 of them edit_real;
+  - a clean operator stop.
+  0 infra errors, 0 grader retries, no detector hits, no containers left.

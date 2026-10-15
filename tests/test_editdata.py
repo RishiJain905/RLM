@@ -2,6 +2,7 @@
 
 import json
 import random
+import sys
 import unittest
 
 from rlm_rl import editdata, editfeatures, grader
@@ -149,6 +150,60 @@ class DeriveTest(unittest.TestCase):
         self.assertIn('CARGO_NET_OFFLINE="true"', rust)
         self.assertLess(rust.index("mv /testbed/target /opt/rlm-cache/target"), rust.index("rm -rf /testbed"))
         self.assertIn('LABEL rlm.edit.writable="/opt/rlm-cache"', go)
+
+    def test_go_images_keep_nothing_compiled_from_the_repository(self):
+        # red-team F3: the warm build cache held the repository's own pre-break packages and hidden-test mains
+        for go in (editdata.derive_dockerfile("src:img", "go", 1000, 1000),
+                   editdata.derive_dockerfile("src:img", "go", 1000, 1000, repo_dir="/src/app",
+                                              go={"gomodcache": "/go/pkg/mod", "gocache": "/root/.cache/go-build"})):
+            repo = "/src/app" if "/src/app" in go else "/testbed"
+            module, purge = editdata.go_cache_purge(repo)
+            self.assertLess(go.index(module), go.index(f"rm -rf {repo} "))
+            self.assertLess(go.index("mv "), go.index(purge))
+            self.assertLess(go.index(purge), go.index("chown -R"))
+        self.assertNotIn("go-build", editdata.derive_dockerfile("src:img", "python", 1000, 1000))
+
+    @unittest.skipUnless(sys.platform == "linux", "GNU grep and xargs, as in the Go images")
+    def test_the_go_cache_purge_keeps_dependencies_warm(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, cache = Path(tmp) / "testbed", Path(tmp) / "go-build"
+            (repo).mkdir()
+            (repo / "go.mod").write_text('module github.com/Masterminds/squirrel // a comment\n\ngo 1.21\n'
+                                         "require github.com/lann/builder v0.0.0\n", encoding="utf-8")
+            entries = {
+                "1a/1a2b-d": b"!<arch>\n__.PKGDEF\x00github.com/Masterminds/squirrel.Select\x00",  # the package itself
+                "2c/2c3d-d": b"\x7fELF\x00" + f"{repo}/select.go\x00".encode(),  # compiled from the checkout
+                "3e/3e4f-d": b"!<arch>\n\x00github.com/lann/builder.Set\x00/root/go/pkg/mod/github.com/lann/b.go",
+                "4a/4a5b-a": b"v1 4a5b 3e4f 120 1700000000\n",  # an action entry: hashes only
+                "trim.txt": b"1700000000",
+            }
+            for name, body in entries.items():
+                (cache / name).parent.mkdir(parents=True, exist_ok=True)
+                (cache / name).write_bytes(body)
+            module, purge = editdata.go_cache_purge(str(repo), str(cache))
+            subprocess.run(["sh", "-c", f"set -e; {module}; {purge}"], check=True, timeout=60)
+            left = sorted(str(p.relative_to(cache)).replace("\\", "/") for p in cache.rglob("*") if p.is_file())
+        self.assertEqual(left, ["3e/3e4f-d", "4a/4a5b-a", "trim.txt"])
+
+    @unittest.skipUnless(sys.platform == "linux", "GNU grep and xargs, as in the Go images")
+    def test_without_a_go_mod_only_the_checkouts_paths_go(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "go-build"
+            cache.mkdir()
+            (cache / "a-d").write_bytes(b"/testbed/x.go")
+            (cache / "b-d").write_bytes(b"github.com/dep/x")
+            module, purge = editdata.go_cache_purge(f"{tmp}/none", str(cache))
+            purge = purge.replace(f"{tmp}/none/", "/testbed/")
+            subprocess.run(["sh", "-c", f"set -e; {module}; {purge}"], check=True, timeout=60)
+            self.assertEqual(sorted(p.name for p in cache.iterdir()), ["b-d"])
 
     def test_a_module_its_runner_cant_build_is_dropped_before_any_container(self):
         import asyncio

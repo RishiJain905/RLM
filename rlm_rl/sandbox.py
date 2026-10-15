@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import dataclasses
+import datetime
 import hashlib
 import io
 import json
@@ -162,6 +163,32 @@ def cleanup_stale(run_id: str | None = None, docker: str = "docker", root: Path 
         for child in root.glob("ep-*"):
             shutil.rmtree(child, ignore_errors=True)
     return len(ids)
+
+
+def cleanup_finished(docker: str = "docker", older_than_s: float = 600) -> int:
+    """Remove sandbox and grader containers that exited more than `older_than_s` ago (or were created and never
+    started, an hour ago): a process killed outright never removes its own. Unlike cleanup_stale, safe beside running
+    processes: their containers are running, or have just exited and are about to be removed."""
+    ids = subprocess.run([docker, "ps", "-aq", "--filter", f"label={LABEL}=1", "--filter", "status=exited",
+                          "--filter", "status=dead", "--filter", "status=created"], capture_output=True, text=True,
+                         env=docker_cli_env()).stdout.split()
+    if not ids:
+        return 0
+    out = subprocess.run([docker, "inspect", "--format", "{{.Id}} {{.State.Status}} {{.State.FinishedAt}} {{.Created}}",
+                          *ids], capture_output=True, text=True, env=docker_cli_env()).stdout
+    now, old = time.time(), []
+    for line in out.splitlines():
+        cid, status, finished, created = (line.split() + ["", "", "", ""])[:4]
+        when, limit = (created, 3600.0) if status == "created" else (finished, older_than_s)
+        try:
+            t = datetime.datetime.strptime(when[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            continue
+        if now - t.timestamp() > limit:
+            old.append(cid)
+    if old:
+        subprocess.run([docker, "rm", "-f", *old], capture_output=True, env=docker_cli_env())
+    return len(old)
 
 
 def run_args(docker: str, name: str, image: str, episode_dir: Path, limits: SandboxLimits, run_id: str,

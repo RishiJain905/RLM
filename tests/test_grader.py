@@ -133,6 +133,37 @@ class CheckDiffTest(unittest.TestCase):
             self.assertEqual(([f.path for f in c.files], c.stripped["new_test_files"], self.rules(c)), (["pkg/api.py"], 1, []),
                              language)
 
+    def test_the_runners_own_modules_are_tamper_and_stripped(self):
+        # red-team F1: `python -m pytest` ran a pytest.py from the repository as the runner
+        for path in ("pytest.py", "pluggy.py", "unittest.py", "_pytest/__init__.py", "pytest/__main__.py", "src/pluggy/x.py"):
+            c = self.check(file_patch("pkg/api.py", ["a"], ["b"]) + file_patch(path, [], ["import sys"], new_file=True))
+            self.assertEqual((self.rules(c), [f.path for f in c.files], c.stripped["test_config"]),
+                             (["test_tamper"], ["pkg/api.py"], 1), path)
+        for path in ("pkg/pytest_helpers.py", "pkg/unittest_compat.py", "pkg/mypytest.py"):
+            c = self.check(file_patch(path, ["a"], ["b"]))
+            self.assertEqual((self.rules(c), c.files_changed), ([], 1), path)
+        self.assertEqual(self.rules(self.check(file_patch("pytest.go", ["a"], ["b"]), "go")), [])
+
+    def test_exit_calls_and_skip_like_names_are_no_skip_markers(self):
+        # red-team F2: the unanchored `xit\(` matched `sys.exit(` and zeroed an honest fix
+        for language, line in (("python", "    sys.exit(1)"), ("python", "raise SystemExit(exit(2))"),
+                               ("rust", "let rest = it.iter().skip(1);"), ("go", "    st.Skip(n)"),
+                               ("javascript", "  stream.skip(4)"), ("java", "@IgnoreExtraProperties")):
+            c = self.check(file_patch("pkg/api.py", ["a"], [line]), language)
+            self.assertEqual(self.rules(c), [], (language, line))
+        for line in ("@pytest.mark.skip", "@unittest.skip('x')", "xit('works', () => {})", "describe.skip('a', f)",
+                     "it.skip('b', f)", "test.skip('c', f)", "xdescribe('d', f)", "\tt.Skip(\"later\")",
+                     "\tt.Skipf(\"%d\", n)", "#[ignore]", "@Disabled", "@Ignore"):
+            c = self.check(file_patch("pkg/api.py", ["a"], [line]))
+            self.assertEqual(self.rules(c), ["test_aware"], line)
+
+    def test_an_early_exit_under_any_alias_is_test_aware(self):
+        # with `xit\(` anchored, `_os._exit(0)` slipped past `\bos\._exit` (GraderTest's early exit caught it)
+        for line in ("os._exit(0)", "_os._exit(0)", "posix._exit(1)", "from os import _exit; _exit(0)"):
+            self.assertEqual(self.rules(self.check(file_patch("pkg/api.py", ["a"], [line]))), ["test_aware"], line)
+        for line in ("sys.exit(1)", "def __exit__(self, *a):", "self.__exit__(None, None, None)", "on_exit(cb)"):
+            self.assertEqual(self.rules(self.check(file_patch("pkg/api.py", ["a"], [line]))), [], line)
+
     def test_any_conftest_is_test_configuration(self):
         for patch in (file_patch("conftest.py", [], ["import pytest"], new_file=True),
                       file_patch("pkg/conftest.py", ["x = 1"], ["x = 2"]), file_patch("pytest.ini", ["[pytest]"], ["[pytest]", "addopts = -x"])):
@@ -325,6 +356,74 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(results["k"], "error")
 
 
+class PytestBootTest(unittest.TestCase):
+    """The grader's pytest command against a repository holding stand-ins for the runner (red-team F1): fake "real"
+    pytest and _pytest packages outside the repository, and planted ones inside it."""
+
+    REAL_MAIN = ("import json, os, sys\n"
+                 "def console_main():\n"
+                 "    import mypkg, rlmlate\n"
+                 "    print(json.dumps({'runner': 'real', 'argv': sys.argv, 'mypkg': mypkg.__file__,\n"
+                 "                      'late': rlmlate.WHO, 'path0': sys.path[0], 'path': sys.path}))\n"
+                 "    return 0\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.site, self.repo = root / "site", root / "repo"
+        files = {
+            self.site / "pytest" / "__init__.py": self.REAL_MAIN,
+            self.site / "pytest" / "__main__.py": "import pytest\nif __name__ == '__main__':\n"
+                                                  "    raise SystemExit(pytest.console_main())\n",
+            self.site / "_pytest" / "__init__.py": "",
+            self.site / "_pytest" / "config.py": "default_plugins = ('junitxml',)\n",
+            self.site / "_pytest" / "junitxml.py": "import rlmlate\n",  # a module the runner imports late
+            self.site / "rlmlate.py": "WHO = 'real'\n",
+            self.repo / "pytest.py": "print('planted runner')\nraise SystemExit(3)\n",
+            self.repo / "rlmlate.py": "WHO = 'planted'\n",
+            self.repo / "mypkg" / "__init__.py": "",
+            self.repo / "src" / "pytest.py": "raise SystemExit(4)\n",
+        }
+        for path, text in files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_pytest(self, argv):
+        import os
+        import subprocess
+        import sys
+
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(self.repo / "src"), str(self.site)]),
+                   PYTHONDONTWRITEBYTECODE="1")
+        return subprocess.run([sys.executable, *argv], cwd=self.repo, env=env, capture_output=True, text=True,
+                              timeout=120)
+
+    def test_files_in_the_repository_cant_stand_in_for_the_runner(self):
+        import os
+
+        before = self.run_pytest(["-m", "pytest", "-q", "x"])  # the old command ran the repository's file
+        self.assertEqual(before.returncode, 3, before.stderr)
+        out = self.run_pytest(["-c", grader.pytest_boot(str(self.repo)), "-q", "--junitxml=/tmp/r.xml", "x"])
+        self.assertEqual(out.returncode, 0, out.stderr)
+        got = json.loads(out.stdout.strip().splitlines()[-1])
+        self.assertEqual((got["runner"], got["late"]), ("real", "real"))
+        self.assertEqual(got["argv"][1:], ["-q", "--junitxml=/tmp/r.xml", "x"])
+        self.assertTrue(got["argv"][0].endswith(os.path.join("pytest", "__main__.py")), got["argv"][0])
+        # the repository stays importable as `-m` makes it: the working directory first, its own entries kept
+        self.assertEqual(os.path.realpath(got["path0"]), os.path.realpath(self.repo))
+        self.assertEqual(os.path.realpath(got["mypkg"]), os.path.realpath(self.repo / "mypkg" / "__init__.py"))
+        self.assertIn(str(self.repo / "src"), got["path"])
+
+    def test_the_pytest_command_uses_it(self):
+        spec = TestSpec(runner="pytest", scope=["tests/test_a.py"], f2p=["tests/test_a.py::test_x"], p2p=[])
+        cmds, _ = grader.RUNNER_CLASSES["pytest"].commands(spec, spec.scope, "/tmp/r.xml", None)
+        self.assertEqual(cmds[0]["argv"][:3], ["python", "-c", grader.PYTEST_BOOT])
+        self.assertIn(repr(grader.bridge.EDIT_REPO_PATH), grader.PYTEST_BOOT)
+
+
 class CanaryTest(unittest.TestCase):
     def test_fresh_names_every_time(self):
         for runner, scope in (("pytest", ["tests/test_a.py"]), ("unittest", ["tests.test_a"]), ("go", ["./pkg"]),
@@ -381,6 +480,102 @@ class CanaryTest(unittest.TestCase):
         self.assertEqual(TestSpec.from_dict(json.loads(json.dumps(spec.as_dict()))), spec)
         with self.assertRaises(ValueError):
             TestSpec(runner="nose", scope=[], f2p=[], p2p=[])
+
+
+class LeftoverContainerTest(unittest.TestCase):
+    """Grader containers outlive their `docker run` client: a stopped data build left 47 behind, exited."""
+
+    class Proc:
+        returncode = None
+
+        def __init__(self):
+            self.killed = False
+
+        async def communicate(self, data=None):
+            import asyncio
+
+            await asyncio.sleep(3600)
+
+        async def wait(self):
+            return -9
+
+        def kill(self):
+            self.killed = True
+
+    def run_driver(self, timeout, cancel_after=None):
+        import asyncio
+        import types
+        from unittest import mock
+
+        proc, removed, docker_calls = self.Proc(), [], []
+
+        async def spawn(*args, **kw):
+            return proc
+
+        async def fake_docker(docker, *args):
+            docker_calls.append(args)
+            return 0, "false"
+
+        async def go():
+            image = types.SimpleNamespace(tag="img", bundle=False)
+            with mock.patch("rlm_rl.editbox.container_args", lambda *a, **k: ["docker", "run"]), \
+                    mock.patch("rlm_rl.editbox.python_command", lambda *a: ("python3", [])), \
+                    mock.patch("asyncio.create_subprocess_exec", spawn), \
+                    mock.patch.object(grader, "_docker", fake_docker),                     mock.patch.object(grader, "_remove_now", lambda docker, name: removed.append(name)):
+                task = asyncio.ensure_future(grader._run_driver({"nonce": "n", "commands": []}, image=image,
+                                                                grade_dir=Path("/x"), run_id="r", docker="docker",
+                                                                runtime=Path("/r"), bundle=None, limits=None,
+                                                                timeout=timeout))
+                if cancel_after is not None:
+                    await asyncio.sleep(cancel_after)
+                    task.cancel()
+                return await task
+
+        return proc, removed, docker_calls, go
+
+    def test_a_cancelled_grader_removes_its_container(self):
+        import asyncio
+
+        proc, removed, _, go = self.run_driver(timeout=60, cancel_after=0.05)
+        with self.assertRaises(asyncio.CancelledError):
+            asyncio.run(go())
+        self.assertEqual(len(removed), 1)
+        self.assertTrue(removed[0].startswith("rlm-grade-") and proc.killed)
+
+    def test_a_timed_out_grader_removes_its_container_and_is_infra(self):
+        import asyncio
+
+        proc, removed, docker_calls, go = self.run_driver(timeout=0.05)
+        with self.assertRaises(grader.InfraError):
+            asyncio.run(go())
+        # removed asynchronously: a timeout mid-training mustn't block the event loop
+        self.assertEqual((removed, proc.killed), ([], True))
+        self.assertEqual([c[:2] for c in docker_calls], [("rm", "-f")])
+
+    def test_only_long_finished_sandbox_containers_are_swept(self):
+        import subprocess
+        import time
+        from unittest import mock
+
+        from rlm_rl import sandbox
+
+        def ago(s):
+            return time.strftime("%Y-%m-%dT%H:%M:%S.123456789Z", time.gmtime(time.time() - s))
+
+        calls = []
+        inspect = "\n".join([f"old exited {ago(3600)} {ago(4000)}", f"fresh exited {ago(60)} {ago(400)}",
+                             f"stuck created 0001-01-01T00:00:00Z {ago(7200)}",
+                             f"starting created 0001-01-01T00:00:00Z {ago(300)}", f"dead dead {ago(900)} {ago(950)}"])
+
+        def run(argv, **kw):
+            calls.append(argv)
+            out = {"ps": "old\nfresh\nstuck\nstarting\ndead\n", "inspect": inspect}.get(argv[1], "")
+            return subprocess.CompletedProcess(argv, 0, out, "")
+
+        with mock.patch.object(sandbox.subprocess, "run", run):
+            self.assertEqual(sandbox.cleanup_finished(), 3)
+        self.assertIn(f"label={sandbox.LABEL}=1", calls[0])
+        self.assertEqual(calls[-1], ["docker", "rm", "-f", "old", "stuck", "dead"])
 
 
 if __name__ == "__main__":

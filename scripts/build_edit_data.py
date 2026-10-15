@@ -24,6 +24,7 @@ import math
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -32,7 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rlm_rl import data, editbox, editdata, grader  # noqa: E402
+from rlm_rl import data, editbox, editdata, grader, sandbox  # noqa: E402
 from rlm_rl.tasks import editreal  # noqa: E402
 
 # Which repositories go where (code-editing-plan §4.1; my picks, with the coordinator's list). Training repositories
@@ -1712,6 +1713,13 @@ def main() -> int:
     sub.add_parser("manifest")
     sub.add_parser("report")
     args = parser.parse_args()
+    # A plain `kill` stops a stage the way Ctrl-C does: the graders' containers are removed on the way out (killed
+    # outright, a stage's containers ran on and were left behind, exited).
+    signal.signal(signal.SIGTERM, lambda signum, frame: signal.raise_signal(signal.SIGINT))
+    if args.command in ("validate", "revisible", "retest", "measure"):
+        n = sandbox.cleanup_finished()
+        if n:
+            print(f"removed {n} finished containers left by earlier runs", flush=True)
     if args.command in ("validate", "revisible"):
         # validation chains run side by side: at most this many grader containers at once, all chains together
         os.environ.setdefault(grader.GLOBAL_SLOTS_ENV, "5")

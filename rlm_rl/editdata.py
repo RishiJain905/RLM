@@ -163,6 +163,22 @@ def cache_env(source: str) -> dict:
             if k in env and env[k].startswith("/") and not env[k].startswith(WRITABLE_PREFIXES)}
 
 
+GO_BUILD_CACHE = "/opt/rlm-cache/go-build"
+
+
+def go_cache_purge(repo_dir: str, cache: str = GO_BUILD_CACHE) -> tuple[str, str]:
+    """Shell steps dropping what the image's warm Go build cache compiled from the repository itself (red-team F3,
+    2026-10-14): its packages, test variants and test mains are the pre-break code (an injected bug's answer) and the
+    hidden tests, which `go tool pack` and `go tool objdump` read back in any episode. An entry naming the module path
+    or the checkout's path goes (vendored packages too: they compile from the checkout); dependencies stay warm. The
+    first step reads the module path, so it runs before the checkout is removed; the second after the cache moved."""
+    module = (f"MOD=$(sed -n 's#//.*##; s/^[[:space:]]*module[[:space:]][[:space:]]*//p' {repo_dir}/go.mod 2>/dev/null "
+              "| head -n 1 | tr -d '\"[:space:]')")
+    purge = (f'set -- -e "{repo_dir}/"; if [ -n "$MOD" ]; then set -- "$@" -e "$MOD"; fi; '
+             f'grep -rlaF "$@" {cache} 2>/dev/null | xargs -r rm -f')
+    return module, purge
+
+
 def derive_dockerfile(source: str, language: str, uid: int, gid: int, repo_dir: str = REPO_DIR,
                       path: str | None = None, go: dict | None = None, extra_env: dict | None = None,
                       deps: list[str] | None = None) -> str:
@@ -205,6 +221,9 @@ def derive_dockerfile(source: str, language: str, uid: int, gid: int, repo_dir: 
         # it copies every file into a new layer, which takes many minutes on the data drive.
         steps += ["if [ -d /root/.cache/go-build ]; then mv /root/.cache/go-build /opt/rlm-cache/go-build; "
                   "else mkdir -p /opt/rlm-cache/go-build; fi"]
+    if language == "go":
+        module, purge = go_cache_purge(repo_dir)
+        steps = [module] + steps + [purge]
     if language == "rust":
         # The image's warm build (dependencies compiled) lives in the checkout's target/: keep it as the cache,
         # before the checkout goes, or every test run rebuilds every dependency.
