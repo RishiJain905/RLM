@@ -2,7 +2,7 @@
 
 > **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. **Updated 2026-10-11:** steps 1-7 are built, and decision 7c dropped cyber from the run (step 7). **Updated 2026-10-12:** code editing joins the run: build steps E1-E6 from [code-editing-plan.md](code-editing-plan.md) §13, spec v2 in [production-spec.md](production-spec.md) §12, and the split below (no E7 probe, reserve $10). No W&B credit has been spent.
 >
-> **Updated 2026-10-16:** steps 1-9 and the code-editing build (E1-E6, "step 9.5") are complete, and the three findings of the edit red team (E6) were fixed on 2026-10-15. Steps 10-12 are brought up to date below: the decisions already taken, the edit data as actually built, what each step takes on the PC, and what is still open (11a, 11b, 12b; 13a and 13b later). W&B inference left: ~$217.55 of $250. The $32.45 spent is the earlier experiments plus $0.13 of step 2's checks, and nothing since. Every paid step still waits for your go-ahead.
+> **Updated 2026-10-16:** steps 1-9 and the code-editing build (E1-E6, "step 9.5") are complete, and the three findings of the edit red team (E6) were fixed on 2026-10-15. Steps 10-12 are brought up to date below: the decisions already taken, the edit data as actually built, what each step takes on the PC, and what is still open (10d, 11a, 11b, 12b; 13a and 13b later). W&B inference left: ~$217.55 of $250. The $32.45 spent is the earlier experiments plus $0.13 of step 2's checks, and nothing since. Every paid step still waits for your go-ahead.
 >
 > **Source of truth:** [rl-run-research.md](rl-run-research.md). Its html version says the same thing. Section numbers (§) below point into it. Anything marked *(mine)* is my recommendation, not the research's. Anything marked *(inferred)* hasn't been checked yet.
 >
@@ -46,7 +46,7 @@ The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverle
 | 8 | Red-team | Claude agent | H11, re-checks H1-H4 | $0 | none | Done |
 | 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c | Done; the billing check waits for step 10 |
 | E1-E6 | Code editing build, "step 9.5" ([code-editing-plan.md](code-editing-plan.md) §13) | Design + PC | spec §12 | $0 | taken (E-a to E-g) | Done 2026-10-13; red-team fixes 2026-10-15 |
-| 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | taken (E-d, E-g) | **Next:** ready, waits for your go-ahead |
+| 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | taken (E-d, E-g); 10d new | **Next:** ready, waits for your go-ahead |
 | 11 | Baselines | Spend | §8.2 | ~$9 | 11a, 11b | After step 10 |
 | 12 | Production run | Spend | §8.6 | up to ~$157 + ~$30 evals | 12a taken; 12b new | After step 11; 12b first |
 | 13 | Final eval off W&B | PC or GPU host | §7.4 | $0 on W&B | 13a, 13b | After step 12 |
@@ -535,6 +535,7 @@ It uses read tasks only: no edit sandboxes, and almost no load on the data drive
 - your go-ahead;
 - the inference balance read off W&B's billing page, for `--pot-left` and for the billing check afterwards;
 - Docker and WSL up, no leftover `rlm-` containers, and the sandbox folder owned by your user;
+- the full test suite on the final code (`scripts/sandbox_ctl.py check`): after the 2026-10-15 red-team fixes only the changed modules were rerun (128 of 128), not the whole suite;
 - one fake-model dry run on the final code (`--dry-run`) that comes out clean.
 
 ### Why it comes here
@@ -550,7 +551,7 @@ There is no pilot, so this is the first run on the new environment. It catches p
 - No detector fires unexpectedly.
 - The dashboard's cost panel matches W&B's billing page. That is step 9's last open check.
 
-### Decisions for this step (all taken)
+### Decisions for this step (10a-10c taken, 10d new)
 
 10a, 10b and 10c were settled with the code-editing plan on 2026-10-12 (decisions E-d and E-g): the split below, run the second seed, and run it as soon as it's ready, independently of the edit build. They are kept here for the record.
 
@@ -578,11 +579,17 @@ Updated 2026-10-12 for code editing (Rishi: no E7 probe, reserve $25 to $10). Ba
 - **Taken: as soon as it's ready, without waiting for the edit work** (decision E-g). It's ready now.
 - *Not taken:* after the code-editing build, so that every paid run uses prompt v2.
 
+**10d. Test resuming from an earlier checkpoint on W&B** (new, 2026-10-16; from [step-6-results.md](step-6-results.md) §8)
+
+Rolling back and the learning-rate fallback both fork an earlier checkpoint through ART's experimental fork call. ART documents it for serverless, but no run has used it yet *(inferred that it works)*.
+- **Test it once the second seed finishes: recommended (mine).** `train.py resume second-seed-v1 --from 15 --stop-after 16 --live` trains one extra step, about $0.50, inside the second seed's $14 ceiling. If training continued from the fork, the new step 16's KL to base matches the original's; if it silently started from the base model, KL drops to about 0.
+- **Skip it.** It saves $0.50, but production's first rollback becomes the first test, and a broken fork would cost production steps.
+
 ---
 
 ## Step 11. Baselines
 
-**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-16):** after step 10. The selection set is built.
+**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-16):** after step 10. The selection set is built; the script that runs the baselines isn't yet (below).
 
 ### What we run
 
@@ -598,6 +605,8 @@ The 20-step checkpoints (both seeds) are the research's third baseline. They are
 
 The edit episodes run in Docker on your PC, on the D: data drive. A Go task's tests take up to about an hour under load ([edit-build-results.md](edit-build-results.md) §5a), so expect a few hours for the whole step *(inferred)*.
 
+**Before it runs** ($0, on the PC): a small baseline script. `scripts/train.py` only has `start`, `resume`, `stop` and `status`, and nothing in `rlm_rl/` reads a context without the REPL (checked 2026-10-16). Production's checkpoint-0 eval covers the base model as an RLM once, but not the second pass over the edit tasks, direct reading or the thinking arm. The script reuses `evals.run_eval` and the episode loop, and gets a fake-model dry run first.
+
 ### Why it comes here
 
 The stop rules and every claim compare against these numbers. Without the direct-reading number we can't claim the RLM setup helps. It is also the first paid run of edit tasks. Its measured cost per edit episode checks production's ~$2.10 a step before the $157 is committed (code-editing-plan.md §16).
@@ -606,6 +615,7 @@ The stop rules and every claim compare against these numbers. Without the direct
 
 - Both baselines are logged with full transcripts, and so is the thinking arm if it runs.
 - The cost per edit episode is measured, and production's step count is re-estimated from it. If edit episodes cost much more than estimated, production drops toward ~50 steps or the edit share drops; that is your call before step 12.
+- Two settings are checked against code-editing-plan.md §9 and §11: if more than ~20% of the base model's edit episodes hit the 20-turn cap with a test failing, edit turns go to 30; if the base model passes under ~15% of `edit_real` level 1, `edit_real` starts at a lower share for its first 20 steps.
 - The 11b comparison is settled, if the arm ran.
 
 ### Decisions for this step
@@ -656,7 +666,8 @@ The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5
    - Defender exclusions for `D:\Docker-Image`, `D:\WSL` and `D:\RLM-data` (as administrator);
    - other WSL distros stopped during the run (e.g. `EXL3-Runtime`);
    - no other jobs on D:.
-4. **A last fake-model dry run** with `--real-edit` on the final code.
+4. **Edit wins in the Claude audit** (decision 5a). `scripts/audit.py`'s sample shows no diff or grade, and audit-procedure.md has no edit checks (checked 2026-10-16). Since the audit is the backstop for the canary gap, each sampled edit win should show its diff, and the procedure should say what to look for (test or runner files touched, code that detects a test run, hard-coded expected values).
+5. **A last fake-model dry run** with `--real-edit` on the final code.
 
 **It keeps going while** the selection set has reached a new best in one of the last 3 evals, or a family has moved up a level in the last 30 steps.
 
