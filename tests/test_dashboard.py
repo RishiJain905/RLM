@@ -225,6 +225,26 @@ class SignatureTest(unittest.TestCase):
         self.assertTrue(dashboard.scrub("x" * 30, 10).startswith("x" * 10))
 
 
+class WaitingTest(unittest.TestCase):
+    def test_the_page_between_runs_has_the_next_run_and_no_data(self):
+        cli = _cli()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = argparse.Namespace(run="second-seed-v1", kind="second_seed", lr=None, pot_left=None, out_dir=tmp)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(cli.cmd_waiting(args), 0)
+            self.assertIn("check=passed", out.getvalue())
+            data = dashboard.embedded_data((Path(tmp) / "page.html").read_text(encoding="utf-8"))
+            # publisher.json is the wait loop's: the run's first `wait` must still publish straight away
+            self.assertFalse((Path(tmp) / "publisher.json").exists())
+        self.assertEqual((data["run"]["name"], data["run"]["status"], data["run"]["kind"]),
+                         ("second-seed-v1", "waiting", "second_seed"))
+        self.assertFalse(data["dry_run"])
+        self.assertEqual((data["run"]["config"]["max_steps"], data["lr"]["current"]), (20, 1e-5))
+        for key in ("steps", "evals", "notices", "samples", "abandoned"):
+            self.assertEqual(data[key], [], key)
+        self.assertEqual((data["audits"], data["stop_rules"], data["spend"]["total_usd"]), ({}, {}, 0.0))
+
+
 class WaitTest(DryRunCase):
     def args(self, **kw):
         base = dict(run=RUN, results=str(self.results), dry_run=True, pot_left=None, out_dir=str(self.out), ack=False,

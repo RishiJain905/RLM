@@ -13,6 +13,7 @@ something secret, so nothing was written). A page is only ever written after `ch
 
     python scripts/dashboard.py build prod-dry1 --dry-run      # one build, no waiting
     python scripts/dashboard.py check results/dashboard/page.html --run prod-dry1 --dry-run --deep
+    python scripts/dashboard.py waiting second-seed-v1         # the page between runs: the next run, no data
 
 It uses the standard library alone (plus rlm_rl for --deep), so it runs from Windows Python while the
 training loop runs in WSL. It never reads .env.
@@ -64,6 +65,13 @@ def write_atomic(path: Path, text: str) -> None:
         except PermissionError:  # a reader holding the file open on Windows
             time.sleep(0.2 * (attempt + 1))
     os.replace(tmp, path)
+
+
+def pot_arg(args) -> dict | None:
+    """--pot-left is read off W&B's billing page when the command starts, so the page dates it today."""
+    if args.pot_left is None:
+        return None
+    return {"inference_left_usd": args.pot_left, "as_of": time.strftime("%Y-%m-%d")}
 
 
 def seed_roots(results: Path) -> list[Path]:
@@ -132,6 +140,22 @@ def build(run: str, results: Path, *, dry: bool, pot: dict | None = None, out_di
     return result
 
 
+def waiting_state(run: str, kind: str, lr: float | None = None) -> dict:
+    """The state of a run that hasn't started: its config and nothing else, so the page between runs
+    carries no numbers, transcripts or flags from the run before. Built in memory; results/<run>.json
+    is the training loop's alone."""
+    from rlm_rl import config as rconfig  # noqa: WPS433 (kept out of every build)
+
+    cfg = rconfig.second_seed(run) if kind == "second_seed" else rconfig.production(run, lr)
+    now = time.time()
+    return {"run": run, "kind": kind, "status": "waiting", "created_at": now, "updated_at": now,
+            "config": cfg.as_dict(), "latest": 0, "branch": 0,
+            "lr": {"current": cfg.learning_rate, "start": cfg.learning_rate, "floor": rconfig.LR_FLOOR,
+                   "rule": cfg.lr_rule, "fallback_used": False, "fallback": None},
+            "spend": {**dict.fromkeys(("train_usd", "kl_usd", "eval_usd", "interrupted_usd", "total_usd",
+                                       "training_gpu_usd_est"), 0.0), "ceilings": dict(cfg.ceilings)}}
+
+
 def summary_line(kind: str, r: dict) -> str:
     sig = r.get("signature") or {}
     head = (f"{kind} run={r.get('run')} step={r.get('step')} status={r.get('status')} evals={sig.get('evals')} "
@@ -145,8 +169,25 @@ def summary_line(kind: str, r: dict) -> str:
 
 def cmd_build(args) -> int:
     results = results_dir(args)
-    pot = {"inference_left_usd": args.pot_left} if args.pot_left is not None else None
+    pot = pot_arg(args)
     r = build(args.run, results, dry=is_dry(args, results), pot=pot, out_dir=Path(args.out_dir))
+    print(summary_line("BUILT" if r["ok"] else "BLOCKED", r))
+    return 0 if r["ok"] else 3
+
+
+def cmd_waiting(args) -> int:
+    if args.kind == "production" and args.lr is None:
+        print("production needs --lr (2e-5 or 1e-5, the second seed's call)")
+        return 2
+    pot = pot_arg(args)
+    data = dashboard.page_data(waiting_state(args.run, args.kind, args.lr), pot=pot)
+    page = dashboard.render(data)
+    r = dashboard.check(page, seeds=dashboard.private_seeds(seed_roots(RESULTS)))
+    r.update(run=args.run, step=0, status="waiting", signature={})
+    if r["ok"]:
+        out = Path(args.out_dir) / "page.html"
+        write_atomic(out, page)
+        r["page"] = str(out)
     print(summary_line("BUILT" if r["ok"] else "BLOCKED", r))
     return 0 if r["ok"] else 3
 
@@ -175,7 +216,7 @@ def cmd_check(args) -> int:
 def cmd_wait(args) -> int:
     results = results_dir(args)
     dry = is_dry(args, results)
-    pot = {"inference_left_usd": args.pot_left} if args.pot_left is not None else None
+    pot = pot_arg(args)
     out_dir = Path(args.out_dir)
     publisher = out_dir / "publisher.json"
     pub = load_json(publisher, {})
@@ -254,6 +295,12 @@ def main() -> int:
     p.add_argument("--stale-after", type=float, default=dashboard.STALE_AFTER_S,
                    help="seconds without a state write before a running run counts as stalled")
     p.add_argument("--timeout", type=float, help="give up after this many seconds")
+    p = sub.add_parser("waiting", help="build the page between runs: the next run's name and config, no data")
+    p.add_argument("run")
+    p.add_argument("--kind", choices=("second_seed", "production"), default="second_seed")
+    p.add_argument("--lr", type=float, help="production's learning rate")
+    p.add_argument("--pot-left", type=float, help="W&B inference left, $ (from W&B's billing page)")
+    p.add_argument("--out-dir", default=str(OUT_DIR))
     p = sub.add_parser("check", help="scan a built page for keys, seeds, eval items and edit eval task ids")
     p.add_argument("page")
     p.add_argument("--run", help="also check against this run's eval transcripts")
@@ -261,7 +308,7 @@ def main() -> int:
     p.add_argument("--results")
     p.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    return {"build": cmd_build, "wait": cmd_wait, "check": cmd_check}[args.command](args)
+    return {"build": cmd_build, "wait": cmd_wait, "waiting": cmd_waiting, "check": cmd_check}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -579,7 +579,8 @@ footer p { margin: 0; max-width: 92ch; }
   // ------------------------------------------------------------------ header
   var STATUS = {
     running: ["Running", "t-good", "●"], paused: ["Paused for Rishi", "t-warn", "‖"], stopped: ["Stopped", "t-serious", "■"],
-    finished: ["Finished", "t-good", "✓"], crashed: ["Crashed", "t-crit", "×"], interrupted: ["Interrupted", "t-crit", "×"]
+    finished: ["Finished", "t-good", "✓"], crashed: ["Crashed", "t-crit", "×"], interrupted: ["Interrupted", "t-crit", "×"],
+    waiting: ["Waiting to start", "t-muted", "○"]
   };
   var KIND = { second_seed: "Second seed (step 10)", production: "Production (step 12)" };
   $("run-name").textContent = run.name || "RLM run";
@@ -588,7 +589,10 @@ footer p { margin: 0; max-width: 92ch; }
   var st = STATUS[run.status] || [run.status || "unknown", "t-muted", "?"];
   var pill = $("status"); pill.className = "pill " + st[1] + (run.status === "running" ? " running" : "");
   pill.innerHTML = ""; var ic = el("span", run.status === "running" ? "dot" : "ic", run.status === "running" ? null : st[2]); pill.appendChild(ic); pill.appendChild(document.createTextNode(st[0]));
-  if (run.stop && run.status !== "running") {
+  if (run.status === "waiting") {  // `dashboard.py waiting`: the page between runs, with no data yet
+    $("reason").hidden = false;
+    $("reason").textContent = (run.name || "The next run") + " hasn't started yet. This page switches to it when its first update lands.";
+  } else if (run.stop && run.status !== "running") {
     $("reason").hidden = false;
     $("reason").textContent = "Rule " + run.stop.rule + " at step " + run.stop.at_step + ": " + run.stop.reason + (run.best ? ". Best checkpoint " + run.best.checkpoint + " (" + F.pct(run.best.accuracy) + " on " + run.best.eval + ")." : "");
   }
