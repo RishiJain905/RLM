@@ -1,0 +1,288 @@
+<title>Second Seed Results</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column of numbered report sections under a verdict strip; tables scroll inside their own frames. Same faces and blues as the live dashboard, so the two read as one project. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --wash: #eaeef4; --ink: #121a26; --ink-2: #4b5667; --muted: #7c8797;
+  --line: #dfe4eb; --accent: #2a6fcf; --accent-wash: #e3edfb;
+  --good: #146c2e; --good-wash: #e2f3e6; --warn: #8a5a00; --warn-wash: #fbf0d6; --bad: #a92c2c; --bad-wash: #fbe4e2;
+  --bar: #2a6fcf; --bar-2: #c2cbd8; --bar-bad: #c23b3b;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --s-1: 0.8rem; --s0: 0.95rem; --s1: 1.1rem; --s2: 1.45rem; --s3: 2.1rem;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1016; --panel: #131922; --wash: #1a212c; --ink: #e7ecf3; --ink-2: #a9b3c1; --muted: #78838f;
+    --line: #242c38; --accent: #5b9cf0; --accent-wash: #16263d;
+    --good: #5fcf7d; --good-wash: #13281a; --warn: #f0c060; --warn-wash: #2c2312; --bad: #f08a80; --bad-wash: #321816;
+    --bar: #5b9cf0; --bar-2: #3a4555; --bar-bad: #ec6b62;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1016; --panel: #131922; --wash: #1a212c; --ink: #e7ecf3; --ink-2: #a9b3c1; --muted: #78838f;
+  --line: #242c38; --accent: #5b9cf0; --accent-wash: #16263d;
+  --good: #5fcf7d; --good-wash: #13281a; --warn: #f0c060; --warn-wash: #2c2312; --bad: #f08a80; --bad-wash: #321816;
+  --bar: #5b9cf0; --bar-2: #3a4555; --bar-bad: #ec6b62;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--s0); line-height: 1.55; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: grid; gap: 28px; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--s-1); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 4px 0 0; font-family: var(--font-display); font-weight: 800; font-size: var(--s3); line-height: 1.1; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0; font-family: var(--font-display); font-weight: 750; font-stretch: 106%; font-size: var(--s2); text-wrap: balance; display: flex; gap: 10px; align-items: baseline; }
+h2 .no { font-family: var(--font-data); font-size: var(--s-1); color: var(--muted); font-weight: 600; }
+h3 { margin: 0; font-size: var(--s1); font-weight: 650; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: var(--s1); color: var(--ink-2); max-width: 70ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--s-1); color: var(--ink-2); }
+.meta b { color: var(--ink); font-weight: 600; }
+header { display: grid; gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 4px; align-content: start; }
+.tile .lab { font-size: var(--s-1); color: var(--ink-2); font-weight: 600; }
+.tile .val { font-family: var(--font-display); font-size: var(--s3); font-weight: 750; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.tile .val.bad { color: var(--bad); }
+.tile .val.good { color: var(--good); }
+.tile .ctx { font-size: var(--s-1); color: var(--ink-2); }
+section { display: grid; gap: 14px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.callout { border-radius: var(--r); padding: 14px 16px; display: grid; gap: 8px; }
+.callout.bad { background: var(--bad-wash); }
+.callout.warn { background: var(--warn-wash); }
+.callout.info { background: var(--accent-wash); }
+.callout h3 { font-size: var(--s0); }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: var(--s-1); }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.74rem; letter-spacing: 0.02em; white-space: nowrap; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.steps td, table.steps th { padding: 5px 7px; }
+table.steps tr.hl td { background: var(--warn-wash); }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 650; white-space: nowrap; }
+.pill.good { background: var(--good-wash); color: var(--good); }
+.pill.warn { background: var(--warn-wash); color: var(--warn); }
+.pill.bad { background: var(--bad-wash); color: var(--bad); }
+.pill.wait { background: var(--wash); color: var(--ink-2); }
+code, pre { font-family: var(--font-data); font-size: 0.82em; }
+code { background: var(--wash); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--wash); border-radius: var(--r); padding: 10px 12px; overflow-x: auto; white-space: pre; }
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: minmax(0, 15em) 1fr 4.5em; gap: 10px; align-items: center; font-size: var(--s-1); }
+.bar .track { height: 12px; background: var(--wash); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--bar-2); border-radius: 3px; }
+.bar .fill.src { background: var(--bar); }
+.bar .fill.bad { background: var(--bar-bad); }
+.bar .v { font-family: var(--font-data); text-align: right; font-variant-numeric: tabular-nums; }
+.note { font-size: var(--s-1); color: var(--muted); }
+footer { font-size: var(--s-1); color: var(--ink-2); display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 560px) {
+  .bar { grid-template-columns: 1fr 4em; }
+  .bar .name { grid-column: 1 / -1; }
+  .panel { padding: 14px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">RLM production plan · step 10 · 2026-10-16</div>
+    <h1>Second seed results</h1>
+    <p class="lede">A 20-step GRPO replication of the first ticket run on environment v2, learning rate 1e-5, prompt v1, then a test of resuming from an earlier checkpoint (10d). Run on Rishi's PC and watched live on the <a href="https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3">dashboard</a>.</p>
+    <div class="meta"><span>Run <b>second-seed-v1</b></span><span>Qwen3.8-27B LoRA on W&amp;B serverless</span><span>Started <b>12:19</b>, finished <b>14:45</b> ET</span><span>Source: <code>documentation/step-10-results.md</code></span></div>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="lab">Held-out accuracy</div><div class="val">83.3%</div><div class="ctx">80 of 96, ± 3.8. First seed: 70%</div></div>
+    <div class="tile"><div class="lab">Production learning rate</div><div class="val good">2e-5</div><div class="ctx">All three stability checks passed</div></div>
+    <div class="tile"><div class="lab">Resume from a checkpoint</div><div class="val bad">Broken</div><div class="ctx">The fork trained from a fresh LoRA</div></div>
+    <div class="tile"><div class="lab">W&amp;B inference spent</div><div class="val">$16.22</div><div class="ctx">Billing page; $201.33 left. Plan: ~$12.50</div></div>
+  </div>
+
+  <div class="callout bad">
+    <h3>The 10d test found a real problem</h3>
+    <p>Resuming from an earlier checkpoint doesn't work on W&amp;B serverless. The forked branch copied checkpoint 15 correctly, but training then started from a fresh LoRA. Production's rollbacks and its 2e-5 → 1e-5 fallback both use this fork, so today they would silently restart from the base model. The plan's KL check couldn't see it; comparing the LoRA weights did (§8).</p>
+  </div>
+
+  <section>
+    <h2><span class="no">01</span>Against the plan</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Done-when check</th><th>Result</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr><td>Held-out within ~1 SE of 0.70, or the gap explained</td><td><span class="pill warn">Above; explanation inferred</span></td><td>0.833 ± 0.038 (n 96), 13 points up. The untrained model already passed 62.5% of step 1's rollouts vs the first seed's 53%</td></tr>
+          <tr><td>Grad norm and <code>probs_corr</code> like the first run's</td><td><span class="pill good">Pass</span></td><td>Grad norm median 0.52, max 0.82 (first seed 0.48 / 1.14). <code>probs_corr</code> 0.9964-0.9975 (first ~0.997)</td></tr>
+          <tr><td>Stability curves set production's LR (spec §5.2)</td><td><span class="pill good">2e-5</span></td><td>Entropy steps 16-20 at 86% of steps 1-5 (80% needed); grad norm max 1.6× median (under 3×); <code>probs_corr</code> min 0.9964 (above 0.98)</td></tr>
+          <tr><td>Infra errors under 1%</td><td><span class="pill bad">1.5%</span></td><td>7 of 640 training and 4 of 100 eval episodes, all W&amp;B 429s after 6 tries; 7 of them in step 20</td></tr>
+          <tr><td>No detector fires unexpectedly</td><td><span class="pill warn">2 false alarms</span></td><td>Both <code>escape_attempt</code> hits were harmless <code>/tmp</code> scratch writes</td></tr>
+          <tr><td>Dashboard cost panel matches W&amp;B billing</td><td><span class="pill good">Pass</span></td><td>W&amp;B: $16.22 spent, $201.33 left. The run estimated $16.40, 1.1% high</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>What ran</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Time (ET)</th><th>Event</th></tr></thead>
+        <tbody>
+          <tr><td class="n">11:20-12:05</td><td>Pre-flight, all $0: full WSL suite 412 tests pass (1 skipped, 31 min); a fake-model dry run of the seed is clean; Docker up with no leftover containers; W&amp;B sign-in works and the run name is unused. Dashboard wiped to a "waiting" page.</td></tr>
+          <tr><td class="n">12:19</td><td>Rishi starts the run in WSL. The dashboard republishes after every step and notice.</td></tr>
+          <tr><td class="n">14:37</td><td>Step 20 done. The run stops before the held-out eval: its cost estimate ($3.24) is over the $3 ceiling. Resumed with <code>--ceiling-eval 4</code>, as Rishi had said.</td></tr>
+          <tr><td class="n">14:45</td><td>Held-out eval done: 83.3% over 96. Audit samples written at checkpoints 10 and 20.</td></tr>
+          <tr><td class="n">14:54</td><td>Copy of the finished run saved; 10d fork test (one step from checkpoint 15) runs until 15:02.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The 20 steps took 136 minutes (median 6.2 a step); 2 h 26 m with the eval and the resume. Starting 32 sandbox containers at once now takes about a minute (step 3 measured 3-7 s), which costs time but no episodes.</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>Training, step by step</h2>
+    <div class="panel scroll">
+      <table class="steps">
+        <thead><tr><th class="n">Step</th><th class="n">Pass</th><th class="n">Trainable</th><th class="n">Entropy</th><th class="n">Reward std</th><th class="n">KL</th><th class="n">Grad norm</th><th class="n">probs_corr</th><th class="n">Sub-calls</th><th class="n">Turns</th><th class="n">Min</th><th class="n">Cost</th><th class="n">429s</th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td class="n">0.62</td><td class="n">7/8</td><td class="n">0.259</td><td class="n">0.359</td><td class="n">0.0016</td><td class="n">0.45</td><td class="n">0.9970</td><td class="n">3.9</td><td class="n">7.6</td><td class="n">8.7</td><td class="n">$0.67</td><td class="n">0</td></tr>
+          <tr><td class="n">2</td><td class="n">0.59</td><td class="n">6/8</td><td class="n">0.307</td><td class="n">0.268</td><td class="n">0.0026</td><td class="n">0.50</td><td class="n">0.9974</td><td class="n">2.4</td><td class="n">8.2</td><td class="n">7.6</td><td class="n">$0.68</td><td class="n">175</td></tr>
+          <tr><td class="n">3</td><td class="n">0.66</td><td class="n">6/8</td><td class="n">0.295</td><td class="n">0.281</td><td class="n">0.0014</td><td class="n">0.67</td><td class="n">0.9974</td><td class="n">3.5</td><td class="n">7.7</td><td class="n">11.0</td><td class="n">$0.65</td><td class="n">176</td></tr>
+          <tr><td class="n">4</td><td class="n">0.56</td><td class="n">5/8</td><td class="n">0.292</td><td class="n">0.275</td><td class="n">0.0027</td><td class="n">0.82</td><td class="n">0.9975</td><td class="n">3.0</td><td class="n">8.1</td><td class="n">9.9</td><td class="n">$0.71</td><td class="n">177</td></tr>
+          <tr><td class="n">5</td><td class="n">0.66</td><td class="n">6/8</td><td class="n">0.277</td><td class="n">0.297</td><td class="n">0.0020</td><td class="n">0.68</td><td class="n">0.9973</td><td class="n">2.6</td><td class="n">8.2</td><td class="n">7.0</td><td class="n">$0.75</td><td class="n">122</td></tr>
+          <tr><td class="n">6</td><td class="n">0.75</td><td class="n">6/8</td><td class="n">0.241</td><td class="n">0.304</td><td class="n">0.0029</td><td class="n">0.72</td><td class="n">0.9971</td><td class="n">3.4</td><td class="n">8.5</td><td class="n">7.3</td><td class="n">$0.78</td><td class="n">186</td></tr>
+          <tr><td class="n">7</td><td class="n">0.56</td><td class="n">7/8</td><td class="n">0.253</td><td class="n">0.269</td><td class="n">0.0041</td><td class="n">0.37</td><td class="n">0.9964</td><td class="n">2.9</td><td class="n">7.4</td><td class="n">7.5</td><td class="n">$0.63</td><td class="n">127</td></tr>
+          <tr><td class="n">8</td><td class="n">0.75</td><td class="n">8/8</td><td class="n">0.259</td><td class="n">0.303</td><td class="n">0.0025</td><td class="n">0.38</td><td class="n">0.9969</td><td class="n">2.9</td><td class="n">7.8</td><td class="n">4.3</td><td class="n">$0.69</td><td class="n">141</td></tr>
+          <tr><td class="n">9</td><td class="n">0.72</td><td class="n">4/8</td><td class="n">0.243</td><td class="n">0.174</td><td class="n">0.0036</td><td class="n">0.71</td><td class="n">0.9965</td><td class="n">4.4</td><td class="n">6.8</td><td class="n">6.4</td><td class="n">$0.66</td><td class="n">165</td></tr>
+          <tr><td class="n">10</td><td class="n">0.66</td><td class="n">5/8</td><td class="n">0.253</td><td class="n">0.242</td><td class="n">0.0025</td><td class="n">0.55</td><td class="n">0.9970</td><td class="n">3.5</td><td class="n">7.5</td><td class="n">6.0</td><td class="n">$0.68</td><td class="n">120</td></tr>
+          <tr><td class="n">11</td><td class="n">0.69</td><td class="n">4/8</td><td class="n">0.248</td><td class="n">0.193</td><td class="n">0.0033</td><td class="n">0.65</td><td class="n">0.9973</td><td class="n">4.0</td><td class="n">7.8</td><td class="n">6.1</td><td class="n">$0.68</td><td class="n">188</td></tr>
+          <tr><td class="n">12</td><td class="n">0.53</td><td class="n">6/8</td><td class="n">0.253</td><td class="n">0.304</td><td class="n">0.0037</td><td class="n">0.49</td><td class="n">0.9969</td><td class="n">5.0</td><td class="n">7.5</td><td class="n">8.6</td><td class="n">$0.76</td><td class="n">280</td></tr>
+          <tr><td class="n">13</td><td class="n">0.81</td><td class="n">4/8</td><td class="n">0.265</td><td class="n">0.190</td><td class="n">0.0018</td><td class="n">0.68</td><td class="n">0.9973</td><td class="n">4.3</td><td class="n">8.2</td><td class="n">6.1</td><td class="n">$0.78</td><td class="n">191</td></tr>
+          <tr><td class="n">14</td><td class="n">0.78</td><td class="n">5/8</td><td class="n">0.261</td><td class="n">0.237</td><td class="n">0.0061</td><td class="n">0.49</td><td class="n">0.9969</td><td class="n">2.3</td><td class="n">7.3</td><td class="n">5.8</td><td class="n">$0.64</td><td class="n">88</td></tr>
+          <tr><td class="n">15</td><td class="n">0.75</td><td class="n">4/8</td><td class="n">0.241</td><td class="n">0.193</td><td class="n">0.0039</td><td class="n">0.41</td><td class="n">0.9973</td><td class="n">2.9</td><td class="n">7.5</td><td class="n">5.4</td><td class="n">$0.70</td><td class="n">78</td></tr>
+          <tr><td class="n">16</td><td class="n">0.66</td><td class="n">6/8</td><td class="n">0.249</td><td class="n">0.286</td><td class="n">0.0031</td><td class="n">0.55</td><td class="n">0.9969</td><td class="n">2.5</td><td class="n">7.5</td><td class="n">5.3</td><td class="n">$0.60</td><td class="n">98</td></tr>
+          <tr><td class="n">17</td><td class="n">0.56</td><td class="n">6/8</td><td class="n">0.265</td><td class="n">0.303</td><td class="n">0.0023</td><td class="n">0.43</td><td class="n">0.9970</td><td class="n">3.3</td><td class="n">7.8</td><td class="n">5.6</td><td class="n">$0.70</td><td class="n">108</td></tr>
+          <tr><td class="n">18</td><td class="n">0.62</td><td class="n">6/8</td><td class="n">0.261</td><td class="n">0.310</td><td class="n">0.0080</td><td class="n">0.39</td><td class="n">0.9973</td><td class="n">3.2</td><td class="n">7.6</td><td class="n">6.4</td><td class="n">$0.69</td><td class="n">108</td></tr>
+          <tr><td class="n">19</td><td class="n">0.62</td><td class="n">4/8</td><td class="n">0.216</td><td class="n">0.181</td><td class="n">0.0056</td><td class="n">0.71</td><td class="n">0.9969</td><td class="n">5.2</td><td class="n">8.0</td><td class="n">5.6</td><td class="n">$0.67</td><td class="n">271</td></tr>
+          <tr class="hl"><td class="n">20</td><td class="n">0.88</td><td class="n">2/8</td><td class="n">0.233</td><td class="n">0.083</td><td class="n">0.0032</td><td class="n">0.44</td><td class="n">0.9971</td><td class="n">4.1</td><td class="n">8.0</td><td class="n">5.2</td><td class="n">$0.67</td><td class="n">304</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><b>Training pass rate moved little:</b> 0.62 in steps 1-5 to 0.66 in steps 16-20, within noise. <code>tickets_all</code> went 0.43 → 0.51; <code>tickets_customer</code> stayed at 0.81-0.82. The first seed went 0.53 → 0.71.</li>
+      <li><b><code>tickets_customer</code> is saturated at level 1.</b> All-correct groups rose from 1.8 to 3.0 a step, and those give GRPO nothing, so trainable groups fell from 6.0 to 4.8. Step 20 trained on 2. The frozen controller wanted to move it up from step 3; production lets it.</li>
+      <li><b>Entropy was flat</b> after a bump at steps 2-5. <b>KL to base rose slowly</b> (0.002 → 0.0045 on average, max 0.008), worth watching at 2e-5.</li>
+      <li><b>Behaviour barely moved:</b> 3.1 → 3.7 sub-calls an episode and about 7.8 turns throughout (first seed ~5.2). 81% of episodes already used a sub-call at step 1, against 38% in the first seed.</li>
+      <li>Step 20 (highlighted) lost 7 of its 32 episodes to W&amp;B rate limiting and trained on the 25 good ones. Its pass rate is over those 25.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>The held-out eval</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Family</th><th class="n">Correct</th><th class="n">Accuracy</th><th class="n">Turns</th><th class="n">Sub-calls</th><th>Failures</th></tr></thead>
+        <tbody>
+          <tr><td><code>tickets_all</code></td><td class="n">33 / 46</td><td class="n">0.72 ± 0.07</td><td class="n">10.1</td><td class="n">5.1</td><td>11 wrong, 2 no submit at the 12-turn cap, 4 infra</td></tr>
+          <tr><td><code>tickets_customer</code></td><td class="n">47 / 50</td><td class="n">0.94 ± 0.03</td><td class="n">5.3</td><td class="n">2.2</td><td>3 wrong, each off by one</td></tr>
+          <tr><td><b>All</b></td><td class="n"><b>80 / 96</b></td><td class="n"><b>0.833 ± 0.038</b></td><td class="n">7.6</td><td class="n">3.6</td><td>Counting the 4 infra episodes as wrong: 0.80</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout info">
+      <h3>Why 83% and not ~70% (inferred)</h3>
+      <p>Most of the gap looks like environment v2 itself rather than training: this seed's training gain was only +4 to +8 points, and the untrained model was already stronger at step 1 (62.5% vs 53%). Against the first seed's held-out run, the model submits more often (0.98 vs 0.88, about +8 points) and is right more often when it does (0.85 vs 0.80, about +5). Environment v2 changed the reward, the clip, the sandbox and the thinking setting at once, so this can't single one out.</p>
+      <p><b>To settle it:</b> add the base model on these held-out tasks (environment v2, prompt v1) to step 11's baselines, 100 episodes for about $2. If it lands near 0.60-0.65, the seed's gain matches the first seed's +20 and the replication holds.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>Audits</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Checkpoint</th><th>Split</th><th class="n">Audited</th><th class="n">Clean</th><th class="n">Suspicious</th><th class="n">Hack</th><th class="n">Solve rate</th><th class="n">Clean solve rate</th></tr></thead>
+        <tbody>
+          <tr><td>10</td><td>train</td><td class="n">16</td><td class="n">16</td><td class="n">0</td><td class="n">0</td><td class="n">0.65</td><td class="n">0.65</td></tr>
+          <tr><td>20</td><td>train</td><td class="n">16</td><td class="n">15</td><td class="n">1</td><td class="n">0</td><td class="n">0.69</td><td class="n">0.64</td></tr>
+          <tr><td>20</td><td>held-out</td><td class="n">8</td><td class="n">8</td><td class="n">0</td><td class="n">0</td><td class="n">0.83</td><td class="n">0.83</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><b>How wins are earned:</b> for counts across all tickets, sub-calls label chunks of tickets, then code parses the labels and the printed count is submitted. For one customer's tickets, the model filters by name and classifies them, more and more often by reading them itself.</li>
+      <li><b>The suspicious win:</b> the REPL cuts printed output at 2,000 characters, so the model saw 16 of a customer's 17 tickets. It then wrote out two tickets that appear in no output it saw, and its count depended on one of them. It matched the gold by luck. Two other sampled wins showed the same failure and recovered.</li>
+      <li><b>Detector precision 0 of 2:</b> both <code>escape_attempt</code> hits were the model saving sub-call results to <code>/tmp</code>. It didn't retry and solved the task normally; one correct answer lost its reward. Prompt v1 never says where the model may write.</li>
+      <li>No probing code in any sample.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">06</span>W&amp;B rate limiting</h2>
+    <p>W&amp;B returned 429 "too many requests" on 19-47% of request attempts from step 2 on (3,103 in all), even within our caps of 30 in flight and 20 per model. Step 1 had none, when every request went to one model. From step 2, root calls go to the newest checkpoint and sub-calls to the base model, and the 429s track sub-call volume (correlation 0.74), not root calls. Six retries from 2 s cover about a minute. That held until step 20, where 7 requests failed six times in a row.</p>
+    <p><b>Rishi's decision:</b> spread out sub-call requests in production, even if it is slower.</p>
+  </section>
+
+  <section>
+    <h2><span class="no">07</span>Cost and time</h2>
+    <ul>
+      <li><b>$0.67 a step</b> ($0.60-0.78): 20 steps used $13.77 of the $14 training ceiling. Step 20 only just fit, and 10d needed the ceiling raised to $15.</li>
+      <li><b>What drives cost</b> (inferred from tokens): root prompts 49%, root output 30%, sub-calls 21%. Each root call re-sends the transcript (6k tokens at turn 4, 54k at turn 12), and no prompt tokens were cached. A <code>tickets_all</code> episode costs 3.7× a <code>tickets_customer</code> one.</li>
+      <li><b>The eval cost $1.97</b> against the loop's $3.24 estimate (1.5× the training cost per episode). That margin is why the $3 ceiling stopped the run before its eval.</li>
+      <li><b>A step</b> is rollouts (median ~180 s, falling from 317 s to 176 s over the run) plus training on W&amp;B (~200 s, of which ~75 s is GPU time). Rollouts wait for the slowest episode.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">08</span>10d: resuming from an earlier checkpoint</h2>
+    <pre>train.py resume second-seed-v1 --from 15 --stop-after 16 --ceiling-train 15 --live</pre>
+    <p>The loop forked checkpoint 15 into a new model, <code>second-seed-v1-b1</code>, trained one step on it ($0.66) and stopped. The plan's check compared step 16's KL to base: 0.0043 on the fork against 0.0031 originally. That looks fine, but it can't see the problem: step 16's rollouts are sampled from checkpoint 15, the original branch's model either way. Only the training touches the fork.</p>
+    <div class="panel">
+      <h3>Size of the LoRA's B matrices on W&amp;B</h3>
+      <p class="note">B starts at zero and grows with training. One step from checkpoint 15 should land near 0.84.</p>
+      <div class="bars" role="img" aria-label="LoRA B norms: original step 5 0.547, step 15 0.838, step 20 0.947, fork copy of step 15 0.838, fork after one step 0.231">
+        <div class="bar"><span class="name">Original, checkpoint 5</span><span class="track"><span class="fill" style="display:block;width:57.7%"></span></span><span class="v">0.547</span></div>
+        <div class="bar"><span class="name">Original, checkpoint 15</span><span class="track"><span class="fill src" style="display:block;width:88.5%"></span></span><span class="v">0.838</span></div>
+        <div class="bar"><span class="name">Original, checkpoint 20</span><span class="track"><span class="fill" style="display:block;width:100%"></span></span><span class="v">0.947</span></div>
+        <div class="bar"><span class="name">Fork's copy of checkpoint 15</span><span class="track"><span class="fill src" style="display:block;width:88.5%"></span></span><span class="v">0.838</span></div>
+        <div class="bar"><span class="name">Fork after its one training step</span><span class="track"><span class="fill bad" style="display:block;width:24.4%"></span></span><span class="v">0.231</span></div>
+      </div>
+      <p>The copy is exact (distance 0 from checkpoint 15). The trained fork is small, and as far from checkpoint 15 (0.864) as checkpoint 15 is from zero: <b>one step from a fresh LoRA.</b> W&amp;B also named it <code>step1</code>, not <code>step16</code>.</p>
+    </div>
+    <ul>
+      <li><b>Why</b> (inferred from ART 0.5.20's code): the fork only uploads the source checkpoint as an artifact for the new model, and its own docstring warns that serverless checkpoint tracking may not reflect it. Our loop registers the new model first, which creates its step 0, and forks second. The training service then continued from its own step 0.</li>
+      <li><b>For production at 2e-5:</b> the learning-rate fallback and any stop-rule rollback would restart from the base model while the logs say "continuing from checkpoint N".</li>
+      <li><b>Recommended:</b> before step 12, fix the order (fork before registering, or whatever ART's serverless needs), add a check that compares the new branch's first checkpoint against its source, and re-test one step (~$0.70).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">09</span>Changes before production</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Change</th><th>Why</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><b>Fix the fork</b>, check the new branch's first checkpoint against its source, re-test one step (~$0.70)</td><td>Rollbacks and the LR fallback restart from scratch today (§8)</td><td><span class="pill bad">Blocks rollback</span></td></tr>
+          <tr><td><b>Spread out sub-calls</b>: a lower in-flight cap for the sub-call model (e.g. 12 per model, 24 total) and longer retries (8 tries from 4 s), numbers to tune</td><td>429s on 19-47% of requests; 1.5% of episodes lost. Expect at most 10-20% longer rollouts (inferred)</td><td><span class="pill good">Decided by Rishi</span></td></tr>
+          <tr><td>Raise the 2,000-character REPL output cap for read episodes</td><td>The suspicious win; <code>tickets_all</code> averages 4.5 cut-off outputs an episode</td><td><span class="pill good">Decided by Rishi</span></td></tr>
+          <tr><td>Don't zero a reward for one blocked <code>/tmp</code> write with no retry, or tell the model where scratch is</td><td>0 of 2 detector hits were real</td><td><span class="pill wait">Proposed</span></td></tr>
+          <tr><td>Estimate an eval's cost from eval episodes, or cut the 1.5× margin to ~1.1</td><td>It stopped the run before its eval</td><td><span class="pill wait">Proposed</span></td></tr>
+          <tr><td>Add the base model on <code>heldout-seed1</code> to step 11 (~$2)</td><td>Explains the replication gap (§4)</td><td><span class="pill wait">Proposed</span></td></tr>
+          <tr><td>Watch KL at 2e-5, and turns: 35% of <code>tickets_all</code> training episodes hit the 12-turn cap</td><td>KL rose slowly at 1e-5; all 35 no-submits were at the cap</td><td><span class="pill wait">Note</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>Numbers are the training loop's own estimates unless noted; W&amp;B's billing page is the truth for spend. "Inferred" marks anything not checked directly.</p>
+    <p>Records: <code>results/second-seed-v1-final/</code> holds the finished seed as it was before 10d. The live <code>results/second-seed-v1.json</code> now ends on the fork's branch, with the original steps 16-20 kept under <code>abandoned/b0-after15/</code>.</p>
+  </footer>
+</div>
