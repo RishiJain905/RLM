@@ -39,8 +39,8 @@ class Boom(Exception):
     pass
 
 
+
 class LoopCase(AsyncCase):
-    fork_numbering = "continue"
 
     def oracle(self) -> Oracle:
         return Oracle(1)
@@ -50,7 +50,6 @@ class LoopCase(AsyncCase):
         self.results = Path(self.tmp.name) / "results"
         self.dry = DryRun(self.results, seed=1, oracle=self.oracle())
         await self.dry.__aenter__()
-        self.dry.backend.fork_numbering = self.fork_numbering
 
     async def asyncTearDown(self):
         await self.dry.__aexit__(None, None, None)
@@ -271,9 +270,7 @@ class CrashTest(LoopCase):
 
 
 class RollbackTest(LoopCase):
-    fork_numbering = "restart"  # the fork's checkpoints are numbered from 1, so logical and backend steps differ
-
-    async def test_resume_from_an_earlier_checkpoint_forks_a_branch(self):
+    async def test_resume_from_an_earlier_checkpoint_starts_a_branch(self):
         st = await self.run_("rb", cfg=second_seed("rb"), stop_after=12).start()
         spent = st["spend"]["train_usd"]
         with self.assertRaises(ValueError):  # checkpoint 7 wasn't kept
@@ -283,9 +280,11 @@ class RollbackTest(LoopCase):
         self.assert_contiguous(st, 8)
         self.assertEqual(st["branch"], 1)
         self.assertEqual(st["branches"][1]["from"], {"checkpoint": 5, "branch": 0, "backend_step": 5})
-        self.assertEqual(self.dry.backend.forks, [("rb-b1", "rb", 5)])
+        # a new model started from checkpoint 5's LoRA, numbering its own checkpoints from 1
+        self.assertEqual(st["branches"][1]["model"], "rb-b1")
+        self.assertEqual(self.dry.backend.branched, [("rb-b1", "rb", 5)])
         self.assertEqual([r["branch"] for r in st["steps"]], [0] * 5 + [1] * 3)
-        self.assertEqual(st["steps"][5]["sampled_from"]["model"], "rb:step5")
+        self.assertEqual(st["steps"][5]["sampled_from"]["model"], "rb:step5")  # step 6 samples from checkpoint 5
         self.assertEqual(st["checkpoints"]["6"], {"branch": 1, "backend_step": 1})
         self.assertEqual(st["steps"][6]["sampled_from"]["model"], "rb-b1:step1")
         self.assertEqual([r["step"] for r in st["abandoned"][0]["steps"]], list(range(6, 13)))
@@ -296,6 +295,13 @@ class RollbackTest(LoopCase):
         self.assertGreater(st["spend"]["train_usd"], spent)  # spend never rolls back
         self.assertIn(10, self.dry.backend.models["rb"]["steps"])  # the old branch is untouched
         self.assertNotIn("10", st["audits"])
+
+    async def test_a_branch_model_that_already_has_checkpoints_stops_the_resume(self):
+        await self.run_("rw", cfg=second_seed("rw"), stop_after=6).start()
+        self.dry.backend.models["rw-b1"] = {"steps": [1], "next": 2}  # e.g. left by an earlier attempt
+        with self.assertRaises(RuntimeError):  # training would continue from its step 1, not from checkpoint 5
+            await self.run_("rw").resume(from_checkpoint=5)
+        self.assertEqual(self.dry.backend.trained[-1]["model"], "rw")  # nothing trained on the stale model
 
 
 class LearningRateFallbackTest(LoopCase):

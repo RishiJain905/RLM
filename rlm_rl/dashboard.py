@@ -183,7 +183,8 @@ POLICY_KEYS = ("entropy", "entropy_tokens", "reward_std", "kl_to_base", "kl_k3",
 SHAPE_KEYS = ("subcalls", "budget_hit", "turns", "first_turn_submit", "no_code_turns", "repl_errors", "timeouts",
               "root_completion_tokens", "subcall_tokens", "truncated_turns", "episodes_with_truncated_turn",
               "output_truncations", "context_chars", "wall_s")
-REQUEST_KEYS = ("attempts", "retries", "rate_limited", "server_errors", "timeouts", "connection_errors", "rejected")
+REQUEST_KEYS = ("attempts", "retries", "rate_limited", "server_errors", "timeouts", "connection_errors", "rejected",
+                "paced_s")
 TOKEN_KEYS = ("root_prompt_tokens", "root_completion_tokens", "subcall_prompt_tokens", "subcall_completion_tokens",
               "root_calls", "subcalls")
 FAMILY_KEYS = ("level", "episodes", "scored", "pass_rate", "mean_reward", "window_pass_rate")

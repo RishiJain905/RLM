@@ -1,4 +1,4 @@
-"""H6 and the request half of H5: one shared limiter, retries, and infra errors instead of fake answers.
+"""H6 and the request half of H5: one shared limiter, pacing, retries, and infra errors instead of fake answers.
 
 Runs against tests/fake_model.py, a local OpenAI-compatible server that measures requests in
 flight on its own side and answers 429 above 20 per model name, like W&B. No W&B call is made.
@@ -7,8 +7,10 @@ flight on its own side and answers 429 above 20 per model name, like W&B. No W&B
 """
 
 import asyncio
+import collections
 import json
 import random
+import time
 import unittest
 from pathlib import Path
 
@@ -16,7 +18,7 @@ import openai
 
 from rlm_rl import bridge, client as rclient
 from rlm_rl.bridge import SubcallError
-from rlm_rl.client import Limiter, ModelClient, RequestFailed, RetryPolicy, Usage
+from rlm_rl.client import Limiter, ModelClient, Pacer, RequestFailed, RetryPolicy, Usage
 from tests.fake_model import AsyncCase, FakeModelServer
 
 FAST = RetryPolicy(tries=6, base_s=0.01, max_s=0.05, timeout_s=10)
@@ -104,19 +106,113 @@ class LimiterTest(AsyncCase):
         self.assertEqual((limiter.in_flight, limiter.waiting), (0, 0))
         await asyncio.wait_for(limiter.acquire("a"), 1)
 
+    async def test_a_model_with_a_cap_of_its_own(self):
+        """The sub-call model's cap holds while another model still gets the per-model cap (step 10 §6)."""
+        limiter = Limiter(total=6, per_model=4, model_caps={"sub": 2})
+        self.assertEqual((limiter.cap("sub"), limiter.cap("root")), (2, 4))
+        running, peaks = collections.Counter(), collections.Counter()
+
+        async def job(model):
+            async with limiter.slot(model):
+                running[model] += 1
+                running["all"] += 1
+                for k in (model, "all"):
+                    peaks[k] = max(peaks[k], running[k])
+                await asyncio.sleep(random.uniform(0, 0.01))
+                running[model] -= 1
+                running["all"] -= 1
+
+        await asyncio.gather(*(job(m) for m in ("sub", "root") * 40))
+        self.assertEqual(dict(peaks), {"sub": 2, "root": 4, "all": 6})
+        self.assertEqual(limiter.peaks["by_model"], {"sub": 2, "root": 4})
+
+        # A sub-call blocked only by its own cap doesn't hold up the other model's requests.
+        limiter = Limiter(total=6, per_model=4, model_caps={"sub": 2})
+        for _ in range(2):
+            await limiter.acquire("sub")
+        blocked = asyncio.ensure_future(limiter.acquire("sub"))
+        await asyncio.sleep(0)
+        self.assertFalse(blocked.done())
+        for _ in range(4):
+            await asyncio.wait_for(limiter.acquire("root"), 1)
+        limiter.release("sub")
+        await asyncio.wait_for(blocked, 1)
+        self.assertEqual(dict(limiter.by_model), {"sub": 2, "root": 4})
+
+    def test_a_model_cap_above_the_total_is_refused(self):
+        with self.assertRaises(ValueError):
+            Limiter(total=5, per_model=3, model_caps={"sub": 6})
+        with self.assertRaises(ValueError):
+            Limiter(total=5, per_model=3, model_caps={"sub": 0})
+        self.assertEqual(Limiter(total=5, per_model=3, model_caps={"sub": 5}).cap("sub"), 5)
+
     def test_retry_delays_back_off_with_jitter(self):
         policy, rng = RetryPolicy(), random.Random(1)
-        for attempt in range(5):
-            base = min(60, 2 * 2 ** attempt)
+        for attempt in range(7):
+            base = min(120, 4 * 2 ** attempt)
             for _ in range(50):
                 self.assertTrue(0.5 * base <= policy.delay(attempt, rng) <= 1.5 * base)
-        self.assertGreaterEqual(policy.delay(0, rng, retry_after=30), 30)
-        self.assertLessEqual(policy.delay(9, rng, retry_after=999), 90)
+        self.assertGreaterEqual(policy.delay(0, rng, retry_after=30), 30)  # Retry-After is honoured
+        self.assertGreaterEqual(policy.delay(0, rng, retry_after=999), 120)  # up to the cap
+        self.assertLessEqual(policy.delay(9, rng, retry_after=999), 180)
 
     def test_spec_values(self):
-        self.assertEqual((rclient.MAX_IN_FLIGHT, rclient.MAX_IN_FLIGHT_PER_MODEL), (30, 20))
-        self.assertEqual((RetryPolicy().tries, RetryPolicy().base_s), (6, 2.0))
+        self.assertEqual((rclient.MAX_IN_FLIGHT, rclient.MAX_IN_FLIGHT_PER_MODEL, rclient.MAX_SUBCALLS_IN_FLIGHT),
+                         (24, 20, 12))
+        self.assertEqual(rclient.SUBCALL_START_GAP_S, 0.25)
+        policy = RetryPolicy()
+        self.assertEqual((policy.tries, policy.base_s, policy.max_s, policy.jitter), (8, 4.0, 120.0, 0.5))
+        # The 7 waits between 8 tries come to about 6 minutes before jitter (step 10 §6).
+        self.assertEqual(sum(RetryPolicy(jitter=0).delay(a, random.Random(0)) for a in range(7)), 364)
+        self.assertEqual(rclient.settings(), {"max_in_flight": 24, "per_model": 20, "subcall_in_flight": 12,
+                                              "subcall_start_gap_s": 0.25,
+                                              "retry": {"tries": 8, "base_s": 4.0, "max_s": 120.0, "jitter": 0.5,
+                                                        "timeout_s": 600.0}})
         self.assertFalse(rclient.ENABLE_THINKING)
+
+
+class PacerTest(AsyncCase):
+    GAP = 0.05  # short, so the test is quick; production's is SUBCALL_START_GAP_S
+
+    async def test_spreads_simultaneous_starts_at_least_the_gap_apart(self):
+        pacer = Pacer({"sub": self.GAP})
+        t0 = time.monotonic()
+
+        async def start():
+            await pacer.wait("sub")
+            return time.monotonic() - t0
+
+        starts = sorted(await asyncio.gather(*(start() for _ in range(10))))
+        for k, at in enumerate(starts):
+            self.assertGreaterEqual(at, k * self.GAP - 1e-3, starts)  # the k-th start waits k gaps
+        self.assertLess(starts[-1], 9 * self.GAP + 0.3, starts)  # and not much longer: 10 go out over ~0.45 s
+
+    async def test_late_wake_ups_do_not_bunch(self):
+        """Starts booked while the event loop is blocked still go out a gap apart once it's free."""
+        pacer = Pacer({"sub": self.GAP})
+
+        async def start():
+            await pacer.wait("sub")
+            return time.monotonic()
+
+        tasks = [asyncio.ensure_future(start()) for _ in range(4)]
+        await asyncio.sleep(0)  # all four book their start times
+        time.sleep(4 * self.GAP)  # a busy loop: every booked time passes before anyone wakes
+        starts = sorted(await asyncio.gather(*tasks))
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertGreaterEqual(min(gaps), self.GAP - 1e-3, gaps)
+
+    async def test_other_models_are_not_delayed(self):
+        pacer = Pacer({"sub": 0.5})
+        for _ in range(10):
+            pacer.reserve("sub")
+        self.assertGreater(pacer.reserve("sub"), 4.9)  # the sub-call model is booked 5 s ahead
+        t0 = time.monotonic()
+        self.assertEqual(await asyncio.gather(*(pacer.wait("root") for _ in range(10))), [0.0] * 10)
+        self.assertLess(time.monotonic() - t0, 0.05)
+        self.assertEqual(Pacer().reserve("sub"), 0.0)  # no gaps given: nothing is paced
+        with self.assertRaises(ValueError):
+            Pacer({"sub": -1})
 
 
 class RequestTest(ServerCase):
@@ -238,46 +334,115 @@ class FailureTest(ServerCase):
         self.assertEqual(await task, "ok")
 
 
-class LoadTest(ServerCase):
-    """Done when: a load test never has more than the cap in flight (plan step 4, with Rishi's caps of 30 and 20)."""
+class PacingTest(ServerCase):
+    """Sub-calls spread out (step 10 §6): the sub-call model's own cap and start gap, set by the client."""
 
-    LATENCY = (0.3, 0.6)  # long enough that the client can keep 30 requests open on a slow machine
+    GAP = 0.1  # short, so the test is quick; production's is SUBCALL_START_GAP_S
+
+    def arrivals(self) -> collections.defaultdict:
+        """When each request reached the server, by model."""
+        seen = collections.defaultdict(list)
+
+        def fault(kind, body):
+            seen[body["model"]].append(time.monotonic())
+
+        self.server.fault = fault
+        return seen
+
+    async def test_the_client_caps_and_paces_its_subcall_model(self):
+        c = ModelClient(self.openai, subcall_model=BASE)
+        self.assertEqual((c.limiter.total, c.limiter.cap(BASE), c.limiter.cap(ROOT)), (24, 12, 20))
+        self.assertEqual(c.pacer.gaps, {BASE: 0.25})
+        limiter, pacer = Limiter(), Pacer()
+        shared = ModelClient(self.openai, subcall_model=BASE, limiter=limiter, pacer=pacer)
+        self.assertTrue(shared.limiter is limiter and shared.pacer is pacer)  # one given is used as it is
+
+    async def test_subcall_starts_are_spread_and_root_calls_are_not(self):
+        arrivals = self.arrivals()
+        self.server.latency = (0.05, 0.05)
+        c = self.client(pacer=Pacer({BASE: self.GAP}))
+        t0 = time.monotonic()
+
+        async def watch():  # while the burst is being paced, it holds no slot and isn't queued in the limiter
+            await asyncio.sleep(3.5 * self.GAP)
+            return c.limiter.waiting, c.limiter.by_model[BASE]
+
+        *_, held = await asyncio.gather(*(c.subcaller()("p") for _ in range(10)),
+                                        *(c.root_turn(MESSAGES, model=ROOT) for _ in range(10)), watch())
+        subs = sorted(at - t0 for at in arrivals[BASE])
+        for k, at in enumerate(subs):
+            self.assertGreaterEqual(at, k * self.GAP - 0.02, subs)  # the k-th waits k gaps; 0.02 s for the wire
+        self.assertLess(max(arrivals[ROOT]) - t0, 4 * self.GAP, subs)  # all 10 root calls went out at once
+        self.assertEqual(held[0], 0)
+        self.assertLessEqual(held[1], 2)
+        paced = c.reset_stats()["paced_s"]  # 0 + 1 + ... + 9 gaps, summed over the 10 sub-calls
+        self.assertTrue(0.5 * 45 * self.GAP < paced < 45 * self.GAP + 1.0, paced)
+
+    async def test_retries_are_paced_too(self):
+        arrivals = self.arrivals()
+        self.server.fault = lambda kind, body, f=self.server.fault: f(kind, body) or 429
+        c = self.client(RetryPolicy(tries=4, base_s=0.001, max_s=0.001, jitter=0, timeout_s=10),
+                        pacer=Pacer({BASE: self.GAP}))
+        with self.assertRaises(RequestFailed) as caught:
+            await c.subcaller()("p")
+        self.assertEqual(caught.exception.attempts, 4)
+        tries = arrivals[BASE]
+        self.assertEqual(len(tries), 4)
+        self.assertGreaterEqual(tries[-1] - tries[0], 3 * self.GAP - 0.02)  # the backoff alone is 1 ms
+        self.assertGreater(c.stats.paced_s, 3 * self.GAP * 0.5)
+
+
+class LoadTest(ServerCase):
+    """Done when: a load test never has more than the cap in flight (plan step 4). The caps are 24 in
+    total, 20 per model and 12 for the sub-call model (step 10 §6). Pacing is off here, so the caps are
+    what hold the load back."""
+
+    LATENCY = (0.3, 0.6)  # long enough that the client can keep 24 requests open on a slow machine
 
     async def _load(self, models: list[str], n: int) -> ModelClient:
         self.server.latency = self.LATENCY
-        c = self.client()
+        c = self.client(pacer=Pacer())
         calls = [c.root_turn(MESSAGES, model=m) if i % 3 == 0 else c.subcaller(model=m)("p")
                  for i, m in zip(range(n), models * n)]
         await asyncio.gather(*calls)
         return c
 
-    async def test_training_shape_reaches_30_and_never_more(self):
+    async def test_training_shape_reaches_24_and_never_more(self):
         c = await self._load([ROOT, BASE], 300)
-        # The client holds 30 slots at its peak. The server sees a little less, since a slot is also
+        # The client holds 24 slots at its peak. The server sees a little less, since a slot is also
         # held while the request is sent and the reply parsed; it must never see more.
-        self.assertEqual(c.limiter.peaks["total"], 30)
-        self.assertTrue(20 < self.server.peak <= 30, self.server.peak)
+        self.assertEqual(c.limiter.peaks["total"], 24)
+        self.assertEqual(c.limiter.peaks["by_model"][BASE], 12)
+        self.assertTrue(12 < self.server.peak <= 24, self.server.peak)
+        self.assertLessEqual(self.server.peak_by_model[BASE], 12)
         self.assertLessEqual(max(self.server.peak_by_model.values()), 20)
         self.assertEqual(self.server.statuses[429], 0)
         self.assertEqual(c.reset_stats()["attempts"], 300)
 
-    async def test_one_model_runs_at_20(self):
-        c = await self._load([BASE], 200)
+    async def test_one_model_alone(self):
+        """A base-model eval sends everything to the sub-call model, so it runs at 12; any other model runs at 20."""
+        c = await self._load([BASE], 100)
+        self.assertEqual(c.limiter.peaks["total"], 12)
+        self.assertTrue(self.server.peak <= 12 and self.server.statuses[429] == 0)
+        self.server.reset_counts()
+        c = await self._load([ROOT], 100)
         self.assertEqual(c.limiter.peaks["total"], 20)
         self.assertTrue(self.server.peak <= 20 and self.server.statuses[429] == 0)
 
     async def test_two_clients_sharing_one_limiter(self):
-        limiter = Limiter()
-        clients = [self.client(limiter=limiter) for _ in range(3)]
+        limiter, pacer = Limiter(model_caps={BASE: rclient.MAX_SUBCALLS_IN_FLIGHT}), Pacer()
+        clients = [self.client(limiter=limiter, pacer=pacer) for _ in range(3)]
         self.server.latency = self.LATENCY
         await asyncio.gather(*(c.subcaller(model=m)("p") for c in clients for m in (ROOT, BASE) for _ in range(60)))
-        self.assertEqual(limiter.peaks["total"], 30)
-        self.assertTrue(20 < self.server.peak <= 30, self.server.peak)
+        self.assertEqual(limiter.peaks["total"], 24)
+        self.assertTrue(12 < self.server.peak <= 24, self.server.peak)
+        self.assertLessEqual(self.server.peak_by_model[BASE], 12)
         self.assertEqual(self.server.statuses[429], 0)
 
     async def test_without_the_per_model_cap_w_and_b_would_refuse(self):
         """Why the cap of 20 per model exists: 30 to one model name gets 429s, as the step 2 probe found."""
-        c = self.client(limiter=Limiter(total=30, per_model=30), retry=RetryPolicy(tries=1, timeout_s=10))
+        c = self.client(limiter=Limiter(total=30, per_model=30), pacer=Pacer(),
+                        retry=RetryPolicy(tries=1, timeout_s=10))
         self.server.latency = (1.0, 1.0)
         results = await asyncio.gather(*(c.subcaller()("p") for _ in range(30)), return_exceptions=True)
         self.assertEqual(sum(isinstance(r, RequestFailed) for r in results), 10)

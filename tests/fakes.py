@@ -136,26 +136,24 @@ class FakeBackend:
     """An in-memory stand-in for backend.ArtBackend: no W&B, no credit.
 
     Each model keeps a list of checkpoint steps. `train` checks the groups are trainable ART groups
-    (rewards, and root choices carrying token ids) and adds the next step; `fork` starts a model from
-    another's checkpoint; `train_metrics(name, step)` makes the metrics a test needs. Set
-    `fail_next_train` to an exception to make the next train call raise it before training, or
-    `fail_after_next_train` to raise it after the checkpoint exists. `fork_numbering="restart"`
-    numbers a fork's checkpoints from 1, one of the two ways the serverless backend might *(inferred)*.
+    (rewards, and root choices carrying token ids) and adds the next step; `branch_from` starts a new
+    model from another's checkpoint, numbering its own checkpoints from 1, as W&B does (step 10
+    results §8); `train_metrics(name, step)` makes the metrics a test needs. Set `fail_next_train` to an
+    exception to make the next train call raise it before training, or `fail_after_next_train` to raise
+    it after the checkpoint exists.
     """
 
-    def __init__(self, base_url: str, *, api_key: str = "test-key", fork_numbering: str = "continue",
-                 path: str | None = None):
+    def __init__(self, base_url: str, *, api_key: str = "test-key", path: str | None = None):
         import openai
 
         self.path = path  # where the checkpoint lists persist between processes (the CLI dry run)
         self.base_url = base_url
         self.api_key = api_key
-        self.fork_numbering = fork_numbering  # "continue": a fork at k trains to k+1; "restart": to 1
         self.models: dict[str, dict] = {}
         self.trained: list[dict] = []
         self.logged: list[dict] = []
         self.deleted: list[tuple[str, list[int]]] = []
-        self.forks: list[tuple[str, str, int]] = []
+        self.branched: list[tuple[str, str, int]] = []  # (new model, source model, source step)
         self.fail_next_train: BaseException | None = None
         self.fail_after_next_train: BaseException | None = None  # the job finishes, then the client loses it
         self.train_metrics = lambda name, step: {"loss/grad_norm": 0.7, "loss/probs_corr": 0.997,
@@ -213,12 +211,11 @@ class FakeBackend:
         self.models[name]["steps"] = [s for s in self.models[name]["steps"] if s not in steps]
         self._persist()
 
-    async def fork(self, name: str, from_name: str, step: int) -> None:
-        if step not in self.models[from_name]["steps"]:
-            raise ValueError(f"{from_name} has no checkpoint {step}")
-        self.forks.append((name, from_name, step))
-        self.models[name] = {"steps": [step], "next": step + 1} if self.fork_numbering == "continue" else \
-            {"steps": [], "next": 1}
+    async def branch_from(self, name: str, source: str, step: int) -> None:
+        if step not in self.models[source]["steps"]:
+            raise ValueError(f"{source} has no checkpoint {step}")
+        self.branched.append((name, source, step))
+        self.models.setdefault(name, {"steps": [], "next": 1})  # a name already used keeps its steps: the loop refuses it
         self._persist()
 
     async def log(self, name: str, groups, *, split: str, step: int, metrics: dict) -> None:

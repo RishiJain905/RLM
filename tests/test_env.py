@@ -16,8 +16,8 @@ import unittest
 
 import openai
 
-from rlm_rl import bridge, env, sandbox
-from rlm_rl.client import Limiter, ModelClient, RetryPolicy
+from rlm_rl import bridge, client as rclient, env, sandbox
+from rlm_rl.client import Limiter, ModelClient, Pacer, RetryPolicy
 from rlm_rl.env import Episode, InfraPause, Score, Task, filter_step, run_episode, run_groups, to_trajectory
 from tests.fake_model import AsyncCase, FakeModelServer
 from tests.fakes import FakeSandbox
@@ -87,6 +87,20 @@ class EpisodeTest(EnvCase):
         ep = await self.episode()
         self.assertIn(bridge.NO_CODE_BLOCK_ERROR, ep.messages[3]["content"])
         self.assertEqual((ep.turns[0].code, ep.turns[0].cell, ep.correct), (None, None, True))
+
+    async def test_output_cap_follows_the_prompt_version(self):
+        """Prompt v2 shows 8,000 characters of a cell's output; v1 keeps the second seed's 2,000 (step 10 results)."""
+        # the cell prints 5,001 characters: 5,000 z's and a newline
+        for version, cap, kept, z_shown in (("v2", bridge.OUTPUT_MAX_CHARS, 5001, 5000),
+                                            ("v1", bridge.OUTPUT_MAX_CHARS_V1, 2000, 2000)):
+            replies = iter(["```python\nprint('z' * 5000)\n```", "```python\nsubmit(1)\n```"])
+            self.server.policy = lambda messages: next(replies)
+            ep = await self.episode(prompt_version=version)
+            self.assertEqual((len(ep.turns[0].cell["stdout"]), ep.turns[0].cell["stdout_chars"]), (kept, 5001), version)
+            self.assertIn("z" * z_shown, ep.messages[3]["content"])
+            self.assertNotIn("z" * (z_shown + 1), ep.messages[3]["content"])
+            self.assertEqual("more characters truncated" in ep.messages[3]["content"], version == "v1", version)
+            self.assertEqual(ep.limits["output_max_chars"], cap)
 
     async def test_turn_limit(self):
         self.server.policy = lambda messages: "```python\nprint(1)\n```"
@@ -348,16 +362,19 @@ class DockerTest(EnvCase):
 
         self.server.policy = policy
         tasks = [make_task(5, f"t{i}") for i in range(8)]
-        groups = await run_groups(tasks, 4, client=self.client, root_model=ROOT, scorer=exact,
+        # unpaced, so the in-flight caps are what holds the load back (pacing has its own tests in test_client)
+        client = ModelClient(self.openai, subcall_model=BASE, retry=FAST, rng=random.Random(0), pacer=Pacer())
+        groups = await run_groups(tasks, 4, client=client, root_model=ROOT, scorer=exact,
                                   run_id="test-step4", **self.sandbox_kwargs)
         episodes = [ep for g in groups for ep in g]
         self.assertEqual([ep.infra_error for ep in episodes], [None] * 32)
         self.assertTrue(all(ep.correct and ep.subcalls_used == 10 for ep in episodes))
-        self.assertLessEqual(self.server.peak, 30)
-        self.assertLessEqual(max(self.server.peak_by_model.values()), 20)
+        self.assertLessEqual(self.server.peak, rclient.MAX_IN_FLIGHT)
+        self.assertLessEqual(self.server.peak_by_model.get(BASE, 0), rclient.MAX_SUBCALLS_IN_FLIGHT)
+        self.assertLessEqual(max(self.server.peak_by_model.values()), rclient.MAX_IN_FLIGHT_PER_MODEL)
         self.assertEqual(self.server.statuses[429], 0)
         print(f"\n  load: server peak {self.server.peak} in flight "
-              f"({dict(self.server.peak_by_model)}), client peak {self.client.limiter.peaks['total']}")
+              f"({dict(self.server.peak_by_model)}), client peak {client.limiter.peaks['total']}")
 
 
 if __name__ == "__main__":

@@ -199,7 +199,8 @@ def step_metrics(groups: list[list[Episode]], step_filter: StepFilter, *, contro
 
     ent, ent_tokens = entropy(clean)
     lengths = [_transcript_tokens(ep) for ep in clean]
-    output_truncations = [sum(1 for t in ep.turns if t.cell and t.cell.get("stdout_chars", 0) > bridge.OUTPUT_MAX_CHARS)
+    output_truncations = [sum(1 for t in ep.turns if t.cell and t.cell.get("stdout_chars", 0)
+                              > (ep.limits or {}).get("output_max_chars", bridge.OUTPUT_MAX_CHARS))
                           for ep in clean]
     usage = Usage()
     for ep in eps:

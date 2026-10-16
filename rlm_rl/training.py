@@ -27,15 +27,19 @@ Files, under results/:
 - <run>/pending/: the batch sent for training, until its checkpoint is recorded.
 - <run>/abandoned/: logs of steps a resume from an earlier checkpoint left behind.
 
-Checkpoints. Logical checkpoint n is the weights after step n, held by one model on the backend
-(a "branch") at some backend step. Checkpoint 0 is the base model. Every 5th checkpoint is kept,
-plus every evaluated one, the best and the latest; the rest are deleted from the backend (spec §8).
+Checkpoints. Logical checkpoint n is the weights after step n, held by a model on the backend at
+some backend step; each branch records its model. Checkpoint 0 is the base model. Every 5th
+checkpoint is kept, plus every evaluated one, the best and the latest; the rest are deleted from
+the backend (spec §8).
 
 Resume. `resume()` picks up from the latest checkpoint. With `from_checkpoint`, it continues
-from an earlier kept checkpoint instead: that checkpoint is forked into a new branch (a new model
-on the backend), so nothing is deleted, the later steps' logs move to abandoned/, and the
-controller and learning rate come back from that checkpoint's snapshot. Spend never rolls back.
-The automatic LR fallback (spec §5.2 step 3) uses the same mechanism.
+from an earlier kept checkpoint instead, on a new branch: a new model on the backend that starts
+from that checkpoint's LoRA (backend.branch_from), so nothing is deleted. The later steps' logs move
+to abandoned/, and the controller and learning rate come back from that checkpoint's snapshot. The
+new branch's optimizer starts fresh. Spend never rolls back. The automatic LR fallback (spec §5.2
+step 3) uses the same mechanism. The step 10 tests (results §8) showed why it works this way: W&B
+trains from the newest step it has saved for a model, so a fork of the artifact alone, a deletion of
+newer steps, or new weights under an old step all failed.
 """
 
 from __future__ import annotations
@@ -82,7 +86,7 @@ class Backend(Protocol):
     async def latest_step(self, name: str) -> int: ...
     async def list_steps(self, name: str) -> list[int]: ...
     async def delete_steps(self, name: str, steps: list[int]) -> None: ...
-    async def fork(self, name: str, from_name: str, step: int) -> None: ...
+    async def branch_from(self, name: str, source: str, step: int) -> None: ...
     async def log(self, name: str, groups: list | None, *, split: str, step: int, metrics: dict) -> None: ...
     def art_model(self, name: str) -> Any: ...
 
@@ -116,7 +120,7 @@ class TrainingRun:
                  sandbox_factory: Callable[..., Any] = Sandbox, sandbox_kwargs: dict | None = None,
                  draw: Callable[..., list] = rtasks.draw, eval_sets: Callable[[str], tuple] = eval_set,
                  capability_items: list | None = None, prune: bool = True, stop_after: int | None = None,
-                 rng: random.Random | None = None, retry: RetryPolicy | None = None,
+                 rng: random.Random | None = None, retry: RetryPolicy | None = None, pacer: Any = None,
                  log: Callable[[str], None] = print):
         self.run = run
         self.cfg = cfg
@@ -132,6 +136,7 @@ class TrainingRun:
         self.stop_after = stop_after
         self.rng = rng or random.Random()
         self.retry = retry or RetryPolicy()
+        self.pacer = pacer
         self.say = log
         self.state: dict = {}
         self.ctl: DifficultyController | None = None
@@ -258,11 +263,16 @@ class TrainingRun:
 
     def _model_for(self, c: int) -> str:
         ckpt = self._ckpt(c)
-        return self.backend.inference_name(branch_name(self.run, ckpt["branch"]), ckpt["backend_step"])
+        return self.backend.inference_name(self._model_of(ckpt["branch"]), ckpt["backend_step"])
+
+    def _model_of(self, branch: int) -> str:
+        """The backend model a branch trains on, as recorded when the branch began."""
+        entry = next((b for b in self.state["branches"] if b["branch"] == branch), None)
+        return (entry or {}).get("model") or branch_name(self.run, branch)
 
     @property
     def _branch(self) -> str:
-        return branch_name(self.run, self.state["branch"])
+        return self._model_of(self.state["branch"])
 
     def _ceilings_text(self) -> str:
         return ", ".join(f"{k} ${v:g}" for k, v in self.cfg.ceilings.items()) or "none"
@@ -272,11 +282,12 @@ class TrainingRun:
             self.capability_items = capability.load(capability.resolve(self.cfg.capability_set))
 
     async def _open(self) -> None:
-        await self.backend.open(branch_name(self.run, 0))
-        if self.state["branch"] != 0:
+        await self.backend.open(self._model_of(0))
+        if self._branch != self._model_of(0):
             await self.backend.open(self._branch)
-        self.base_model = self.backend.inference_name(branch_name(self.run, 0), 0)
-        self.client = ModelClient(self.backend.openai_client(), subcall_model=self.base_model, retry=self.retry)
+        self.base_model = self.backend.inference_name(self._model_of(0), 0)
+        self.client = ModelClient(self.backend.openai_client(), subcall_model=self.base_model, retry=self.retry,
+                                  pacer=self.pacer)  # None: the client's own, which spaces out sub-calls (client.py)
         self._mark = self.client.spent_usd()
         self._reset_pause_window()
 
@@ -506,7 +517,7 @@ class TrainingRun:
         pending = self.state.get("pending")
         if not pending:
             return
-        n, name, row = pending["step"], branch_name(self.run, pending["branch"]), pending["row"]
+        n, name, row = pending["step"], self._model_of(pending["branch"]), pending["row"]
         latest = await self.backend.latest_step(name)
         if latest != pending["latest_before"]:
             self._commit_row(self._trained(row, latest, None, None))
@@ -731,9 +742,14 @@ class TrainingRun:
         src = self._ckpt(target)
         old, new = st["branch"], len(st["branches"])
         name = branch_name(self.run, new)
-        await self.backend.open(name)
-        if src["backend_step"]:
-            await self.backend.fork(name, branch_name(self.run, src["branch"]), src["backend_step"])
+        if src["backend_step"]:  # checkpoint 0 is the base model: a new model starts there anyway
+            await self.backend.branch_from(name, self._model_of(src["branch"]), src["backend_step"])
+        else:
+            await self.backend.open(name)
+        latest = await self.backend.latest_step(name)
+        if latest != 0:  # the new branch must start from the seeded step 0, or training continues from elsewhere
+            raise RuntimeError(f"{name} already has checkpoint {latest}; a branch from checkpoint {target} needs a new "
+                               "model, so nothing was trained")
         folder = self.run_dir / "abandoned" / f"b{old}-after{target}"
         for path in self._files_after(target):
             self._move(path, folder / path.relative_to(self.run_dir))
@@ -765,8 +781,9 @@ class TrainingRun:
         st["kept"] = sorted(self._kept())
         self._update_best()
         self._reset_pause_window()
-        self._notice("rollback", f"continuing from checkpoint {target} on branch {new} ({name}) at learning rate "
-                                 f"{st['lr']['current']:g}: {reason}. Steps after {target} are kept under {folder.name}")
+        self._notice("rollback", f"continuing from checkpoint {target} on branch {new} ({name}, started from its LoRA "
+                                 f"with a fresh optimizer) at learning rate {st['lr']['current']:g}: {reason}. Steps after "
+                                 f"{target} are kept under {folder.name}")
         self._save()
 
     def _files_after(self, target: int) -> list[Path]:

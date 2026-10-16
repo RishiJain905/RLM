@@ -249,9 +249,9 @@ class ReplTest(SandboxCase):
         self.assertEqual(result.stdout, f"{len(CONTEXT)} {CONTEXT[:40]!r}\n")
 
     async def test_variables_persist_and_output_is_truncated(self):
-        results, _ = await self.cells("x = 41", "x += 1; print(x)", "print('y' * 5000)")
+        results, _ = await self.cells("x = 41", "x += 1; print(x)", "print('y' * 9000)")
         self.assertEqual(results[1].stdout, "42\n")
-        self.assertEqual((len(results[2].stdout), results[2].stdout_chars), (2000, 5001))
+        self.assertEqual((len(results[2].stdout), results[2].stdout_chars), (bridge.OUTPUT_MAX_CHARS, 9001))
 
     async def test_budget_and_errors_reach_the_model(self):
         async def picky(prompt):

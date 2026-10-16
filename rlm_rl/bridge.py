@@ -38,7 +38,12 @@ WIRE_OPS = ("llm", "llm_batch")
 MAX_TURNS = 12
 MAX_SUBCALLS = 30
 ROOT_MAX_TOKENS = 3072
-OUTPUT_MAX_CHARS = 2000
+# What one cell's printed output shows the model. Raised from 2,000 for prompt v2 after the second seed
+# (step 10 results §5, Rishi 2026-10-16): 40% of its cells were cut, the median cut cell printed 4,100
+# characters, and a cut list led to the one suspicious audited win. 8,000 covers 78% of those cells. The
+# REPL keeps this much; `limits(family, version)` gives each episode its own cap, which env.py applies.
+OUTPUT_MAX_CHARS = 8000
+OUTPUT_MAX_CHARS_V1 = 2000  # prompt v1 (the second seed) keeps the cap it ran with, and its system prompt says so
 TRACEBACK_LINES = 6
 CELL_TIMEOUT_S = 120
 
@@ -75,9 +80,10 @@ def is_edit(family: str) -> bool:
     return str(family).startswith(EDIT_PREFIX)
 
 
-def limits(family: str) -> Limits:
-    """The limits an episode of this family runs under (spec §12.3)."""
-    return EDIT_LIMITS if is_edit(family) else READ_LIMITS
+def limits(family: str, version: str = PROMPT_VERSION) -> Limits:
+    """The limits an episode of this family runs under (spec §12.3), with prompt v1's output cap for a v1 episode."""
+    lim = EDIT_LIMITS if is_edit(family) else READ_LIMITS
+    return dataclasses.replace(lim, output_max_chars=OUTPUT_MAX_CHARS_V1) if version == "v1" else lim
 
 # Sub-calls (spec §1.2).
 SUBCALL_MAX_CHARS = 24_000
@@ -94,7 +100,7 @@ SUBMIT_MAX_BYTES = 100_000
 
 SYSTEM_PROMPT = """You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
 
-Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
+Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 8000 characters). Variables persist between turns.
 
 Available in the REPL:
 - `context`: the task input (str)
@@ -258,9 +264,10 @@ def cell_messages(version: str = PROMPT_VERSION, limits: Limits = READ_LIMITS, e
                         CELL_CRASH_TEMPLATE.format() + tail)
 
 
-def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int) -> str:
+def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int,
+                max_chars: int = OUTPUT_MAX_CHARS) -> str:
     """The user message after a turn. `stdout_chars` is how much the cell printed before truncation."""
-    out = stdout[:OUTPUT_MAX_CHARS]
+    out = stdout[:max_chars]
     if stdout_chars > len(out):
         out += OBS_TRUNCATED.format(n=stdout_chars - len(out))
     parts = [OBS_OUTPUT.format(stdout=out) if out.strip() else OBS_NOTHING_PRINTED]

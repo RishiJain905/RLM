@@ -54,7 +54,7 @@ import traceback
 # Must match rlm_rl/bridge.py; tests/test_contract.py checks.
 API_NAMES = ("context", "llm", "llm_batch", "submit")
 WIRE_OPS = ("llm", "llm_batch")
-OUTPUT_MAX_CHARS = 2000
+OUTPUT_MAX_CHARS = 8000  # the largest cap; the host cuts each episode to its own (prompt v1: 2,000)
 TRACEBACK_LINES = 6
 SUBCALL_MAX_CHARS = 24_000
 SUBCALL_TRUNCATION_MARK = "[prompt truncated]"

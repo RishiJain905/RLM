@@ -104,13 +104,13 @@ footer { font-size: var(--s-1); color: var(--ink-2); display: grid; gap: 6px; bo
   <div class="tiles">
     <div class="tile"><div class="lab">Held-out accuracy</div><div class="val">83.3%</div><div class="ctx">80 of 96, ± 3.8. First seed: 70%</div></div>
     <div class="tile"><div class="lab">Production learning rate</div><div class="val good">2e-5</div><div class="ctx">All three stability checks passed</div></div>
-    <div class="tile"><div class="lab">Resume from a checkpoint</div><div class="val bad">Broken</div><div class="ctx">The fork trained from a fresh LoRA</div></div>
+    <div class="tile"><div class="lab">Resume from a checkpoint</div><div class="val good">Fixed</div><div class="ctx">Broken in 10d; a seeded fresh branch works</div></div>
     <div class="tile"><div class="lab">W&amp;B inference spent</div><div class="val">$16.22</div><div class="ctx">Billing page; $201.33 left. Plan: ~$12.50</div></div>
   </div>
 
-  <div class="callout bad">
-    <h3>The 10d test found a real problem</h3>
-    <p>Resuming from an earlier checkpoint doesn't work on W&amp;B serverless. The forked branch copied checkpoint 15 correctly, but training then started from a fresh LoRA. Production's rollbacks and its 2e-5 → 1e-5 fallback both use this fork, so today they would silently restart from the base model. The plan's KL check couldn't see it; comparing the LoRA weights did (§8).</p>
+  <div class="callout warn">
+    <h3>The 10d test found a real problem, now fixed</h3>
+    <p>Resuming from an earlier checkpoint didn't work on W&amp;B serverless: the forked branch copied checkpoint 15 correctly, but training then started from a fresh LoRA. Production's rollbacks and its 2e-5 → 1e-5 fallback would have silently restarted from the base model. The plan's KL check couldn't see it; comparing the LoRA weights did. A fresh branch model seeded with the checkpoint's LoRA does train on from it, tested live, and the loop now resumes that way (§8).</p>
   </div>
 
   <section>
@@ -259,8 +259,17 @@ footer { font-size: var(--s-1); color: var(--ink-2); display: grid; gap: 6px; bo
     <ul>
       <li><b>Why</b> (inferred from ART 0.5.20's code): the fork only uploads the source checkpoint as an artifact for the new model, and its own docstring warns that serverless checkpoint tracking may not reflect it. Our loop registers the new model first, which creates its step 0, and forks second. The training service then continued from its own step 0.</li>
       <li><b>For production at 2e-5:</b> the learning-rate fallback and any stop-rule rollback would restart from the base model while the logs say "continuing from checkpoint N".</li>
-      <li><b>Recommended:</b> before step 12, fix the order (fork before registering, or whatever ART's serverless needs), add a check that compares the new branch's first checkpoint against its source, and re-test one step (~$0.70).</li>
     </ul>
+    <div class="panel">
+      <h3>The fix, tested live</h3>
+      <p>W&amp;B trains each model from the newest step in its own checkpoint list, loading that step's LoRA by its artifact alias and checking it against the optimizer state saved with it. Forking before registering left the list at step 0. Deleting newer steps was refused ("Cannot delete the last checkpoint"). New weights under an existing step were loaded, then refused ("Optimizer checkpoint and loaded LoRA weights do not match"). What works: <b>a fresh model, with only step 0 and no optimizer state, whose <code>step0</code> holds the checkpoint's LoRA.</b> Trained one step on a saved batch ($0 inference, ~$0.16 GPU):</p>
+      <div class="bars" role="img" aria-label="Distance from checkpoint 15: seeded fresh model after one step 0.211, checkpoint 20 0.397, the 10d fork 0.864">
+        <div class="bar"><span class="name">Seeded fresh model, one step</span><span class="track"><span class="fill src" style="display:block;width:24.4%"></span></span><span class="v">0.211</span></div>
+        <div class="bar"><span class="name">Checkpoint 20 (five more steps)</span><span class="track"><span class="fill" style="display:block;width:45.9%"></span></span><span class="v">0.397</span></div>
+        <div class="bar"><span class="name">10d fork, one step (fresh LoRA)</span><span class="track"><span class="fill bad" style="display:block;width:100%"></span></span><span class="v">0.864</span></div>
+      </div>
+      <p class="note">Distance of the LoRA B matrices from checkpoint 15. The loop now resumes this way: a new branch <code>&lt;run&gt;-b&lt;n&gt;</code>, seeded and checked before anything trains, with a fresh optimizer; nothing is deleted.</p>
+    </div>
   </section>
 
   <section>
@@ -269,9 +278,9 @@ footer { font-size: var(--s-1); color: var(--ink-2); display: grid; gap: 6px; bo
       <table>
         <thead><tr><th>Change</th><th>Why</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td><b>Fix the fork</b>, check the new branch's first checkpoint against its source, re-test one step (~$0.70)</td><td>Rollbacks and the LR fallback restart from scratch today (§8)</td><td><span class="pill bad">Blocks rollback</span></td></tr>
-          <tr><td><b>Spread out sub-calls</b>: a lower in-flight cap for the sub-call model (e.g. 12 per model, 24 total) and longer retries (8 tries from 4 s), numbers to tune</td><td>429s on 19-47% of requests; 1.5% of episodes lost. Expect at most 10-20% longer rollouts (inferred)</td><td><span class="pill good">Decided by Rishi</span></td></tr>
-          <tr><td>Raise the 2,000-character REPL output cap for read episodes</td><td>The suspicious win; <code>tickets_all</code> averages 4.5 cut-off outputs an episode</td><td><span class="pill good">Decided by Rishi</span></td></tr>
+          <tr><td><b>Fix the fork:</b> resume on a fresh branch model seeded with the checkpoint's LoRA</td><td>Rollbacks and the LR fallback restarted from scratch (§8)</td><td><span class="pill good">Built, tested live</span></td></tr>
+          <tr><td><b>Spread out sub-calls:</b> 12 in flight (24 in all), starts 0.25 s apart, 8 retries from 4 s capped at 120 s</td><td>429s on 19-47% of requests; 1.5% of episodes lost. Rollouts 10-25% longer (inferred)</td><td><span class="pill good">Built</span></td></tr>
+          <tr><td><b>REPL output cap 8,000 characters</b> for prompt v2; v1 keeps 2,000</td><td>40% of cells were cut; 8,000 covers 78% of them</td><td><span class="pill good">Built</span></td></tr>
           <tr><td>Don't zero a reward for one blocked <code>/tmp</code> write with no retry, or tell the model where scratch is</td><td>0 of 2 detector hits were real</td><td><span class="pill wait">Proposed</span></td></tr>
           <tr><td>Estimate an eval's cost from eval episodes, or cut the 1.5× margin to ~1.1</td><td>It stopped the run before its eval</td><td><span class="pill wait">Proposed</span></td></tr>
           <tr><td>Add the base model on <code>heldout-seed1</code> to step 11 (~$2)</td><td>Explains the replication gap (§4)</td><td><span class="pill wait">Proposed</span></td></tr>

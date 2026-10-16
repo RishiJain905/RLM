@@ -220,7 +220,8 @@ def pinned(cfg: RunConfig, *, lr: dict, controller_state: dict, spend: dict, tem
                    "tools_version": repl_tools.TOOLS_VERSION},  # the edit REPL's coding tools (spec §12.1)
         "edit_limits": bridge.EDIT_LIMITS.as_dict(),
         "limits": {"max_turns": bridge.MAX_TURNS, "max_subcalls": bridge.MAX_SUBCALLS,
-                   "root_max_tokens": bridge.ROOT_MAX_TOKENS, "output_max_chars": bridge.OUTPUT_MAX_CHARS,
+                   "root_max_tokens": bridge.ROOT_MAX_TOKENS,
+                   "output_max_chars": bridge.limits("read", cfg.prompt_version).output_max_chars,
                    "traceback_lines": bridge.TRACEBACK_LINES, "cell_timeout_s": bridge.CELL_TIMEOUT_S,
                    "subcall_max_chars": bridge.SUBCALL_MAX_CHARS, "subcall_max_tokens": bridge.SUBCALL_MAX_TOKENS,
                    "subcall_temperature": bridge.SUBCALL_TEMPERATURE, "root_temperature": client.ROOT_TEMPERATURE,
@@ -233,8 +234,7 @@ def pinned(cfg: RunConfig, *, lr: dict, controller_state: dict, spend: dict, tem
         "controller": {"settings": controller.settings(), "state": controller_state},
         "generators": tasks.versions(cfg.mix),
         "manifest": manifest(cfg),
-        "limiter": {"max_in_flight": client.MAX_IN_FLIGHT, "per_model": client.MAX_IN_FLIGHT_PER_MODEL,
-                    "retry": dataclasses.asdict(client.RetryPolicy())},
+        "limiter": client.settings(),  # caps, the sub-call gap and the retry policy (client.py, step 10 §6)
         "git": git if git is not None else git_state(),
         "spend": spend,
         "run": cfg.as_dict(),

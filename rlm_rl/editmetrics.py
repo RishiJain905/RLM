@@ -17,6 +17,7 @@ import re
 import statistics
 from typing import Any, Iterable
 
+from . import bridge
 from .repl_tools import TOOL_NAMES
 
 # A program run that is a build or test command (from the exec event's arguments).
@@ -126,7 +127,8 @@ def episode_stats(ep: Any) -> dict:
             repeated += key in seen
             seen.add(key)
     sent = sum(len(c.get("prompt") or "") for c in ep.subcalls)
-    printed = sum(min(int(t.cell.get("stdout_chars") or 0), 2000) + len(t.cell.get("error") or "")
+    cap = int((getattr(ep, "limits", None) or {}).get("output_max_chars") or bridge.OUTPUT_MAX_CHARS)
+    printed = sum(min(int(t.cell.get("stdout_chars") or 0), cap) + len(t.cell.get("error") or "")
                   for t in turns if t.cell)
     grade = ep.grade or {}
     graded = bool(grade.get("graded"))

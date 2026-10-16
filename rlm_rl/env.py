@@ -165,6 +165,14 @@ class Episode:
         }
 
 
+def _cap_output(result: CellResult, max_chars: int) -> None:
+    """Cut a cell's output to the episode's own cap. The REPL keeps bridge.OUTPUT_MAX_CHARS, the largest cap, so a
+    prompt v1 episode is cut here to the 2,000 characters it ran with; transcripts and detectors see what the model saw."""
+    result.stdout = result.stdout[:max_chars]
+    if result.error is not None:
+        result.error = result.error[:2 * max_chars]  # the sandbox's own error cut, at this episode's cap
+
+
 def _cell_dict(result: CellResult) -> dict:
     out = {"stdout": result.stdout, "stdout_chars": result.stdout_chars, "error": result.error,
            "stderr": result.stderr, "submitted": result.submitted, "answer": result.answer,
@@ -215,7 +223,7 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     submitted, non-empty diff is graded in a fresh container (`grade`, grader.grade by default). A
     grader that fails is an infra error, like a sandbox that fails.
     """
-    lim = bridge.limits(task.family)
+    lim = bridge.limits(task.family, prompt_version)
     edit = bridge.is_edit(task.family)
     task_limits = {}
     if edit and (task.edit or {}).get("cell_timeout_s"):  # a task whose own tests need longer cells (spec §12.3)
@@ -263,6 +271,7 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 ep.messages.append({"role": "assistant", "content": reply})
                 code = extract_code(reply)
                 result = CellResult("", 0, bridge.NO_CODE_BLOCK_ERROR) if code is None else await box.run_cell(code)
+                _cap_output(result, lim.output_max_chars)
                 turn = Turn(reply, choice.finish_reason, len((choice.model_extra or {}).get("token_ids", ())),
                             code, None if code is None else _cell_dict(result), None,
                             round(t1 - t0, 3), round(time.monotonic() - t1, 3))
@@ -273,7 +282,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 turns_left = lim.max_turns - index - 1
                 if turns_left:
                     turn.observation = bridge.observation(result.stdout, result.stdout_chars, result.error, turns_left,
-                                                          box.bridge.max_subcalls - box.bridge.subcalls_used)
+                                                          box.bridge.max_subcalls - box.bridge.subcalls_used,
+                                                          max_chars=lim.output_max_chars)
                     ep.messages.append({"role": "user", "content": turn.observation})
             if edit:
                 ep.diff = await box.diff()

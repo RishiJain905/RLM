@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 from rlm_rl import bridge, capability, evals, tasks as rtasks
+from rlm_rl.client import Pacer
 from rlm_rl.training import TrainingRun
 from tests.fake_model import FakeModelServer
 from tests.fakes import FakeBackend, FakeSandbox
@@ -220,5 +221,6 @@ class DryRun:
             kwargs["sandbox_kwargs"] = {"edit_sandbox_factory": FakeEditSandbox, "grade": local_grade,
                                       **(kwargs.get("sandbox_kwargs") or {})}
         kwargs.setdefault("rng", random.Random(self.seed))
+        kwargs.setdefault("pacer", Pacer())  # the fake server has no rate limit to space sub-calls out for
         return TrainingRun(run, backend=self.backend, results=self.results, draw=self.oracle.draw,
                            eval_sets=self.oracle.eval_set, **kwargs)

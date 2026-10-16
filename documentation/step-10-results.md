@@ -12,7 +12,7 @@
 >
 > **W&B inference spent:** $16.22 on W&B's billing page ($201.33 left of $250). The run estimated $16.40: $15.74 for the seed (training $13.77, eval $1.97) and $0.66 for the 10d step (§8). The plan budgeted ~$12 plus ~$0.50.
 >
-> **Status:** complete. Rishi's follow-ups (resuming from a saved LoRA, sub-call spacing, the REPL output cap) are being built before step 10 is closed.
+> **Status:** complete, with Rishi's three follow-ups built: resuming from a saved checkpoint (§8.1, tested live), sub-call spacing and the 8,000-character output cap (§10). The follow-up tests spent $0.31 more of inference and ~$0.16 of GPU time.
 >
 > Anything marked *(mine)* is my choice, not the plan's. Anything marked *(inferred)* hasn't been checked.
 
@@ -22,7 +22,7 @@
 
 **The replication check is not a clean pass.** The plan asked for the held-out score to land within about 1 SE of 0.70, or for the gap to be explained. It landed 13 points above, and the explanation is inferred: environment v2 makes the untrained model stronger (§4). One $2 eval of the base model on these held-out tasks would settle it, and I recommend adding it to step 11's baselines.
 
-**10d found a real problem: resuming from an earlier checkpoint doesn't work on W&B serverless** (§8). The forked branch trained from a fresh LoRA instead of checkpoint 15, so production's rollback and its 2e-5 → 1e-5 fallback would silently restart from the base model. The plan's KL check couldn't have caught it; comparing the LoRA weights did.
+**10d found a real problem, now fixed: resuming from an earlier checkpoint didn't work on W&B serverless** (§8). The forked branch trained from a fresh LoRA instead of checkpoint 15, so production's rollback and its 2e-5 → 1e-5 fallback would have silently restarted from the base model. The plan's KL check couldn't have caught it; comparing the LoRA weights did. A fresh branch model seeded with the checkpoint's LoRA does continue from it, tested live (§8.1), and the loop now resumes that way.
 
 **Three more things need fixing before production** (§10): W&B rate limiting (429s on 19-47% of requests from step 2 on, and 1.5% of episodes lost overall), the 2,000-character REPL output cap (it led to the one suspicious audited win), and the escape rule firing on harmless `/tmp` scratch writes.
 
@@ -180,6 +180,34 @@ LoRA's B matrices start at zero and grow as training goes (0.55 after 5 steps, 0
 
 The live record `results/second-seed-v1.json` now ends on branch 1 at checkpoint 16, with the original steps 16-20 under `abandoned/b0-after15/`. The seed's results come from the saved copy.
 
+### 8.1 Follow-up: a resume that works (2026-10-16, Rishi's go-ahead)
+
+Rishi asked for resuming to be fixed before step 10 closes, cheaply. Reading ART's code (a subagent, $0) showed how W&B's training service works: each train call sends only the model's id, and the service continues from the **newest step in its own checkpoint list** for that model, loading that step's LoRA by its artifact alias `step<N>`. ART's fork only logs an artifact, which the service never reads. Four live checks followed:
+
+| Try | Result | Cost |
+|---|---|---|
+| Fork the checkpoint into a new model *before* registering it | The new model's list held only step 0. No | $0 |
+| Rewind the seed's own model: copy step 20 to `second-seed-v1-archive`, then delete it so 15 is newest | W&B refused: "Cannot delete the last checkpoint (step 20)". Nothing trained; step 20 kept, plus an archive copy | $0 |
+| On the throwaway branch, log checkpoint 15's LoRA under its newest step's alias (`step1`), then train one 4-task step | W&B **loaded** checkpoint 15's weights, then refused: "Optimizer checkpoint and loaded LoRA weights do not match". The rollouts ran; nothing trained | $0.31 inference |
+| **A fresh model** (`rewind-probe-1016`, only step 0, no optimizer state yet): log checkpoint 15's LoRA as its `step0`, then train on the saved 4-task batch from the try above | **Trained to step 1, from checkpoint 15's weights** | $0 inference, ~$0.16 GPU |
+
+The weights settle it (`compare_weights.py`, $0):
+
+| Checkpoint | LoRA B norm | Distance from checkpoint 15 |
+|---|---|---|
+| Checkpoint 15 | 0.838 | 0 |
+| Fresh model seeded with 15, after one step | **0.865** | **0.211** |
+| Checkpoint 20 (five more steps on the original) | 0.947 | 0.397 |
+| The 10d fork after one step (a fresh LoRA) | 0.231 | 0.864 |
+
+One step from checkpoint 15 moved the weights 0.21, about half of what five normal steps moved them. A fresh start sits 0.86 away. The step's grad norm was 1.43, higher than the run's 0.4-0.8, as expected with a fresh optimizer *(inferred)*.
+
+**The mechanism is now in the code** (`rlm_rl/backend.py` `branch_from`, `rlm_rl/training.py` `_rollback`). A resume from checkpoint *c* registers a new model `<run>-b<n>`, checks it has only step 0, logs *c*'s LoRA as its `step0`, checks the copy landed, and trains on from there. Checkpoint *c* itself is still served from its original model, so nothing is deleted. The new branch's optimizer state starts fresh; that is the one difference from never having stopped. A branch name that already has checkpoints stops the resume before anything trains. The LR fallback uses the same path.
+
+This also answers Rishi's question about the LoRAs: they were saved correctly the whole time. A branch's `step0` is the fresh LoRA W&B creates at registration, stored at full precision (217.7 MB), and trained checkpoints are 108.9 MB.
+
+**Tests spent $0.31 of inference** (the throwaway step's rollouts) and ~$0.16 of GPU time. Records: `results/preflight/fork-check/` (the probes and the weight comparison), `results/preflight/rewind-test-2026-10-16.log`, `alias-test-2026-10-16.log` and `fresh-model-probe-2026-10-16.log`. W&B keeps three leftovers from the tests: `second-seed-v1-archive` (a copy of step 20), `fork-probe-1016` and `rewind-probe-1016`.
+
 ## 9. The billing check
 
 **Pass.** W&B's billing page showed **$201.33 left** after the 10d step (Rishi, 2026-10-16), so step 10 cost **$16.22** on W&B ($217.55 − $201.33). The run's own estimate was $16.40: $0.18, or 1.1%, high. The dashboard's cost panel can be trusted for production's budget, slightly on the safe side.
@@ -188,9 +216,9 @@ The live record `results/second-seed-v1.json` now ends on branch 1 at checkpoint
 
 | # | Change | Why | Status |
 |---|---|---|---|
-| 0 | **Fix the fork** (fork before registering the new model, or what ART's serverless needs), check the new branch's first checkpoint against its source, and re-test one step (~$0.70) | §8: rollbacks and the LR fallback restart from scratch today | **Blocks step 12's rollback and fallback** |
-| 1 | **Spread out sub-calls:** a lower in-flight cap for the sub-call model (e.g. 12 per model, 24 total) and longer retries (8 tries, backoff from 4 s, about 8 minutes) *(mine, numbers to tune)* | §6. Average demand is ~10-20 in flight, so expect at most 10-20% longer rollouts *(inferred)*, partly offset by fewer backoffs | **Decided** (Rishi); being built |
-| 2 | Raise the REPL's 2,000-character output cap for read episodes | The one suspicious win (§5); `tickets_all` averages 4.5 cut-off outputs an episode | **Decided** (Rishi); being built |
+| 0 | **Fix the fork:** a resume now starts a fresh branch model whose `step0` holds the checkpoint's LoRA | §8: rollbacks and the LR fallback restarted from scratch | **Built and tested live** (§8.1) |
+| 1 | **Spread out sub-calls:** at most 12 sub-calls in flight (24 in all), starts at least 0.25 s apart, and 8 retries from 4 s, capped at 120 s, which rides out about 6 minutes of throttling *(mine, numbers to tune)* | §6. Expect rollouts 10-25% longer and steps 5-12% longer *(inferred)*, partly offset by fewer backoffs; step 1 and base-model evals, all on `:step0`, about 1.5× | **Built** (`rlm_rl/client.py`) |
+| 2 | **Raise the REPL output cap to 8,000 characters** for prompt v2 (production, baselines). Prompt v1 keeps 2,000, so the second seed stays reproducible | §5. 40% of the seed's cells were cut; 8,000 covers 78% of them. Root prompts may cost up to ~25% more *(inferred upper bound; fewer turns may offset it)* | **Built** (`rlm_rl/bridge.py`, `env.py`; sandbox images rebuilt) |
 | 3 | Don't zero a reward for a single blocked `/tmp` write with no retry, or tell the model where scratch is (prompt v2) | 0 of 2 detector hits were real (§5) | Proposed |
 | 4 | Compute the eval-affordability estimate from eval episodes, or drop the 1.5× margin to ~1.1 | It stopped the run before its eval (§7) | Proposed |
 | 5 | Add the base model on `heldout-seed1` (env v2, prompt v1) to step 11 | Explains the replication gap (§4), ~$2 | Proposed |

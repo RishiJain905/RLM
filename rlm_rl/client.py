@@ -1,13 +1,29 @@
-"""Every request to the model goes through here: one shared limiter, retries and infra errors (spec §1.2-1.3, H5, H6).
+"""Every request to the model goes through here: limits, pacing, retries and infra errors (spec §1.2-1.3, H5, H6).
 
-- One Limiter caps requests in flight across root turns and sub-calls alike: 30 in total, and
-  20 for any one model name, which is W&B's own limit per checkpoint (step 2 §5). Root calls go
-  to the training checkpoint (`:stepN`) and sub-calls to the base model (`:step0`), so training
-  can use all 30. A base-model eval sends everything to `:step0` and runs at 20.
+- One Limiter caps requests in flight across root turns and sub-calls alike: 24 in total, 12 for
+  the sub-call model, and 20 for any other model name, which is W&B's own limit per checkpoint
+  (step 2 §5). Root calls go to the training checkpoint (`:stepN`) and sub-calls to the base model
+  (`:step0`), so training runs at most 20 root calls and 12 sub-calls, 24 together.
+- A Pacer starts requests to the sub-call model at least 0.25 s apart, at most 4 new ones a
+  second, so an `llm_batch` of 10 goes out over about 2.5 s instead of at once. Every try waits
+  for its start time, retries too, before it asks the limiter for a slot, so pacing holds no slot.
+  Other models aren't paced. The time spent pacing is logged as the step's `paced_s`.
+- Caps and gaps go by model name, not by kind of call. A base-model eval sends its root calls to
+  `:step0` too, so it runs at 12 in flight and 4 starts a second, and so does training's first
+  step, which samples from `:step0`. The KL rescoring against base shares the sub-call model's 12
+  and its gap.
 - A 429, a 5xx, a timeout or a dropped connection is retried with jittered exponential backoff,
-  up to 6 tries starting at 2 s. A request gives its slot back while it waits. When the tries run
-  out it raises RequestFailed, an InfraError: the episode is flagged infra_error and never
-  reaches training, and the model is never shown a fake answer.
+  up to 8 tries starting at 4 s and capped at 120 s, which rides out about 6 minutes of
+  throttling. A Retry-After header is honoured up to the cap. A request gives its slot back while
+  it waits. When the tries run out it raises RequestFailed, an InfraError: the episode is flagged
+  infra_error and never reaches training, and the model is never shown a fake answer.
+- Why the cap for sub-calls, the pacing and the longer retries (step 10 §6, 2026-10-16): at 30 in
+  total and 20 per model, W&B answered 429 to 19-47% of tries from step 2 on, once root calls and
+  sub-calls went to different models; step 1, all on one model, had none. The 429s tracked sub-call
+  volume, which arrives in bursts from `llm_batch`. Six tries from 2 s covered about a minute, and
+  in step 20 seven requests ran out of tries, which made 7 of its 32 episodes infra errors. Rishi
+  decided to spread sub-calls out in production even if it is slower. The numbers are defaults to
+  tune *(mine)*.
 - Every response is checked for thinking mode (step 2 §4): reasoning tokens must be 0, and a
   root call's rendered prompt must end with the empty think block. A failed check is infra.
 - Root calls rebuild the token ids ART's trainer needs from prompt logprobs, which W&B's
@@ -25,7 +41,7 @@ import collections
 import random
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import openai
@@ -33,9 +49,17 @@ import openai
 from . import bridge
 from .bridge import Complete, InfraError, SubcallError
 
-# Requests in flight (step 2 §5, Rishi 2026-10-10). Replaces the cap of 8 in spec §1.3.
-MAX_IN_FLIGHT = 30
-MAX_IN_FLIGHT_PER_MODEL = 20
+# Requests in flight. Step 2 §5 (Rishi 2026-10-10) set 30 in total and 20 per model name, replacing
+# the cap of 8 in spec §1.3. At those caps W&B answered 429 to 19-47% of tries once sub-calls had a
+# model of their own (step 10 §6, 2026-10-16), so the total fell to 24 and the sub-call model got a
+# cap of 12 (step 10 §10 #1 *(mine)*, defaults to tune). Average demand there was ~10-20 in flight.
+MAX_IN_FLIGHT = 24
+MAX_IN_FLIGHT_PER_MODEL = 20  # every model but the sub-call model: W&B's own limit per checkpoint (step 2 §5)
+MAX_SUBCALLS_IN_FLIGHT = 12  # the sub-call model (`:step0`), set by the ModelClient that has it (step 10 §6)
+
+# The least time between the starts of two requests to the sub-call model: at most 4 new ones a
+# second (step 10 §6, Rishi 2026-10-16: spread sub-calls out even if it is slower). A default to tune *(mine)*.
+SUBCALL_START_GAP_S = 0.25
 
 ROOT_TEMPERATURE = 1.0  # training and eval alike (spec §5.1)
 ENABLE_THINKING = False  # root and sub-calls (spec §5.1)
@@ -61,9 +85,14 @@ SUBCALL_REJECT_STATUSES = frozenset({400, 413, 422})  # the model's prompt was r
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    tries: int = 6
-    base_s: float = 2.0
-    max_s: float = 60.0
+    """Jittered exponential backoff. The defaults wait 4, 8, 16, 32, 64, 120 and 120 s between 8 tries,
+    364 s before jitter, so a request rides out about 6 minutes of throttling. They were 6 tries from
+    2 s, capped at 60 s, which covered about a minute and ran out on 7 requests in step 10's last step
+    (step 10 §6, 2026-10-16). Defaults to tune *(mine)*."""
+
+    tries: int = 8
+    base_s: float = 4.0
+    max_s: float = 120.0  # also caps a Retry-After header
     jitter: float = 0.5  # each wait is scaled by a random factor in [1 - jitter, 1 + jitter]
     timeout_s: float = 600.0  # one request, sent to the API as its timeout
 
@@ -88,16 +117,27 @@ class RequestFailed(InfraError):
         self.attempts = attempts
 
 
-# ----------------------------------------------------------------------------- limiter
+# ----------------------------------------------------------------------------- limiter and pacer
 
 
 class Limiter:
     """Caps requests in flight, in total and per model name. Waiters are served first come, first served,
-    except that one blocked only by its own model's cap doesn't hold up requests for another model."""
+    except that one blocked only by its own model's cap doesn't hold up requests for another model.
 
-    def __init__(self, total: int = MAX_IN_FLIGHT, per_model: int = MAX_IN_FLIGHT_PER_MODEL):
+    `model_caps` gives some models a cap of their own in place of `per_model`, such as the sub-call
+    model's MAX_SUBCALLS_IN_FLIGHT, which ModelClient sets on the limiter it creates.
+    """
+
+    def __init__(self, total: int = MAX_IN_FLIGHT, per_model: int = MAX_IN_FLIGHT_PER_MODEL,
+                 model_caps: dict[str, int] | None = None):
         if per_model > total:
             raise ValueError("the per-model cap can't be above the total cap")
+        self.model_caps = dict(model_caps or {})
+        for model, cap in self.model_caps.items():
+            if cap > total:
+                raise ValueError(f"the cap for {model} ({cap}) can't be above the total cap ({total})")
+            if cap < 1:
+                raise ValueError(f"the cap for {model} must be at least 1, not {cap}")
         self.total = total
         self.per_model = per_model
         self.in_flight = 0
@@ -118,6 +158,10 @@ class Limiter:
     @property
     def waiting(self) -> int:
         return sum(1 for _, fut in self._waiters if not fut.done())
+
+    def cap(self, model: str) -> int:
+        """The most requests `model` may have in flight."""
+        return self.model_caps.get(model, self.per_model)
 
     @asynccontextmanager
     async def slot(self, model: str):
@@ -157,7 +201,7 @@ class Limiter:
                 continue
             if self.in_flight >= self.total:
                 break
-            if self.by_model[model] >= self.per_model:
+            if self.by_model[model] >= self.cap(model):
                 continue  # keeps its place; a later request for another model may go first
             self._waiters.remove(item)
             self.in_flight += 1
@@ -173,6 +217,64 @@ class Limiter:
             if item[1] is fut:
                 self._waiters.remove(item)
         self._grant()
+
+
+class Pacer:
+    """Spaces out the starts of requests to a model: each starts at least `gaps[model]` seconds after
+    the one booked before it. Models without a gap start at once.
+
+    A start time is booked without an await in between, so requests that arrive together under
+    asyncio get distinct times: a burst of 10 with a 0.25 s gap goes out over 2.25 s. A request that
+    wakes late, behind a busy event loop, waits on until a full gap has passed since the request
+    before it started, so late wake-ups don't bunch either. A request cancelled while it waits leaves
+    its time unused, which only widens the gap. ModelClient paces before it asks the limiter for a
+    slot, so a request waiting here holds none. One that then waits in the limiter's queue starts
+    when a slot frees, one per finished request, so that queue doesn't release a burst either.
+    """
+
+    def __init__(self, gaps: dict[str, float] | None = None):
+        self.gaps = dict(gaps or {})
+        for model, gap in self.gaps.items():
+            if gap < 0:
+                raise ValueError(f"the start gap for {model} can't be negative ({gap})")
+        self._next: dict[str, float] = {}  # by model: the next start time free to book, on time.monotonic()
+        self._last: dict[str, float] = {}  # by model: when the last request actually started
+
+    def reserve(self, model: str) -> float:
+        """Book `model`'s next start time and return how long to wait for it (0 for a model without a gap)."""
+        gap = self.gaps.get(model, 0.0)
+        if gap <= 0:
+            return 0.0
+        now = time.monotonic()
+        start = max(now, self._next.get(model, now))
+        self._next[model] = start + gap
+        return start - now
+
+    async def wait(self, model: str) -> float:
+        """Wait for `model`'s next start time. Returns the seconds waited."""
+        gap = self.gaps.get(model, 0.0)
+        if gap <= 0:
+            return 0.0
+        began = time.monotonic()
+        delay = self.reserve(model)
+        while True:
+            if delay > 0:
+                await asyncio.sleep(delay)
+            now = time.monotonic()
+            last = self._last.get(model)
+            delay = 0.0 if last is None else last + gap - now
+            if delay <= 0:
+                break
+        self._last[model] = now
+        self._next[model] = max(self._next[model], now + gap)  # later bookings follow the actual starts
+        return now - began
+
+
+def settings() -> dict:
+    """The pinned request limits, for the run's config.json (spec §8)."""
+    return {"max_in_flight": MAX_IN_FLIGHT, "per_model": MAX_IN_FLIGHT_PER_MODEL,
+            "subcall_in_flight": MAX_SUBCALLS_IN_FLIGHT, "subcall_start_gap_s": SUBCALL_START_GAP_S,
+            "retry": asdict(RetryPolicy())}
 
 
 # ----------------------------------------------------------------------------- accounting
@@ -229,14 +331,15 @@ class RequestStats:
     timeouts: int = 0
     connection_errors: int = 0
     rejected: int = 0  # non-retryable 4xx
+    paced_s: float = 0.0  # waiting for a start time from the Pacer, summed over tries, like the limiter's waited_s
     failed: collections.Counter = field(default_factory=collections.Counter)  # RequestFailed raised, by kind
     events: collections.deque = field(default_factory=lambda: collections.deque(maxlen=500))  # failures with cf-ray
 
     def as_dict(self) -> dict:
         return {"calls": dict(self.calls), "attempts": self.attempts, "retries": self.retries,
                 "rate_limited": self.rate_limited, "server_errors": self.server_errors, "timeouts": self.timeouts,
-                "connection_errors": self.connection_errors, "rejected": self.rejected, "failed": dict(self.failed),
-                "events": list(self.events)}
+                "connection_errors": self.connection_errors, "rejected": self.rejected,
+                "paced_s": round(self.paced_s, 3), "failed": dict(self.failed), "events": list(self.events)}
 
 
 # ----------------------------------------------------------------------------- token ids and thinking
@@ -290,17 +393,21 @@ def _retry_after(exc: Exception) -> float | None:
 
 
 class ModelClient:
-    """Root turns and sub-calls for one run, through one limiter.
+    """Root turns and sub-calls for one run, through one limiter and one pacer.
 
     `openai_client` is any AsyncOpenAI-compatible client, usually ART's `model.openai_client()`.
     Its own retries are turned off, so every retry is counted and waits outside the limiter.
+    Without a `limiter` or `pacer` given, the client makes its own, giving `subcall_model` its cap
+    of MAX_SUBCALLS_IN_FLIGHT and its start gap of SUBCALL_START_GAP_S (step 10 §6). One given is
+    used as it is: pass the same ones to clients that should share them.
     """
 
     def __init__(self, openai_client: Any, *, subcall_model: str, limiter: Limiter | None = None,
-                 retry: RetryPolicy = RetryPolicy(), rng: random.Random | None = None):
+                 pacer: Pacer | None = None, retry: RetryPolicy = RetryPolicy(), rng: random.Random | None = None):
         self._client = openai_client.with_options(max_retries=0)
         self.subcall_model = subcall_model
-        self.limiter = limiter or Limiter()
+        self.limiter = limiter if limiter is not None else Limiter(model_caps={subcall_model: MAX_SUBCALLS_IN_FLIGHT})
+        self.pacer = pacer if pacer is not None else Pacer({subcall_model: SUBCALL_START_GAP_S})
         self.retry = retry
         self.stats = RequestStats()
         self.spend: collections.defaultdict[str, Usage] = collections.defaultdict(Usage)  # every response, by kind
@@ -400,11 +507,13 @@ class ModelClient:
         raise RequestFailed(kind, message, model=model, **kw)
 
     async def _request(self, kind: str, model: str, **kwargs) -> Any:
-        """One chat completion under the limiter, retried on 429, 5xx, timeouts and dropped connections."""
+        """One chat completion, paced and under the limiter, retried on 429, 5xx, timeouts and dropped connections."""
         self.stats.calls[kind] += 1
         tries = self.retry.tries
         for attempt in range(tries):
             retry_after = failure = status = cf_ray = None
+            paced = await self.pacer.wait(model)  # every try, before it holds a slot
+            self.stats.paced_s += paced  # after the await: `+= await` would read the total first and lose others' time
             self.stats.attempts += 1
             async with self.limiter.slot(model):
                 try:

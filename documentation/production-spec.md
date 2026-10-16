@@ -177,7 +177,7 @@ Exact accuracy is logged next to the reward, and it is the headline metric. Ther
 | Root output tokens per turn | 1,536 | 3,072 |
 | Sub-call prompt size | 24,000 chars | 24,000 chars |
 | Sub-call output tokens | 1,024 | 1,024 |
-| REPL output shown | 2,000 chars | 2,000 chars |
+| REPL output shown | 2,000 chars | 2,000 chars; 8,000 from prompt v2 (§12.3) |
 | Traceback shown | last 6 lines | last 6 lines |
 | Cell timeout | 120 s, including time queued for sub-calls | 120 s of compute; time blocked on the bridge doesn't count |
 | After a timeout or crash | REPL restarted, variables lost | Same, and the model is told |
@@ -384,7 +384,7 @@ The REPL wires them in with `repl_tools.configure(root, base, time_left, on_call
 ```text
 You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
 
-Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
+Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 8000 characters). Variables persist between turns.
 
 Available in the REPL:
 - `context`: the task input (str)
@@ -443,7 +443,7 @@ The second seed (step 10) keeps prompt v1, so it repeats the setup steps 5 and 6
 | Sub-calls | 30 | 30 |
 | Root output tokens per turn | 3,072 | 4,096 |
 | Sub-call prompt and output | 24,000 chars, 1,024 tokens | same |
-| REPL output shown | 2,000 chars | 2,000 chars |
+| REPL output shown | 8,000 chars (prompt v1: 2,000) | 8,000 chars |
 | Cell timeout (compute) | 120 s | 300 s |
 | Container | 1 CPU, 512 MB, 64 pids | 2 CPUs, 4 GB, 256 pids |
 | Grader timeout | none | Per task: 600 s, or 4x its slowest gold run if longer |

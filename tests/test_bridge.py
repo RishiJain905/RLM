@@ -14,7 +14,7 @@ from rlm_rl.bridge import EpisodeBridge, InfraError, SubcallError
 # Spec §12.2 (prompt v2), copied from the spec. A change here is a change to what the model is trained on.
 SPEC_SYSTEM_PROMPT_V2 = """You are a Recursive Language Model. You work on a task whose input is too large to read directly. The input is stored in a persistent Python REPL as the string variable `context`; for coding tasks, a repository is also checked out on disk.
 
-Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 2000 characters). Variables persist between turns.
+Each turn, write a short plan and then exactly one ```python code block. The REPL runs it and shows you what it prints (truncated to 8000 characters). Variables persist between turns.
 
 Available in the REPL:
 - `context`: the task input (str)
@@ -71,6 +71,10 @@ class PromptTextTest(unittest.TestCase):
         v1 = bridge.SYSTEM_PROMPT_V1
         self.assertIn(f"at most {bridge.MAX_TURNS} turns and {bridge.MAX_SUBCALLS} sub-calls", v1)
         self.assertIn(f"truncated to {bridge.OUTPUT_MAX_CHARS} characters", bridge.SYSTEM_PROMPT)
+        self.assertIn(f"truncated to {bridge.OUTPUT_MAX_CHARS_V1} characters", v1)  # the second seed's cap
+        self.assertEqual(bridge.limits("tickets_all", "v1").output_max_chars, bridge.OUTPUT_MAX_CHARS_V1)
+        self.assertEqual(bridge.limits("tickets_all").output_max_chars, bridge.OUTPUT_MAX_CHARS)
+        self.assertEqual(bridge.limits("edit_real").output_max_chars, bridge.OUTPUT_MAX_CHARS)
         self.assertNotIn("at most 12 turns", bridge.SYSTEM_PROMPT)  # v2 gives the limits with each task
         self.assertIn(f"{bridge.CELL_TIMEOUT_S} seconds", bridge.CELL_TIMEOUT_ERROR)
         self.assertEqual(bridge.budget_exhausted_message(), "sub-call budget exhausted (30 total)")
@@ -147,6 +151,8 @@ class PromptTextTest(unittest.TestCase):
                          "Your next turn is the last one: it must call submit() with your best answer.")
         long = bridge.observation("x" * 2000, 2500, None, 3, 30)
         self.assertTrue(long.startswith("REPL output:\n" + "x" * 2000 + "\n[... 500 more characters truncated]"))
+        cut = bridge.observation("x" * 8000, 9000, None, 3, 30, max_chars=2000)  # a prompt v1 episode's cap
+        self.assertTrue(cut.startswith("REPL output:\n" + "x" * 2000 + "\n[... 7000 more characters truncated]"))
 
     def test_truncate_prompt(self):
         self.assertEqual(bridge.truncate_prompt("abc"), "abc")
