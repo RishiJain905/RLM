@@ -2,6 +2,8 @@
 
 > **Status:** draft for discussion, 2026-10-10. Step 9, the live dashboard, was added at your request. **Updated 2026-10-11:** steps 1-7 are built, and decision 7c dropped cyber from the run (step 7). **Updated 2026-10-12:** code editing joins the run: build steps E1-E6 from [code-editing-plan.md](code-editing-plan.md) §13, spec v2 in [production-spec.md](production-spec.md) §12, and the split below (no E7 probe, reserve $10). No W&B credit has been spent.
 >
+> **Updated 2026-10-16:** steps 1-9 and the code-editing build (E1-E6, "step 9.5") are complete, and the three findings of the edit red team (E6) were fixed on 2026-10-15. Steps 10-12 are brought up to date below: the decisions already taken, the edit data as actually built, what each step takes on the PC, and what is still open (10d, 11a, 11b, 12b; 13a and 13b later). W&B inference left: ~$217.55 of $250. The $32.45 spent is the earlier experiments plus $0.13 of step 2's checks, and nothing since. Every paid step still waits for your go-ahead.
+>
 > **Source of truth:** [rl-run-research.md](rl-run-research.md). Its html version says the same thing. Section numbers (§) below point into it. Anything marked *(mine)* is my recommendation, not the research's. Anything marked *(inferred)* hasn't been checked yet.
 >
 > **How to answer:** each step ends with its own open decisions, numbered by step (1a, 1b, …). Reply with the number and your pick, for example "1a yes, 1b calibrate, 3b WSL2". Where a step lists defaults, I'll use them unless you say otherwise.
@@ -32,22 +34,22 @@ The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverle
 - *PC*: code that runs on your PC through a Remote Control thread.
 - *Spend*: uses W&B inference credit, and waits for your go-ahead.
 
-| # | Step | Type | Covers | W&B inference | Decisions |
-|---|---|---|---|---|---|
-| 1 | Freeze the design spec | Design | H1, H10 (spec) | $0 | 1a, 1b, 1c |
-| 2 | Prerequisite checks | You + PC | §6, §7.4, §10.7 | $0 | none (one action for you) |
-| 3 | Sandbox and bridge (do first) | PC | H2, H3, H4, H10 | $0 | 3a, 3b, 3c |
-| 4 | Limiter, infra flags, eval logging (do first) | PC | H5, H6, H9 | $0 | none |
-| 5 | Environment v2 | PC | H1, H11, H13 | $0 | 5a |
-| 6 | Training loop and monitoring | PC | §5.3, §8.5, §8.6 | $0 | none |
-| 7 | Data | PC + Design | H7, H8 | $0 | 7a, 7b, 7c |
-| 8 | Red-team | Claude agent | H11, re-checks H1-H4 | $0 | none |
-| 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c |
-| E1-E6 | Code editing build ([code-editing-plan.md](code-editing-plan.md) §13) | Design + PC | spec §12 | $0 | taken (E-a to E-g) |
-| 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | 10a, 10b, 10c |
-| 11 | Baselines | Spend | §8.2 | ~$9 | 11a |
-| 12 | Production run | Spend | §8.6 | up to ~$157 + ~$30 evals | 12a |
-| 13 | Final eval off W&B | PC or GPU host | §7.4 | $0 on W&B | 13a, 13b |
+| # | Step | Type | Covers | W&B inference | Decisions | Status (2026-10-16) |
+|---|---|---|---|---|---|---|
+| 1 | Freeze the design spec | Design | H1, H10 (spec) | $0 | 1a, 1b, 1c | Done |
+| 2 | Prerequisite checks | You + PC | §6, §7.4, §10.7 | $0 ($0.13 of checks) | none (one action for you) | Done |
+| 3 | Sandbox and bridge (do first) | PC | H2, H3, H4, H10 | $0 | 3a, 3b, 3c | Done |
+| 4 | Limiter, infra flags, eval logging (do first) | PC | H5, H6, H9 | $0 | none | Done |
+| 5 | Environment v2 | PC | H1, H11, H13 | $0 | 5a | Done |
+| 6 | Training loop and monitoring | PC | §5.3, §8.5, §8.6 | $0 | none | Done |
+| 7 | Data | PC + Design | H7, H8 | $0 | 7a, 7b, 7c | Done |
+| 8 | Red-team | Claude agent | H11, re-checks H1-H4 | $0 | none | Done |
+| 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c | Done; the billing check waits for step 10 |
+| E1-E6 | Code editing build, "step 9.5" ([code-editing-plan.md](code-editing-plan.md) §13) | Design + PC | spec §12 | $0 | taken (E-a to E-g) | Done 2026-10-13; red-team fixes 2026-10-15 |
+| 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | taken (E-d, E-g); 10d new | **Next:** ready, waits for your go-ahead |
+| 11 | Baselines | Spend | §8.2 | ~$9 | 11a, 11b | After step 10 |
+| 12 | Production run | Spend | §8.6 | up to ~$157 + ~$30 evals | 12a taken; 12b new | After step 11; 12b first |
+| 13 | Final eval off W&B | PC or GPU host | §7.4 | $0 on W&B | 13a, 13b | After step 12 |
 
 Inference adds up to ~$218 of the ~$218 left, counting a ~$10 reserve.
 
@@ -513,15 +515,32 @@ You change sharing yourself from the page's Share menu; I can't do it for you. S
 
 ## Step 10. Second seed, which is also the smoke test
 
-**Type:** Spend · **Cost:** ~$12 · **Hole:** H12 · **Research:** §7.3, §11
+**Type:** Spend · **Cost:** ~$12 · **Hole:** H12 · **Research:** §7.3, §11 · **Status (2026-10-16):** next. Everything it needs is built and tested; it waits only for your go-ahead, because it spends credit.
 
 ### What we run
 
-We repeat the 20-step GRPO run at level 1 on the ticket tasks, on environment v2, plus a 100-episode held-out eval. That is about 740 episodes.
+We repeat the 20-step GRPO run at level 1 on the ticket tasks, on environment v2, plus a 100-episode held-out eval. That is about 740 episodes. `config.second_seed` pins it:
+- learning rate 1e-5, fixed, with the difficulty controller frozen;
+- 20 steps, then the held-out eval on the first seed's tasks (`heldout-seed1`);
+- prompt v1, so it repeats the setup the 20-step run used (decision E-g; production and the baselines use v2);
+- thinking off on root calls and sub-calls, which a replication needs (step 2 results §6).
+
+It uses read tasks only: no edit sandboxes, and almost no load on the data drive. Read-only dry runs took a median 290 s a step, so expect roughly 2-3 hours with the eval *(inferred: live inference adds latency the dry runs don't have)*.
+
+**How it runs** ([step-9-results.md](step-9-results.md) §7):
+1. In WSL: `.venv-linux/bin/python scripts/train.py start --kind second_seed --run second-seed-v1 --live`.
+2. Beside it, a Claude session on the PC runs the dashboard loop: `scripts/dashboard.py wait second-seed-v1 --pot-left <W&B balance>`. It publishes each step to the same dashboard URL your friends already have.
+
+**Before it starts** (all $0):
+- your go-ahead;
+- the inference balance read off W&B's billing page, for `--pot-left` and for the billing check afterwards;
+- Docker and WSL up, no leftover `rlm-` containers, and the sandbox folder owned by your user;
+- the full test suite on the final code (`scripts/sandbox_ctl.py check`): after the 2026-10-15 red-team fixes only the changed modules were rerun (128 of 128), not the whole suite;
+- one fake-model dry run on the final code (`--dry-run`) that comes out clean.
 
 ### Why it comes here
 
-There is no pilot, so this is the first run on the new environment. It catches plumbing bugs at about a tenth of production cost. It also shows whether the gain reproduces with the sandbox, calibrated reward and restored clip in place.
+There is no pilot, so this is the first run on the new environment. It catches plumbing bugs at about a tenth of production cost. It also shows whether the gain reproduces with the sandbox, calibrated reward and restored clip in place. Since decision E-g the code-editing build no longer gates it: it never touches edit tasks. Running it before the baselines also gives the dashboard its first live run.
 
 ### Done when
 
@@ -530,8 +549,11 @@ There is no pilot, so this is the first run on the new environment. It catches p
 - Its stability curves decide production's learning rate: 2e-5 if they pass the checks in spec §5.2, otherwise 1e-5.
 - Infra errors stay under 1%.
 - No detector fires unexpectedly.
+- The dashboard's cost panel matches W&B's billing page. That is step 9's last open check.
 
-### Decisions for this step
+### Decisions for this step (10a-10c taken, 10d new)
+
+10a, 10b and 10c were settled with the code-editing plan on 2026-10-12 (decisions E-d and E-g): the split below, run the second seed, and run it as soon as it's ready, independently of the edit build. They are kept here for the record.
 
 **10a. The inference split**
 
@@ -547,38 +569,54 @@ There is no pilot, so this is the first run on the new environment. It catches p
 
 Updated 2026-10-12 for code editing (Rishi: no E7 probe, reserve $25 to $10). Baselines add the 16 edit tasks, run twice; each selection eval costs ~$3.50 with edit tasks. Spec §12.11 holds the same table.
 
-- **Approve as is: recommended (research).**
-- **Change it,** and say which line.
+- **Taken: approved as is** (decision E-d, 2026-10-12; spec §12.11).
 
 **10b. Run the second seed at all**
-- **Run it: recommended (research).** It replaces the pilot, and it checks that 0.70 wasn't a lucky seed.
-- **Skip it and save ~$12.** Production's first steps then become the smoke test, so a plumbing bug costs production budget, and the 20-step result stays a single seed.
+- **Taken: run it** (decision E-g). It replaces the pilot, and it checks that 0.70 wasn't a lucky seed.
+- *Not taken:* skip it and save ~$12, making production's first steps the smoke test.
 
 **10c. When to run it**
-- **After data and the red-team (steps 7-8),** as the research orders it.
-- **Straight after step 6 and the dashboard (step 9), once a red-team pass on the ticket environment comes back clean: recommended (mine).** Data gets built while it runs, and the new task families get their own red-team before production. It costs the same and warns us earlier about plumbing bugs.
+- **Taken: as soon as it's ready, without waiting for the edit work** (decision E-g). It's ready now.
+- *Not taken:* after the code-editing build, so that every paid run uses prompt v2.
+
+**10d. Test resuming from an earlier checkpoint on W&B** (new, 2026-10-16; from [step-6-results.md](step-6-results.md) §8)
+
+Rolling back and the learning-rate fallback both fork an earlier checkpoint through ART's experimental fork call. ART documents it for serverless, but no run has used it yet *(inferred that it works)*.
+- **Test it once the second seed finishes: recommended (mine).** `train.py resume second-seed-v1 --from 15 --stop-after 16 --live` trains one extra step, about $0.50, inside the second seed's $14 ceiling. If training continued from the fork, the new step 16's KL to base matches the original's; if it silently started from the base model, KL drops to about 0.
+- **Skip it.** It saves $0.50, but production's first rollback becomes the first test, and a broken fork would cost production steps.
 
 ---
 
 ## Step 11. Baselines
 
-**Type:** Spend · **Cost:** ~$9 · **Research:** §8.2
+**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-16):** after step 10. The selection set is built; the script that runs the baselines isn't yet (below).
 
 ### What we run
 
-On the 64-task selection set (`selection-v2`, spec §12.10: 48 read tasks and 16 edit tasks), about 150 episodes:
-- **Base Qwen3.8-27B as an RLM** in environment v2, prompt v2. This is the step-0 number. The 16 edit tasks run twice, which also measures cost per edit episode, turn-cap hits and the base pass rate per tier before production (the dropped E7 probe's job).
+On the 64-task selection set (`selection-v2`, spec §12.10), about 150 episodes. As built, it holds 48 read tasks (aggregation, call graph, needle, repo localization and tickets) and 16 edit tasks: 10 `edit_real` (Python 3, Go 4, JavaScript 3) and 6 `edit_synth`.
+- **Base Qwen3.8-27B as an RLM** in environment v2, prompt v2, thinking off. This is the step-0 number. The 16 edit tasks run twice. That also measures, before production:
+  - the cost per edit episode, against code-editing-plan.md §10's guesses: ~$0.06 for `edit_synth` and ~$0.15 for `edit_real` *(inferred)*;
+  - turn-cap hits;
+  - the base pass rate per tier, the dropped E7 probe's job.
 - **The base model reading the context directly,** where it fits in 262K tokens (read tasks only).
+- **If 11b says so,** the base model as an RLM with root thinking at `medium` on the same 64 tasks. Sub-calls stay off.
 
 The 20-step checkpoints (both seeds) are the research's third baseline. They are optional here, and not included in the ~$9.
 
+The edit episodes run in Docker on your PC, on the D: data drive. A Go task's tests take up to about an hour under load ([edit-build-results.md](edit-build-results.md) §5a), so expect a few hours for the whole step *(inferred)*.
+
+**Before it runs** ($0, on the PC): a small baseline script. `scripts/train.py` only has `start`, `resume`, `stop` and `status`, and nothing in `rlm_rl/` reads a context without the REPL (checked 2026-10-16). Production's checkpoint-0 eval covers the base model as an RLM once, but not the second pass over the edit tasks, direct reading or the thinking arm. The script reuses `evals.run_eval` and the episode loop, and gets a fake-model dry run first.
+
 ### Why it comes here
 
-The stop rules and every claim compare against these numbers. Without the direct-reading number we can't claim the RLM setup helps.
+The stop rules and every claim compare against these numbers. Without the direct-reading number we can't claim the RLM setup helps. It is also the first paid run of edit tasks. Its measured cost per edit episode checks production's ~$2.10 a step before the $157 is committed (code-editing-plan.md §16).
 
 ### Done when
 
-Both baselines are logged with full transcripts.
+- Both baselines are logged with full transcripts, and so is the thinking arm if it runs.
+- The cost per edit episode is measured, and production's step count is re-estimated from it. If edit episodes cost much more than estimated, production drops toward ~50 steps or the edit share drops; that is your call before step 12.
+- Two settings are checked against code-editing-plan.md §9 and §11: if more than ~20% of the base model's edit episodes hit the 20-turn cap with a test failing, edit turns go to 30; if the base model passes under ~15% of `edit_real` level 1, `edit_real` starts at a lower share for its first 20 steps.
+- The 11b comparison is settled, if the arm ran.
 
 ### Decisions for this step
 
@@ -586,17 +624,50 @@ Both baselines are logged with full transcripts.
 - **The base model, as in training: recommended (mine; the research makes no call).** The root was trained against base-model sub-calls, so evals stay comparable and nothing shifts at deployment.
 - **The trained LoRA.** That means one model to serve, but sub-calls then behave differently from training and need their own eval.
 
-This is needed here because every eval from now on should use whichever model the harness will use.
+This is needed here because every eval from now on should use whichever model the harness will use. Training already uses the frozen base model for sub-calls (spec §0); this decision is about deployment and the evals.
+
+**11b. Thinking for the production root** (from [step-2-prerequisite-results.md](step-2-prerequisite-results.md) §6; not in this plan until now)
+- **Add one base-model arm with root thinking at `medium` to the baselines: recommended (step 2, mine).** It costs ~$2 for the 64 tasks, more with edit tasks (~$2-3 *(inferred)*), which is about one production step. Production uses `medium` only if it beats thinking off by a clear margin, about 12 points or more (~2 SE at n = 64). Otherwise production stays off. Sub-calls stay off either way, and `xhigh` is never used. Thinking at `medium` costs ~1.6× per read episode, so production would buy fewer steps. Editing may gain more from thinking than reading does (code-editing-plan.md §16).
+- **Skip it.** Thinking stays off everywhere, as in the 20-step run, and the question stays untested.
 
 ---
 
 ## Step 12. Production run
 
-**Type:** Spend · **Cost:** up to ~$157 + ~$30 evals; training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9
+**Type:** Spend · **Cost:** up to ~$157 + ~$30 evals; training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9 · **Status (2026-10-16):** after step 11. Code, data and dry runs are ready. The edit red team's gate for edit spend is open now that F1-F3 are fixed ([step-9.5-red-team-results.md](step-9.5-red-team-results.md), Fixes). 12b comes first.
 
 ### What we run
 
-GRPO at 32 episodes per step, with every family starting at level 1. It runs until a stop rule fires or it reaches the $157 ceiling. The live dashboard (step 9) updates every step, so you and your friends can watch it. The learning rate is whatever the second seed decided. At 2e-5, entropy or reward-std collapse rolls the run back to the last good checkpoint and continues at 1e-5 (spec §5.2). With 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). The selection set and capability check run every 10 steps, at ~$3.50 each.
+GRPO at 32 episodes per step (8 tasks × 4 rollouts), with every family starting at level 1. It runs until a stop rule fires or it reaches the $157 ceiling. The live dashboard (step 9) updates every step at the same URL, so you and your friends can watch it.
+- **Learning rate:** whatever the second seed decided. At 2e-5, entropy or reward-std collapse rolls the run back to the last good checkpoint and continues at 1e-5 (spec §5.2).
+- **Mix** (spec §12.7):
+  - aggregation 25%;
+  - code reading 20% (`callgraph` 10%, `needle` 10%);
+  - repo localization 15%;
+  - editing 40% (`edit_real` 25%, `edit_synth` 15%).
+- **Cost:** with 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). Step 11 re-checks this.
+- **Evals:** the selection set and capability check run every 10 steps, at ~$3.50 each.
+- **Thinking:** off, unless 11b's arm earns `medium` for the root.
+
+The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5> --live`, with the same dashboard loop as step 10.
+
+**The edit data it trains on** (round 1, frozen 2026-10-13; [edit-build-results.md](edit-build-results.md) §7):
+- **`edit_real` training: 107 tasks.** Python 86, Go 16 (2 of them real pull requests), JavaScript 5. Levels: 46 at level 1, 48 at level 2, 13 at level 3, none at 4-5 (a draw above level 3 takes the nearest level).
+- **Eval splits:** selection 10 and test 40 (Python 16, Go 15, JavaScript 9; 8 of them feature tasks, where spec §12.10 asks for 15).
+- **Against the plan:** the spec planned ~314 `edit_real` tasks in five language groups. Rust, TypeScript, Java and the Go top-up have their candidates, images and fixes on D: for a later round.
+- **`edit_synth`** generates its tasks per seed, so it has no pool to run out of.
+
+**How long it takes on the PC.** Edit episodes and their graders run in Docker on the D: data drive, a USB hard disk. Measured under load, a step averages ~30-35 minutes: ~20-25 when its `edit_real` tasks are Python or JavaScript, about an hour when one is Go (edit-build-results.md §5a). 75 steps is ~40 hours. Add about an hour for each of the ~7-8 selection evals, and the run takes ~2-2.5 days of the PC running without a break *(inferred)*. A slow drive costs time, never reward: every limit was set from measurements, and an infra error is never scored as a 0.
+
+**Before it starts** (all $0, on the PC):
+1. **What 12b chooses,** built and tested.
+2. **The training run clears leftover containers at start.** The data build does this since 2026-10-15, but a training run doesn't yet, so a crashed run's containers would pile up. It's a few lines and a test.
+3. **Optional drive settings**, yours to make (edit-build-results.md §5a):
+   - Defender exclusions for `D:\Docker-Image`, `D:\WSL` and `D:\RLM-data` (as administrator);
+   - other WSL distros stopped during the run (e.g. `EXL3-Runtime`);
+   - no other jobs on D:.
+4. **Edit wins in the Claude audit** (decision 5a). `scripts/audit.py`'s sample shows no diff or grade, and audit-procedure.md has no edit checks (checked 2026-10-16). Since the audit is the backstop for the canary gap, each sampled edit win should show its diff, and the procedure should say what to look for (test or runner files touched, code that detects a test run, hard-coded expected values).
+5. **A last fake-model dry run** with `--real-edit` on the final code.
 
 **It keeps going while** the selection set has reached a new best in one of the last 3 evals, or a family has moved up a level in the last 30 steps.
 
@@ -612,7 +683,9 @@ GRPO at 32 episodes per step, with every family starting at level 1. It runs unt
 - entropy dropping fast, or KL jumping
 - sub-calls climbing toward 30 without accuracy following
 - turns or tokens hitting their caps
-- infra errors above 1%
+- infra errors above 1%; on edit steps this includes grader containers that never report (InfraPause: 4 of the last 320 episodes)
+- the edit detectors (`test_tamper`, `grader_tamper`, `test_aware`) firing, and the Claude audit of sampled edit wins. Recognizable canaries stay a known gap, and the audit is its backstop (step-9.5-red-team-results.md)
+- all-0 edit groups piling up, a language stuck near 0 on the dashboard's per-language table, and the `edit_real` pool shrinking through retirement (12b)
 
 **If money runs short:** cap training contexts at ~250K characters, or eval every 15 steps instead of 10. Cutting episodes per step is the last resort, because the 20-step run never tested it.
 
@@ -623,8 +696,15 @@ A stop rule fires or the run reaches the ceiling, and the best checkpoint on the
 ### Decisions for this step
 
 **12a. The $10 reserve**
-- **I ask you before touching it: recommended (mine).** This follows your rule to ask before spending credit.
-- **Spend it automatically when the last 2 evals were both new bests, then ask** (the research's rule). This saves a round-trip if you're away when the run hits the ceiling.
+- **Taken: I ask you before touching it** (2026-10-12; spec §12.11). The run stops at its ceiling and says whether the research's rule would spend the reserve; resuming with a higher ceiling spends it.
+- *Not taken:* spend it automatically when the last 2 evals were both new bests, then ask (the research's rule).
+
+**12b. When the `edit_real` pool runs out** (new, 2026-10-16)
+
+About 75 steps × 2 `edit_real` tasks is ~150 draws from 107 training tasks. Retirement takes a task out for good once its group comes back all-0 twice or all-1 once. If every task retires, `editreal.make_task` raises "no edit_real task left to draw", nothing catches it, and the run stops mid-step. It can resume from its last checkpoint, but someone has to be there.
+- **Add a fallback before production: recommended (mine).** When the pool is empty, draw again from the tasks retired longest ago, or move `edit_real`'s 25% to `edit_synth` for the rest of the run. It takes a few hours on the PC with a test, costs $0, and the run never stops for want of tasks. Round 2 can still be added later.
+- **Build round 2 first.** Validate Rust, TypeScript, Java and the Go top-up toward the ~314 planned tasks: more languages and less repetition. Round 1's validation took about two days on the data drive, so production would start days later *(inferred)*.
+- **Start as is.** It costs nothing up front, but risks a stop partway through the run; I'd then add one of the above and resume.
 
 ---
 
@@ -639,6 +719,12 @@ We push the best LoRA to your Hugging Face. Then we run the held-out test, the p
 - 2-3 sampling seeds
 - paired tests (McNemar or paired bootstrap)
 - the base model and direct reading re-run in the same place
+
+Code editing adds (code-editing-plan.md §14):
+- the edit tiers: the 40-task `edit_real` test split as built, with 8 feature tasks rather than 15;
+- SWE-bench Pro, DeepSWE v1.1 and the normal-coding-agent comparison (decision E-e), run through Harbor.
+
+That needs Docker on the eval host for the repository images.
 
 **The comparison is fair only if** it uses the same harness (frozen bridge, prompts, limits and decoding), the same sub-call model (11a), and runs the base model in the same setup.
 
