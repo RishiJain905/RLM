@@ -15,6 +15,14 @@ need more than that:
   policy's and the base model's logprobs line up token for token. The logged KL is the mean of
   (policy logprob - base logprob) over those tokens. A turn whose tokens don't line up is skipped
   and counted. It is logged, never put in the loss.
+
+  With root thinking (production, decision 11b) a turn's sampled tokens include its thinking, which
+  the next turn's prompt drops, so the whole conversation no longer lines up. Each re-scored
+  rollout then re-scores `KL_TURNS_PER_THINKING_EPISODE` of its turns, picked at random, one
+  request each: the conversation up to that turn, with the turn itself as the assistant's
+  unfinished reply, its thinking inside `<think>` tags, under the same thinking setting. That
+  renders exactly the prompt the turn was sampled from plus its sampled tokens, except the final
+  end-of-turn token, which isn't scored. Two turns keep the cost near one whole-conversation request.
 """
 
 from __future__ import annotations
@@ -26,8 +34,10 @@ import statistics
 from typing import Any
 
 from . import bridge, detectors, editmetrics
-from .client import ModelClient, RequestFailed, Usage
+from .client import IM_END_ID, ModelClient, RequestFailed, Usage
 from .env import Episode, StepFilter
+
+KL_TURNS_PER_THINKING_EPISODE = 2  # turns re-scored per rollout when the root thinks *(mine)*
 
 TRAIN_METRIC_KEYS = {  # ART's serverless train metrics -> our names (spec §9)
     "loss/grad_norm": "grad_norm",
@@ -107,32 +117,70 @@ def align(ep: Episode, prompt_ids: list[int], base_logprobs: list[float | None])
     return pairs, misaligned
 
 
+def align_turn(choice: Any, prompt_ids: list[int], base_logprobs: list[float | None]) -> list[tuple[float, float]] | None:
+    """Pair one sampled turn's policy logprobs with its base logprobs, from a re-score of that turn alone (thinking
+    mode). The re-score ends where the reply's text does, so a final end-of-turn token isn't paired. None if the
+    tokens don't line up."""
+    extra = choice.model_extra or {}
+    p_ids, c_ids = extra.get("prompt_token_ids") or [], extra.get("token_ids") or []
+    content = getattr(getattr(choice, "logprobs", None), "content", None) or ()
+    expected = c_ids[:-1] if c_ids and c_ids[-1] == IM_END_ID else c_ids
+    start, end = len(p_ids), len(p_ids) + len(expected)
+    if (not expected or len(content) != len(c_ids) or end > len(prompt_ids) or prompt_ids[start:end] != expected
+            or prompt_ids[1:start] != p_ids[1:start]):
+        return None
+    return [(float(token.logprob), base_logprobs[start + i]) for i, token in enumerate(content[:len(expected)])
+            if token.logprob is not None and base_logprobs[start + i] is not None]
+
+
+def thinking_turn_messages(ep: Episode, k: int) -> list[dict]:
+    """The conversation up to turn k, with turn k as the assistant's unfinished reply, its thinking in <think> tags."""
+    turn = ep.turns[k]
+    reply = f"<think>\n{turn.reasoning or ''}\n</think>\n\n{turn.reply}"
+    return ep.messages[:2 + 2 * k] + [{"role": "assistant", "content": reply}]
+
+
 async def kl_to_base(client: ModelClient, episodes: list[Episode], *, base_model: str, n: int,
                      rng: random.Random) -> dict[str, Any]:
     """KL to base from `n` re-scored rollouts (spec §5.3). Never raises: failures are counted."""
     picked = rng.sample(episodes, min(n, len(episodes))) if episodes else []
     usage_before = client.spend["kl"].cost_usd()
+    thinking = client.root_thinking
+    jobs = []  # (episode, turn index or None for the whole conversation)
+    for ep in picked:
+        if thinking:
+            turns = min(len(ep.choices), len(ep.turns))
+            jobs += [(ep, k) for k in sorted(rng.sample(range(turns), min(KL_TURNS_PER_THINKING_EPISODE, turns)))]
+        else:
+            jobs.append((ep, None))
 
-    async def one(ep: Episode):
+    async def one(ep: Episode, k: int | None):
         try:
-            return ep, await client.prompt_logprobs(ep.messages, model=base_model)
+            if k is None:
+                return ep, k, await client.prompt_logprobs(ep.messages, model=base_model)
+            return ep, k, await client.prompt_logprobs(thinking_turn_messages(ep, k), model=base_model,
+                                                       thinking=thinking, continue_final=True)
         except RequestFailed as exc:
-            return ep, exc
+            return ep, k, exc
 
-    results = await asyncio.gather(*(one(ep) for ep in picked))
+    results = await asyncio.gather(*(one(ep, k) for ep, k in jobs))
     pairs, misaligned, failed = [], 0, 0
-    for ep, result in results:
+    for ep, k, result in results:
         if isinstance(result, Exception):
             failed += 1
             continue
-        got, bad = align(ep, *result)
+        if k is None:
+            got, bad = align(ep, *result)
+        else:
+            got = align_turn(ep.choices[k], *result)
+            got, bad = (got, 0) if got is not None else ([], 1)
         pairs.extend(got)
         misaligned += bad
     diffs = [p - b for p, b in pairs]
     # k3 = E[exp(r) - 1 - r] with r = base - policy: never negative and lower variance than k1 (logged beside it)
     k3 = [math.exp(-d) - 1 + d for d in diffs]
     return {"kl": _round(_mean(diffs)), "kl_k3": _round(_mean(k3)), "tokens": len(diffs), "rollouts": len(picked),
-            "failed": failed, "misaligned_turns": misaligned,
+            "requests": len(jobs), "failed": failed, "misaligned_turns": misaligned,
             "cost_usd": round(client.spend["kl"].cost_usd() - usage_before, 6)}
 
 

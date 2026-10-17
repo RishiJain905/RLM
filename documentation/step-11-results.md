@@ -299,13 +299,21 @@ Tests: 198 across every module these touch, in WSL. Three that pinned v2's defau
 **Spend:** step11-v3 measured $2.78, so step 11 counts **$9.99** against its $12 ceiling ($7.21 billed + $2.78 measured). If W&B bills this run's failed tries at the first run's rate, the billing page should read about $190.4.
 
 **Left before production (step 12):**
-1. **Train with root thinking at `medium`** (Rishi's decision B). Not built yet:
+1. **Train with root thinking at `medium`** (Rishi's decision B). *Done later on 2026-10-17, $0: see the end of this section.* What it needed:
    - the training loop's client and pinned config need the setting;
    - the KL monitor re-scores whole conversations with thinking off, so it would skip every thinking turn as misaligned. It needs to re-score each turn with its thinking included, which costs about 5× today's ~$0.01 a step.
 
    ART 0.5.20 handles thinking turns itself, as far as I can tell from its code: a turn whose prompt drops the earlier thinking becomes its own training sequence, so the tokens trained are the tokens sampled. Then a fake-model dry run with thinking on.
 2. **Optional:** 3.4% of medium-thinking turns hit the token cap, most of them read turns spent entirely on thinking (§6). A 4,096-token read turn would fix most of that for a little cost.
 3. **The `test_aware` false positive** on scratch scripts that call `process.exit` (§4) is still open. It is a red-team detector, so I left it for Rishi.
+
+**Training with medium thinking, built (Rishi: "do the full fix", no spend; 2026-10-17, $0):**
+- `config.production` sets `root_thinking="medium"`. The loop's client uses it, and the pinned config records it (`limits.thinking`). Sub-calls stay off.
+- The KL monitor re-scores 2 random turns of each re-scored rollout, one request each, with the turn's thinking in `<think>` tags as the assistant's unfinished reply under the same thinking setting. That is the prompt the turn was sampled from plus its sampled tokens, so policy and base logprobs pair up token for token. The cost is about the same as before.
+- ART needs no change. Its training sequences come from each turn's own prompt and sampled tokens, and a turn whose prompt dropped the earlier thinking starts a sequence of its own *(checked in ART 0.5.20's tokenizer, not live)*.
+- Tests: new ones for the monitor's thinking path, the client's continued-reply request and production's config. 198 tests across every affected module pass in WSL (monitor, client, baselines, training, data families, env, edit env, dashboard, bridge, contract, evals). The fake server now renders thinking the way Qwen3.8's template does.
+- A 3-step fake-model dry run of production with thinking on: selection and capability evals at checkpoint 0, then 3 trained steps, with every re-scored turn lined up (0 misaligned), prompt v3, 30 edit turns, `selection-v3`.
+- **The one live check left:** whether W&B's real chat template renders a continued thinking reply exactly as the model sampled it. Production's first step shows it for free (`kl_misaligned` on the dashboard). If turns don't line up, KL reads n/a, and training is unaffected (KL isn't in the loss or any stop rule).
 
 ## 14. Files
 

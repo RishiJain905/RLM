@@ -54,6 +54,10 @@ EDIT_MANIFEST = "edit/manifest.json"  # the edit task data's manifest, on the da
 SECOND_SEED_CEILINGS = {"train": 14.0, "eval": 3.0}  # ~$12 planned: ~$10 of steps and ~$1.6 of eval *(mine)*
 PRODUCTION_CEILINGS = {"train": 157.0, "eval": 30.0}  # spec §12.11; the ~$10 reserve is never spent without Rishi (12a)
 
+# Root thinking for production (Rishi, 2026-10-17, decision 11b): the base model with its root thinking at `medium` beat
+# thinking off by 17 points in the step 11 baselines, at ~1.25x the inference cost a step. Sub-calls stay off.
+PRODUCTION_ROOT_THINKING = "medium"
+
 TRAINING_GPU_USD_PER_STEP = 0.16  # the 20-step run's measured rate (research §7.1); an estimate for the dashboard
 
 
@@ -82,6 +86,7 @@ class RunConfig:
     first_step_estimate_usd: float = 1.0  # used by the budget check until a step has been measured
     eval_episode_estimate_usd: float = 0.03  # before any step has been measured (research §7.2: ~$0.016 at level 1)
     prompt_version: str = bridge.PROMPT_VERSION  # v3 (step 11 fixes on spec §12.2's v2); the second seed ran v1
+    root_thinking: str | None = None  # client.ROOT_THINKING_EFFORTS or None (off); production thinks at medium
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -94,6 +99,8 @@ class RunConfig:
             raise ValueError(f"unknown prompt version {self.prompt_version!r}")
         if self.prompt_version == "v1" and any(bridge.is_edit(f) for f in self.mix):
             raise ValueError("edit families need prompt v2 (spec §12.2)")
+        if self.root_thinking is not None and self.root_thinking not in client.ROOT_THINKING_EFFORTS:
+            raise ValueError(f"root thinking must be None or one of {client.ROOT_THINKING_EFFORTS}")
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -140,7 +147,7 @@ def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunCon
     return RunConfig(run=run, kind="production", learning_rate=learning_rate,
                      lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", mix=mix, eval_every=10,
                      eval_at_start=True, selection=selection, capability_set=capability_set,
-                     ceilings=dict(PRODUCTION_CEILINGS))
+                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING)
 
 
 # ----------------------------------------------------------------------------- pinned values (spec §8)
@@ -225,7 +232,8 @@ def pinned(cfg: RunConfig, *, lr: dict, controller_state: dict, spend: dict, tem
                    "traceback_lines": bridge.TRACEBACK_LINES, "cell_timeout_s": bridge.CELL_TIMEOUT_S,
                    "subcall_max_chars": bridge.SUBCALL_MAX_CHARS, "subcall_max_tokens": bridge.SUBCALL_MAX_TOKENS,
                    "subcall_temperature": bridge.SUBCALL_TEMPERATURE, "root_temperature": client.ROOT_TEMPERATURE,
-                   "thinking": client.ENABLE_THINKING},
+                   "thinking": cfg.root_thinking or False,  # the root's reasoning effort, or False for off
+                   "subcall_thinking": bridge.SUBCALL_ENABLE_THINKING},
         "train_call": cfg.train_args(lr["current"]),
         "lr": lr,
         "episodes_per_step": {"tasks": cfg.tasks_per_step, "rollouts": cfg.rollouts},

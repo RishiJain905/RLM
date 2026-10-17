@@ -16,7 +16,7 @@ from rlm_rl import baselines, bridge, client as rclient
 from rlm_rl.client import ModelClient, Pacer, RequestFailed, RetryPolicy
 from rlm_rl.env import Task
 from rlm_rl.tasks import tickets
-from tests.fake_model import THINKING_OFF_TAIL, THINKING_ON_TAIL, AsyncCase, FakeModelServer
+from tests.fake_model import FAKE_REASONING, THINKING_OFF_TAIL, THINKING_ON_TAIL, AsyncCase, FakeModelServer, thinking_ids
 from tests.fakes import FakeSandbox
 
 FAST = RetryPolicy(tries=3, base_s=0.01, max_s=0.05, timeout_s=10)
@@ -92,8 +92,8 @@ class RootThinkingTest(ServerCase):
         body = self.server.bodies[-1]
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": True, "reasoning_effort": "medium"})
         self.assertTrue(rclient.thinking_on_prompt(choice.model_extra["prompt_token_ids"]))
-        self.assertEqual(choice.model_extra["reasoning_tokens"], 8)
-        self.assertEqual(usage.root_reasoning_tokens, 8)
+        self.assertEqual(choice.model_extra["reasoning_tokens"], len(thinking_ids(FAKE_REASONING)))
+        self.assertEqual(usage.root_reasoning_tokens, len(thinking_ids(FAKE_REASONING)))
         self.assertEqual(rclient.reasoning_text(choice), "fake thinking about the next step")
         await client.subcaller()("hello")  # sub-calls stay off
         self.assertEqual(self.server.bodies[-1]["chat_template_kwargs"], {"enable_thinking": False})

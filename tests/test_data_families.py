@@ -383,6 +383,10 @@ class MixAndLicenceTest(unittest.TestCase):
         cfg = config.production("p", 2e-5)
         self.assertEqual(cfg.selection, "selection-v3")
         self.assertEqual(cfg.prompt_version, "v3")
+        self.assertEqual(cfg.root_thinking, "medium")  # decision 11b (Rishi, 2026-10-17)
+        self.assertIsNone(config.second_seed().root_thinking)
+        with self.assertRaises(ValueError):
+            config.RunConfig(run="x", kind="production", learning_rate=2e-5, lr_rule="fixed", root_thinking="xhigh")
         self.assertEqual(cfg.ceilings, {"train": 157.0, "eval": 30.0})
         self.assertEqual(cfg.capability_set, config.CAPABILITY_SET)
         self.assertEqual(cfg.mix, tasks.production_mix())

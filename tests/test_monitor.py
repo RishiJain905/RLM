@@ -71,6 +71,35 @@ class SignalsTest(MonitorCase):
         changed[first] += 1  # the first reply: the second turn's prompt no longer matches either
         self.assertEqual(monitor.align(ep, changed, lps)[1], 2)
 
+    async def test_kl_with_root_thinking_rescores_turns_with_their_thinking(self):
+        """Production thinks at medium (decision 11b): a turn's sampled tokens include its thinking, which the next
+        turn's prompt drops, so each re-scored rollout re-scores two of its turns, each with its thinking."""
+        self.client = ModelClient(self.openai, subcall_model=BASE, retry=FAST, rng=random.Random(0), root_thinking="medium")
+        groups = await self.groups()
+        episodes = monitor.scored(groups)
+        self.assertTrue(all(t.reasoning for ep in episodes for t in ep.turns))
+        start = len(self.server.bodies)
+        kl = await monitor.kl_to_base(self.client, episodes, base_model=BASE, n=3, rng=random.Random(0))
+        self.assertAlmostEqual(kl["kl"], 0.5)  # policy -0.4, base -0.9, thinking tokens included
+        self.assertEqual((kl["rollouts"], kl["failed"], kl["misaligned_turns"]), (3, 0, 0))
+        self.assertEqual(kl["requests"], 3 * monitor.KL_TURNS_PER_THINKING_EPISODE)
+        bodies = [b for b in self.server.bodies[start:] if b.get("prompt_logprobs") is not None]
+        self.assertEqual(len(bodies), kl["requests"])
+        for body in bodies:
+            self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": True, "reasoning_effort": "medium"})
+            self.assertTrue(body["continue_final_message"])
+            self.assertFalse(body["add_generation_prompt"])
+            self.assertIn("<think>", body["messages"][-1]["content"])
+        # every scored token is a sampled one but the final end-of-turn token of each re-scored turn
+        ep = episodes[0]
+        pairs = monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
+            monitor.thinking_turn_messages(ep, 0), model=BASE, thinking="medium", continue_final=True))
+        self.assertEqual(len(pairs), len(ep.choices[0].model_extra["token_ids"]) - 1)
+        # a turn whose thinking was recorded wrongly no longer lines up, and is counted
+        ep.turns[0].reasoning = "something else"
+        self.assertIsNone(monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
+            monitor.thinking_turn_messages(ep, 0), model=BASE, thinking="medium", continue_final=True)))
+
     async def test_a_failed_rescoring_is_counted_not_raised(self):
         self.server.fault = lambda kind, body: 500 if kind == "kl" else None
         episodes = monitor.scored(await self.groups(2, 2))

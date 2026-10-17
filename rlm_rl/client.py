@@ -528,15 +528,23 @@ class ModelClient:
             self._fail("thinking_on", "a chat call spent reasoning tokens", model)
         return choice.message.content or ""
 
-    async def prompt_logprobs(self, messages: list[dict], *, model: str) -> tuple[list[int], list[float | None]]:
+    async def prompt_logprobs(self, messages: list[dict], *, model: str, thinking: str | None = None,
+                              continue_final: bool = False) -> tuple[list[int], list[float | None]]:
         """Score a finished conversation under `model`: each prompt token's id and logprob (KL to base, spec §5.3).
 
         The conversation is sent as the prompt with `prompt_logprobs=0`, and one token is generated.
         The first token has no logprob, as in the token-id rebuild. Raises RequestFailed.
+
+        For a turn sampled with root thinking (monitor.kl_to_base), `thinking` renders the prompt as that turn's was
+        rendered, and `continue_final` renders the last message, the turn with its thinking, as the assistant's
+        unfinished reply instead of adding a new one.
         """
-        response = await self._request(
-            "kl", model, messages=messages, max_tokens=1, temperature=ROOT_TEMPERATURE,
-            extra_body={"prompt_logprobs": 0, "chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+        template = {"enable_thinking": True, "reasoning_effort": thinking} if thinking else {"enable_thinking": ENABLE_THINKING}
+        extra = {"prompt_logprobs": 0, "chat_template_kwargs": template}
+        if continue_final:
+            extra.update(continue_final_message=True, add_generation_prompt=False)
+        response = await self._request("kl", model, messages=messages, max_tokens=1, temperature=ROOT_TEMPERATURE,
+                                       extra_body=extra)
         entries = (response.model_extra or {}).get("prompt_logprobs")
         if not entries:
             self._fail("bad_response", "the response has no prompt logprobs", model)

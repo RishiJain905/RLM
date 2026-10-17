@@ -241,6 +241,7 @@ await backend.train(
 
 - Every step, 4 sampled rollouts are re-scored under the base model using `prompt_logprobs`. The logged KL is the mean of (policy logprob − base logprob) over the sampled root tokens.
 - That's ~4 × 8K input tokens a step, about $0.01 *(inferred)*. A KL estimate from ART itself only appears when `kl_penalty_coef > 0`.
+- **With root thinking** (production at `medium`, decision 11b, 2026-10-17): a turn's sampled tokens include its thinking, which the next turn's prompt drops, so the whole conversation no longer lines up. Each re-scored rollout instead re-scores 2 of its turns, picked at random, one request each: the conversation up to the turn, with the turn as the assistant's unfinished reply (`continue_final_message`) and its thinking in `<think>` tags, under the same thinking setting. Cost stays near one whole-conversation request a rollout. The step's `kl_misaligned` count shows whether W&B's real template lines up; production's first step is the first live check.
 - **Fallback (research §8.5):** if KL to base jumps, or the capability check drops, we turn on a small `kl_penalty_coef` against the base model. That's a one-argument change.
 
 ### 5.4 What happens to a step's rollouts before training

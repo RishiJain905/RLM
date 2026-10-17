@@ -287,7 +287,8 @@ class TrainingRun:
             await self.backend.open(self._branch)
         self.base_model = self.backend.inference_name(self._model_of(0), 0)
         self.client = ModelClient(self.backend.openai_client(), subcall_model=self.base_model, retry=self.retry,
-                                  pacer=self.pacer)  # None: the client's own, which spaces out sub-calls (client.py)
+                                  pacer=self.pacer,  # None: the client's own, which spaces out sub-calls (client.py)
+                                  root_thinking=self.cfg.root_thinking)  # production: medium (decision 11b)
         self._mark = self.client.spent_usd()
         self._reset_pause_window()
 

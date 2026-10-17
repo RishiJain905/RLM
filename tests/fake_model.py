@@ -51,14 +51,35 @@ def fake_ids(text: str) -> list[int]:
     return [1000 + (sum(map(ord, text[i:i + 4])) % 90_000) for i in range(0, len(text), 4)] or [1000]
 
 
-def render(messages: list[dict], thinking: bool = False) -> list[int]:
-    """Prompt token ids as Qwen3.8's template lays them out, with fake ids for the text."""
+FAKE_REASONING = "fake thinking about the next step"
+
+
+def thinking_ids(reasoning: str) -> list[int]:
+    """A thinking turn's sampled tokens before its reply: the thinking, then the closing think tag."""
+    return fake_ids(reasoning) + [rclient.THINK_END_ID, DOUBLE_NEWLINE_ID]
+
+
+def render(messages: list[dict], thinking: bool = False, continue_final: bool = False) -> list[int]:
+    """Prompt token ids as Qwen3.8's template lays them out, with fake ids for the text.
+
+    With `continue_final` the last message is the assistant's unfinished reply: no end-of-turn token and no new
+    generation prompt. With thinking on, its thinking (in <think> tags in the content) is rendered as the model
+    sampled it."""
     ids = []
-    for m in messages:
+    last = len(messages) - 1
+    for i, m in enumerate(messages):
         ids += [rclient.IM_START_ID, ROLE_IDS[m["role"]], NEWLINE_ID]
-        if m["role"] == "assistant":
+        content = m["content"]
+        if continue_final and i == last and thinking and "</think>" in content:
+            reasoning = content.split("</think>")[0].split("<think>")[-1].strip("\n")
+            ids += [rclient.THINK_START_ID, NEWLINE_ID] + thinking_ids(reasoning)
+            content = content.split("</think>")[-1].lstrip("\n")
+        elif m["role"] == "assistant":
             ids += THINKING_OFF_TAIL[3:]
-        ids += fake_ids(m["content"]) + [rclient.IM_END_ID, NEWLINE_ID]
+        ids += fake_ids(content)
+        if continue_final and i == last:
+            return ids
+        ids += [rclient.IM_END_ID, NEWLINE_ID]
     return ids + (THINKING_ON_TAIL if thinking else THINKING_OFF_TAIL)
 
 
@@ -189,19 +210,21 @@ class FakeModelServer:
         else:
             prompt_text = messages[-1]["content"]
             text = self.answer_for(model, prompt_text) if self.answer_for else self.answer(prompt_text)
-        completion = fake_ids(text) + [rclient.IM_END_ID]
         # the server's own setting, or a request that asks for thinking (plan step 11's medium-thinking arm)
         thinking = self.thinking or bool((body.get("chat_template_kwargs") or {}).get("enable_thinking"))
-        prompt = render(messages, thinking)
+        reasoning = thinking_ids(FAKE_REASONING) if thinking and kind == "root" else []
+        completion = reasoning + fake_ids(text) + [rclient.IM_END_ID]
+        prompt = render(messages, thinking, continue_final=bool(body.get("continue_final_message")))
         choice = {"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}
         if thinking:
-            choice["message"]["reasoning"] = "fake thinking about the next step"
+            choice["message"]["reasoning"] = FAKE_REASONING
         out = {"id": f"chatcmpl-{time.monotonic_ns()}", "object": "chat.completion", "created": int(time.time()),
                "model": body["model"], "choices": [choice],
                "usage": {"prompt_tokens": len(prompt), "completion_tokens": len(completion),
                          "total_tokens": len(prompt) + len(completion),
                          "prompt_tokens_details": {"cached_tokens": 0},
-                         "completion_tokens_details": {"reasoning_tokens": 8 if thinking else 0}}}
+                         "completion_tokens_details": {"reasoning_tokens": len(reasoning) if reasoning else
+                                                       (8 if thinking else 0)}}}
         if body.get("logprobs"):
             lp = self.completion_logprob(model)
             choice["logprobs"] = {"content": [{"token": f"token_id:{i}", "logprob": lp, "bytes": None,

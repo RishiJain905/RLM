@@ -661,7 +661,7 @@ The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5
 **How long it takes on the PC.** Edit episodes and their graders run in Docker on the D: data drive, a USB hard disk. Measured under load, a step averages ~30-35 minutes: ~20-25 when its `edit_real` tasks are Python or JavaScript, about an hour when one is Go (edit-build-results.md §5a). 75 steps is ~40 hours. Add about an hour for each of the ~7-8 selection evals, and the run takes ~2-2.5 days of the PC running without a break *(inferred)*. A slow drive costs time, never reward: every limit was set from measurements, and an infra error is never scored as a 0.
 
 **Before it starts** (all $0, on the PC):
-0. **Training with root thinking at `medium`:** the loop's client, the pinned config, and the KL monitor, which re-scores whole conversations with thinking off and would skip every thinking turn as misaligned (step-11-results.md §14). Then a fake-model dry run with thinking on.
+0. **Training with root thinking at `medium`:** done 2026-10-17 ($0). `config.production` sets it, the loop's client and pinned config carry it, and the KL monitor re-scores thinking turns one at a time with their thinking (spec §5.3). A 3-step fake-model dry run of production with thinking on came out clean (every re-scored turn lined up). Production's first step is the first live check of the KL alignment (`kl_misaligned` on the dashboard).
 1. **What 12b chooses,** built and tested.
 2. **The training run clears leftover containers at start.** The data build does this since 2026-10-15, but a training run doesn't yet, so a crashed run's containers would pile up. It's a few lines and a test.
 3. **Optional drive settings**, yours to make (edit-build-results.md §5a):
