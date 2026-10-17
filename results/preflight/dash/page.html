@@ -1,0 +1,1149 @@
+<title>RLM Live Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a sticky instrument strip over one column of labelled panels; every chart is a small multiple on one shared step axis. Chrome stays monochrome so colour only ever means data or status. */
+:root {
+  --bg: #f2f4f7; --panel: #ffffff; --wash: #eceff4; --ink: #0f1621; --ink-2: #4a5565; --muted: #7d8898;
+  --line: #e1e5eb; --axis: #c2c9d3; --ring: rgba(15, 22, 33, 0.10);
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #008300; --c7: #4a3aa7; --c8: #e34948;
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+  --good-ink: #006300; --warn-ink: #7a5200; --serious-ink: #a4441c; --crit-ink: #ad2727;
+  --seq-0: #eef4fc; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
+  --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: #ffffff; --seq-t-5: #ffffff; --seq-t-6: #ffffff;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.78rem; --step-0: 0.9rem; --step-1: 1.05rem; --step-2: 1.35rem; --step-3: 1.9rem;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+    --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+    --good-ink: #3fc23f; --warn-ink: #f5bd47; --serious-ink: #f09a77; --crit-ink: #ec7373;
+    --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+    --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: var(--ink); --seq-t-5: #0b0e13; --seq-t-6: #0b0e13;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+  --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+  --good-ink: #3fc23f; --warn-ink: #f5bd47; --serious-ink: #f09a77; --crit-ink: #ec7373;
+  --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+  --seq-t-0: var(--ink); --seq-t-1: var(--ink); --seq-t-2: var(--ink); --seq-t-3: var(--ink); --seq-t-4: var(--ink); --seq-t-5: #0b0e13; --seq-t-6: #0b0e13;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; } /* panels and badges set their own display, which would beat the attribute */
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.45; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--c1); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; }
+
+/* instrument strip */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; gap: 8px; padding-block: 12px 0; }
+.idrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 0; font-family: var(--font-display); font-stretch: 100%; font-weight: 800; font-size: var(--step-2); letter-spacing: -0.01em; text-wrap: balance; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: var(--step--1); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.badge.dry { border-color: var(--warn); color: var(--warn-ink); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-weight: 600; font-size: var(--step--1); border: 1px solid currentColor; white-space: nowrap; }
+.pill .ic { font-family: var(--font-data); font-size: 0.8em; }
+.t-good { color: var(--good-ink); } .t-warn { color: var(--warn-ink); } .t-serious { color: var(--serious-ink); } .t-crit { color: var(--crit-ink); } .t-muted { color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+.running .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 600; }
+.reason { font-size: var(--step--1); color: var(--ink-2); max-width: 90ch; }
+.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+.nav::-webkit-scrollbar { display: none; }
+.nav a { flex: none; padding: 8px 10px 9px; font-size: var(--step--1); font-weight: 600; color: var(--ink-2); text-decoration: none; border-bottom: 2px solid transparent; }
+.nav a:hover { color: var(--ink); border-bottom-color: var(--axis); }
+.banner { margin-block: 12px 0; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); color: var(--ink); font-size: var(--step--1); }
+.toast { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 40; background: var(--ink); color: var(--panel); padding: 8px 12px; border-radius: var(--radius); font-size: var(--step--1); font-weight: 600; box-shadow: 0 4px 18px var(--ring); }
+
+/* panels */
+main { display: grid; gap: 18px; padding-block: 18px 40px; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 14px; min-width: 0; scroll-margin-top: 150px; }
+section.panel > * { min-width: 0; } /* a wide table scrolls inside its .scroll instead of widening the panel */
+#eval-table { display: grid; gap: 8px; }
+#eval-table .scroll + .c-title { margin-top: 10px; }
+.phead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.phead h2 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); letter-spacing: 0; text-wrap: balance; }
+.phead p { margin: 4px 0 0; color: var(--ink-2); font-size: var(--step--1); max-width: 78ch; }
+.flag { font: inherit; font-size: var(--step--1); font-weight: 600; color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; white-space: nowrap; }
+.flag:hover { color: var(--ink); border-color: var(--axis); background: var(--wash); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 14px 16px; }
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.sub { font-size: var(--step--1); color: var(--ink-2); }
+.empty { color: var(--muted); font-size: var(--step--1); padding: 10px 0; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.tile .lab { font-size: var(--step--1); color: var(--ink-2); font-weight: 600; }
+.tile .val { font-size: var(--step-3); font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
+.tile .val small { font-size: var(--step-0); font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.tile .val.dense { font-size: var(--step-2); line-height: 1.6; }
+.tile .ctx { font-size: var(--step--1); color: var(--ink-2); }
+.tile svg { width: 100%; height: 30px; display: block; margin-top: 4px; }
+
+/* charts */
+figure.chart { margin: 0; display: grid; gap: 4px; min-width: 0; }
+figure.chart figcaption { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0 10px; }
+.c-title { font-weight: 600; font-size: var(--step--1); color: var(--ink); }
+.c-val { font-family: var(--font-data); font-size: var(--step--1); font-weight: 600; color: var(--ink); white-space: nowrap; }
+.c-note { grid-column: 1 / -1; font-size: 0.74rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 0.74rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.key { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.key.box { width: 9px; height: 9px; border-radius: 2px; }
+.key.ghost { background: var(--muted) !important; opacity: 0.6; }
+.plot { position: relative; min-width: 0; border-radius: 4px; }
+.plot svg { display: block; overflow: visible; }
+.plot:focus-visible { outline-offset: 0; }
+.grid-l { stroke: var(--line); stroke-width: 1; }
+.base-l { stroke: var(--axis); stroke-width: 1; }
+.ax-t { fill: var(--muted); font-family: var(--font-data); font-size: 10px; font-variant-numeric: tabular-nums; }
+.ref-l { stroke: var(--ink-2); stroke-width: 1; opacity: 0.55; }
+.ref-t { fill: var(--ink-2); font-size: 10px; font-family: var(--font-body); }
+.xmark-l { stroke: var(--crit); stroke-width: 1; opacity: 0.7; }
+.xmark-t { fill: var(--crit-ink); font-size: 10px; font-weight: 600; }
+.cross { stroke: var(--ink-2); stroke-width: 1; }
+.end-t { font-size: 10px; fill: var(--ink-2); font-family: var(--font-body); }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--axis); border-radius: var(--radius); padding: 8px 10px; font-size: 0.76rem; box-shadow: 0 6px 20px var(--ring); max-width: 280px; }
+.tip .th { font-family: var(--font-data); color: var(--ink-2); margin-bottom: 4px; }
+.tip .tr { display: grid; grid-template-columns: 14px auto 1fr; align-items: center; gap: 6px; }
+.tip .tr b { font-family: var(--font-data); font-weight: 600; }
+.tip .tr span:last-child { color: var(--ink-2); }
+
+/* meters */
+.meters { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.meter { display: grid; gap: 5px; }
+.meter .row { display: flex; justify-content: space-between; gap: 10px; font-size: var(--step--1); }
+.meter .row b { font-family: var(--font-data); }
+.track { height: 8px; border-radius: 4px; background: var(--seq-1); overflow: hidden; }
+.fill { height: 100%; border-radius: 4px; background: var(--c1); }
+.fill.warn { background: var(--warn); } .fill.crit { background: var(--crit); }
+
+/* heatmap, tables */
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; font-size: var(--step--1); width: 100%; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.74rem; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.heat td.cell { text-align: center; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 64px; border: 2px solid var(--panel); border-radius: 4px; }
+.heat td.cell small { display: block; font-size: 0.66rem; opacity: 0.8; }
+.heat td.fam { font-weight: 600; }
+.heat td.now { box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* rules, notices, samples */
+.rules { display: grid; gap: 8px; }
+.rule { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 4px 14px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rule:last-child { border-bottom: 0; }
+.rule .nm { font-weight: 650; }
+.rule .nm small { display: block; color: var(--muted); font-weight: 500; font-size: 0.72rem; }
+.rule .tx { font-size: var(--step--1); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.notices { list-style: none; margin: 0; padding: 0; display: grid; max-height: 520px; overflow: auto; border-top: 1px solid var(--line); }
+.notices li { display: grid; grid-template-columns: 92px 64px 1fr; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: var(--step--1); align-items: baseline; }
+.notices time, .notices .st { font-family: var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.notices .kd { font-weight: 650; margin-right: 6px; }
+.samples { display: grid; gap: 8px; }
+details.sample { border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+details.sample > summary { cursor: pointer; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; list-style: none; }
+details.sample > summary::-webkit-details-marker { display: none; }
+details.sample > summary::before { content: "+"; font-family: var(--font-data); color: var(--muted); width: 10px; }
+details.sample[open] > summary::before { content: "\2212"; }
+details.sample > summary .meta { font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); }
+.sbody { padding: 0 12px 12px; display: grid; gap: 10px; min-width: 0; }
+.sbody h4 { margin: 6px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-family: var(--font-display); font-stretch: 112%; }
+.sbody p { margin: 0; max-width: 80ch; }
+pre { margin: 0; font-family: var(--font-data); font-size: 0.74rem; line-height: 1.5; background: var(--wash); border-radius: 4px; padding: 8px 10px; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word; }
+.turn { display: grid; gap: 6px; border-left: 2px solid var(--line); padding-left: 10px; min-width: 0; }
+.verdict { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: var(--step--1); }
+.verdict dt { color: var(--ink-2); } .verdict dd { margin: 0; font-family: var(--font-data); word-break: break-word; }
+.btn { font: inherit; font-size: var(--step--1); font-weight: 600; border: 1px solid var(--ink); background: var(--ink); color: var(--panel); border-radius: var(--radius); padding: 6px 12px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--ink); }
+textarea.csv { width: 100%; min-height: 120px; font-family: var(--font-data); font-size: 0.72rem; background: var(--wash); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+footer { color: var(--ink-2); font-size: var(--step--1); padding-block: 0 40px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 92ch; }
+@media (max-width: 640px) {
+  .notices li { grid-template-columns: 70px 1fr; }
+  .notices li .st { display: none; }
+  .rule { grid-template-columns: 1fr; }
+  section.panel { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .running .dot { animation: none; } * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <div class="idrow">
+      <span class="eyebrow">RLM · GRPO on W&amp;B serverless · Qwen3.8-27B LoRA</span>
+    </div>
+    <div class="idrow">
+      <h1 id="run-name">RLM live run</h1>
+      <span id="kind" class="badge"></span>
+      <span id="dry" class="badge dry" hidden>Dry run: fake model, no W&amp;B, $0</span>
+      <span id="status" class="pill"></span>
+    </div>
+    <div id="reason" class="reason" hidden></div>
+    <div class="readout" id="readout"></div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview">Overview</a><a href="#cost">Cost</a><a href="#pass">Pass rates</a><a href="#policy">Policy health</a>
+      <a href="#behaviour">RLM behaviour</a><a href="#editing" id="nav-editing" hidden>Editing</a><a href="#reward">Reward and cheating</a><a href="#infra">Infra and timing</a>
+      <a href="#evals">Evals</a><a href="#rules">Stop rules</a><a href="#notices">Notices</a><a href="#samples">Transcripts</a><a href="#data">Data</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="stale" class="banner" hidden></div>
+  <main id="main">
+    <section class="panel" id="overview" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Overview</div><h2>Where the run stands</h2><p id="overview-sub"></p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="panel" id="cost" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/cost</div><h2>Inference spend</h2><p>Every rollout, sub-call, KL re-score and eval is paid from the W&amp;B inference pot. These are the loop's estimates at the research's prices; W&amp;B's billing page is the truth.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="meters" id="meters"></div>
+      <div class="grid" id="cost-charts"></div>
+    </section>
+
+    <section class="panel" id="pass" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p id="pass-sub">Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="pass-charts"></div>
+      <div class="grid wide" id="pass-extra"></div>
+    </section>
+
+    <section class="panel" id="policy" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/policy · actor</div><h2>Policy health</h2><p>Entropy and within-group reward std are the collapse signals behind the learning-rate rule. Grey lines are the thresholds the loop checks.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="policy-charts"></div>
+    </section>
+
+    <section class="panel" id="behaviour" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/shape</div><h2>RLM behaviour</h2><p>How the root model uses the REPL, over every episode: sub-calls against the budget of 30, turns against the cap (12 for read episodes, 20 for edit episodes), and how long its transcripts get. Edit episodes also get 4,096 output tokens a turn and 300 s cells, where read episodes keep 3,072 and 120 s.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="behaviour-charts"></div>
+    </section>
+
+    <section class="panel" id="editing" data-comment-target hidden>
+      <div class="phead"><div><div class="eyebrow">rlm/edit · spec §12.9</div><h2>Editing</h2><p>Edit episodes (edit real and edit synth) change a repository, and hidden tests grade the diff: the reward is 1 only when every fail-to-pass and pass-to-pass test passes. They run with 20 turns, 30 sub-calls, 4,096 tokens a turn and 300 s cells, and the REPL gives them seven coding tools: read_file, find_files, grep, edit_file, write_file, shell and diff. None of the behaviour below is rewarded; it shows whether the gains come the RLM way.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="edit-charts"></div>
+      <div id="edit-langs"></div>
+    </section>
+
+    <section class="panel" id="reward" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/reward</div><h2>Reward and cheating</h2><p>Exact accuracy is the read families' headline, and resolved (every hidden test passing) the edit families'. A firing hack detector zeroes the rollout's reward before the group mean, so a hack becomes a negative example. Network try is the one rule that is only logged.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="reward-charts"></div>
+      <div id="audits"></div>
+    </section>
+
+    <section class="panel" id="infra" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">rlm/infra · rlm/time</div><h2>Infra and timing</h2><p>Infra episodes never reach training; for edit episodes that includes a grader that couldn't start. Above 1% the run pauses for Rishi.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid" id="infra-charts"></div>
+    </section>
+
+    <section class="panel" id="evals" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">val</div><h2>Evals</h2><p id="evals-sub"></p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="grid wide" id="eval-charts"></div>
+      <div id="eval-table"></div>
+    </section>
+
+    <section class="panel" id="rules" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Stop rules</div><h2>What would stop or pause the run</h2><p>Checked after every step. A stop keeps the best checkpoint; a pause waits for Rishi. Every stop can be resumed.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="rules" id="rule-list"></div>
+    </section>
+
+    <section class="panel" id="notices" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Notices</div><h2>Operator log</h2><p>Incidents and interventions: pauses, fixes, rollbacks, level moves and resumes, newest first.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="chips" id="notice-filter" role="group" aria-label="Filter notices"></div>
+      <ul class="notices" id="notice-list"></ul>
+    </section>
+
+    <section class="panel" id="samples" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Sampled transcripts</div><h2>Training rollouts</h2><p>A win and a failure from each step, plus any rollout a detector flagged. Samples from the newest steps and from every eval checkpoint are kept. Text is cut short; eval transcripts never appear here, and neither does an edit task's gold patch or hidden tests.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="chips" id="sample-filter" role="group" aria-label="Filter transcripts"></div>
+      <div class="samples" id="sample-list"></div>
+    </section>
+
+    <section class="panel" id="data" data-comment-target>
+      <div class="phead"><div><div class="eyebrow">Table view</div><h2>The latest steps</h2><p>The numbers behind the charts. Copy every step as CSV to look at them yourself; the edit metrics and their per-language counts are the edit.* columns.</p></div><div class="chips"><button class="btn ghost" type="button" id="copy-csv">Copy all steps as CSV</button></div></div>
+      <div class="scroll" id="step-table"></div>
+      <textarea class="csv" id="csv-box" readonly hidden aria-label="Steps as CSV"></textarea>
+    </section>
+  </main>
+  <footer>
+    <p id="foot-src"></p>
+    <p>Never on this page: keys, task seeds, eval seed lists, eval tasks or benchmark items, checkpoint names, and for edit tasks the gold patch, hidden test names, eval task ids and the selection set's repositories. Every build is scanned for them before it is published.</p>
+    <p>Friends watching: flag anything that looks off with a section's Flag button or comment mode. Rishi decides whether to stop, fix or resume the run.</p>
+  </footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="application/json" id="dash-data">{"schema":1,"built_at":1792166425.4442945,"dry_run":true,"run":{"name":"seed-preflight-1016","kind":"second_seed","status":"finished","stop":{"rule":"max_steps","reason":"reached 20 steps","at_step":20,"at":1792166400.8036814},"created_at":1792166360.5259697,"updated_at":1792166400.8116133,"latest":20,"branch":0,"live":null,"heartbeat_age_s":null,"best":{"checkpoint":20,"accuracy":0.8,"eval":"heldout-seed1"},"kept":[0,5,10,15,20],"config":{"kind":"second_seed","learning_rate":1e-05,"lr_rule":"fixed","tasks_per_step":8,"rollouts":4,"max_steps":20,"eval_every":null,"eval_at_start":false,"selection":null,"final_eval":"heldout-seed1","keep_every":5,"kl_samples":4,"base_model":"Qwen/Qwen3.8-27B","frozen_controller":true,"mix":{"tickets_all":0.5,"tickets_customer":0.5},"ceilings":{"train":14.0,"eval":3.0},"has_capability_set":false},"branches":[{"branch":0,"at":1792166360.5259697,"reason":"","from_checkpoint":null}]},"lr":{"current":1e-05,"start":1e-05,"floor":1e-05,"rule":"fixed","fallback_used":false,"fallback":null,"decision":{"production_lr":2e-05,"passed":true,"note":"all checks passed, so production may start at 2e-05","checks":{"entropy_flat":{"passed":true,"need":"steps 16-20 >= 80% of 1-5","steps_1_5":0.594,"steps_16_20":0.549},"grad_norm_spikes":{"passed":true,"need":"never above 3x the median","max":0.7,"median":0.7},"probs_corr":{"passed":true,"need":"above 0.98","min":0.997}}}},"spend":{"train_usd":0.378235,"kl_usd":0.017316,"eval_usd":0.056337,"interrupted_usd":0.0,"total_usd":0.434572,"training_gpu_usd_est":3.2,"ceilings":{"train":14.0,"eval":3.0}},"pot":{"inference_usd":250.0,"inference_left_usd":217.55,"second_seed_usd":12.0,"baselines_usd":9.0,"production_usd":157.0,"evals_usd":30.0,"reserve_usd":10.0,"gpu_usd":1000.0,"gpu_left_usd":992.0,"as_of":"2026-10-16"},"controller":{"frozen":true,"families":{"tickets_all":{"level":1,"max_level":5,"moved_at":null,"saturated":false},"tickets_customer":{"level":1,"max_level":5,"moved_at":null,"saturated":false}},"history":[{"step":19,"family":"tickets_all","from":1,"to":2,"pass_rate":0.8125,"applied":false},{"step":19,"family":"tickets_customer","from":1,"to":2,"pass_rate":0.75,"applied":false},{"step":20,"family":"tickets_all","from":1,"to":2,"pass_rate":0.7708,"applied":false},{"step":20,"family":"tickets_customer","from":1,"to":2,"pass_rate":0.7708,"applied":false}]},"steps":[{"step":1,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166360.9314442,"finished_at":1792166389.872304,"pass":{"rate":0.28125,"rate_with_infra":0.28125,"groups":8,"trainable_groups":7,"all_zero_groups":1,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":2,"1/4":4,"2/4":1,"3/4":1,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.3125,"mean_reward":0.4625,"window_pass_rate":0.3125,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.25,"mean_reward":0.413631,"window_pass_rate":0.25,"saturated":false}},"moves":[],"reward":{"mean":0.438066,"exact":0.28125,"partial":0.156816,"near_blind":0.1875,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.6,"entropy_tokens":1760,"reward_std":0.29094,"kl_to_base":0.2,"kl_k3":0.018731,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":49.625,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":40504.8,"wall_s":0.604375,"transcript_tokens_mean":523.1,"transcript_tokens_p95":535,"transcript_tokens_max":535},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":20,"limiter_wait_s":3.741128846002084},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01904,"kl_usd":0.000885,"spent_train_usd":0.01904},"time":{"rollouts_s":6.13,"kl_s":0.01,"train_s":0.0,"total_s":28.94},"tokens":{"root_prompt_tokens":30184,"root_completion_tokens":1760,"subcall_prompt_tokens":1524,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":2,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166389.894751,"finished_at":1792166390.246676,"pass":{"rate":0.21875,"rate_with_infra":0.21875,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":2,"1/4":5,"2/4":1,"3/4":0,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.125,"mean_reward":0.563388,"window_pass_rate":0.21875,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.3125,"mean_reward":0.4125,"window_pass_rate":0.28125,"saturated":false}},"moves":[],"reward":{"mean":0.487944,"exact":0.21875,"partial":0.269194,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.597,"entropy_tokens":1760,"reward_std":0.270059,"kl_to_base":0.203,"kl_k3":0.019278,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":49.0,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":42945.5,"wall_s":0.22075,"transcript_tokens_mean":519.4,"transcript_tokens_p95":533,"transcript_tokens_max":533},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.826569647001179},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01891,"kl_usd":0.000859,"spent_train_usd":0.03795},"time":{"rollouts_s":0.29,"kl_s":0.01,"train_s":0.0,"total_s":0.35},"tokens":{"root_prompt_tokens":29944,"root_completion_tokens":1760,"subcall_prompt_tokens":1504,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":3,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166390.275729,"finished_at":1792166390.7249787,"pass":{"rate":0.3125,"rate_with_infra":0.3125,"groups":8,"trainable_groups":7,"all_zero_groups":1,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":2,"1/4":2,"2/4":4,"3/4":0,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.1875,"mean_reward":0.535831,"window_pass_rate":0.208333,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.618331,"window_pass_rate":0.333333,"saturated":false}},"moves":[],"reward":{"mean":0.577081,"exact":0.3125,"partial":0.264581,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.594,"entropy_tokens":1760,"reward_std":0.226185,"kl_to_base":0.206,"kl_k3":0.019833,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":46.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":38479.8,"wall_s":0.315875,"transcript_tokens_mean":516.2,"transcript_tokens_p95":529,"transcript_tokens_max":529},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.3227734510001028},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018806,"kl_usd":0.000864,"spent_train_usd":0.056756},"time":{"rollouts_s":0.39,"kl_s":0.01,"train_s":0.0,"total_s":0.45},"tokens":{"root_prompt_tokens":29744,"root_completion_tokens":1760,"subcall_prompt_tokens":1432,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":4,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166390.7556171,"finished_at":1792166391.2012236,"pass":{"rate":0.25,"rate_with_infra":0.25,"groups":8,"trainable_groups":7,"all_zero_groups":1,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":3,"1/4":3,"2/4":1,"3/4":1,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.615313,"window_pass_rate":0.25,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.0625,"mean_reward":0.289587,"window_pass_rate":0.270833,"saturated":false}},"moves":[],"reward":{"mean":0.45245,"exact":0.25,"partial":0.20245,"near_blind":0.3125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.591,"entropy_tokens":1760,"reward_std":0.228675,"kl_to_base":0.209,"kl_k3":0.020395,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":48.375,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":42100.4,"wall_s":0.275094,"transcript_tokens_mean":521.1,"transcript_tokens_p95":532,"transcript_tokens_max":532},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.3492271129985056},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018954,"kl_usd":0.000866,"spent_train_usd":0.07571},"time":{"rollouts_s":0.39,"kl_s":0.01,"train_s":0.0,"total_s":0.45},"tokens":{"root_prompt_tokens":30056,"root_completion_tokens":1760,"subcall_prompt_tokens":1484,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":5,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166391.2334836,"finished_at":1792166391.5705967,"pass":{"rate":0.375,"rate_with_infra":0.375,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":1,"1/4":2,"2/4":5,"3/4":0,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.3125,"mean_reward":0.5525,"window_pass_rate":0.3125,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.680837,"window_pass_rate":0.3125,"saturated":false}},"moves":[],"reward":{"mean":0.616669,"exact":0.375,"partial":0.241669,"near_blind":0.125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.588,"entropy_tokens":1760,"reward_std":0.307941,"kl_to_base":0.212,"kl_k3":0.020965,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":45.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":45226.5,"wall_s":0.20025,"transcript_tokens_mean":511.9,"transcript_tokens_p95":531,"transcript_tokens_max":531},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.3130275049993543},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018669,"kl_usd":0.000851,"spent_train_usd":0.094379},"time":{"rollouts_s":0.28,"kl_s":0.01,"train_s":0.0,"total_s":0.34},"tokens":{"root_prompt_tokens":29464,"root_completion_tokens":1760,"subcall_prompt_tokens":1400,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":6,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166391.6226115,"finished_at":1792166392.0882347,"pass":{"rate":0.40625,"rate_with_infra":0.40625,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":3,"2/4":5,"3/4":0,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.375,"mean_reward":0.6375,"window_pass_rate":0.375,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.608331,"window_pass_rate":0.3125,"saturated":false}},"moves":[],"reward":{"mean":0.622916,"exact":0.40625,"partial":0.216666,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.585,"entropy_tokens":1760,"reward_std":0.314387,"kl_to_base":0.215,"kl_k3":0.021541,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":48.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":40433.6,"wall_s":0.321313,"transcript_tokens_mean":517.5,"transcript_tokens_p95":531,"transcript_tokens_max":531},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.549535199998445},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018862,"kl_usd":0.000862,"spent_train_usd":0.113241},"time":{"rollouts_s":0.4,"kl_s":0.01,"train_s":0.0,"total_s":0.47},"tokens":{"root_prompt_tokens":29824,"root_completion_tokens":1760,"subcall_prompt_tokens":1496,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":7,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166392.1128354,"finished_at":1792166392.5840335,"pass":{"rate":0.5,"rate_with_infra":0.5,"groups":8,"trainable_groups":6,"all_zero_groups":1,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":1,"1/4":1,"2/4":4,"3/4":1,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.773687,"window_pass_rate":0.395833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.5,"window_pass_rate":0.458333,"saturated":false}},"moves":[],"reward":{"mean":0.636844,"exact":0.5,"partial":0.136844,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.582,"entropy_tokens":1760,"reward_std":0.235447,"kl_to_base":0.218,"kl_k3":0.022125,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":46.875,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":43099.6,"wall_s":0.276687,"transcript_tokens_mean":514.5,"transcript_tokens_p95":522,"transcript_tokens_max":522},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.33361599300042144},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018756,"kl_usd":0.000857,"spent_train_usd":0.131997},"time":{"rollouts_s":0.41,"kl_s":0.01,"train_s":0.0,"total_s":0.47},"tokens":{"root_prompt_tokens":29632,"root_completion_tokens":1760,"subcall_prompt_tokens":1436,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":8,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166392.6200013,"finished_at":1792166392.9757786,"pass":{"rate":0.5,"rate_with_infra":0.5,"groups":8,"trainable_groups":7,"all_zero_groups":0,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":1,"1/4":1,"2/4":4,"3/4":1,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.625,"mean_reward":0.715912,"window_pass_rate":0.5,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.375,"mean_reward":0.631663,"window_pass_rate":0.4375,"saturated":false}},"moves":[],"reward":{"mean":0.673787,"exact":0.5,"partial":0.173787,"near_blind":0.1875,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.579,"entropy_tokens":1760,"reward_std":0.27309,"kl_to_base":0.221,"kl_k3":0.022717,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":48.125,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":41043.0,"wall_s":0.211656,"transcript_tokens_mean":518.2,"transcript_tokens_p95":529,"transcript_tokens_max":529},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.3398967709954377},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018881,"kl_usd":0.00087,"spent_train_usd":0.150878},"time":{"rollouts_s":0.3,"kl_s":0.01,"train_s":0.0,"total_s":0.36},"tokens":{"root_prompt_tokens":29872,"root_completion_tokens":1760,"subcall_prompt_tokens":1476,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":9,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166393.0080304,"finished_at":1792166393.483849,"pass":{"rate":0.46875,"rate_with_infra":0.46875,"groups":8,"trainable_groups":7,"all_zero_groups":0,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":1,"1/4":2,"2/4":3,"3/4":1,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.735587,"window_pass_rate":0.520833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.684087,"window_pass_rate":0.458333,"saturated":false}},"moves":[],"reward":{"mean":0.709838,"exact":0.46875,"partial":0.241088,"near_blind":0.09375,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.576,"entropy_tokens":1760,"reward_std":0.243634,"kl_to_base":0.224,"kl_k3":0.023315,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":47.625,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":39789.8,"wall_s":0.320281,"transcript_tokens_mean":519.0,"transcript_tokens_p95":526,"transcript_tokens_max":526},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.567451229998369},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018886,"kl_usd":0.000862,"spent_train_usd":0.169764},"time":{"rollouts_s":0.41,"kl_s":0.01,"train_s":0.0,"total_s":0.48},"tokens":{"root_prompt_tokens":29920,"root_completion_tokens":1760,"subcall_prompt_tokens":1460,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":10,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166393.5170197,"finished_at":1792166393.9817367,"pass":{"rate":0.4375,"rate_with_infra":0.4375,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":2,"2/4":6,"3/4":0,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.698263,"window_pass_rate":0.520833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.375,"mean_reward":0.515,"window_pass_rate":0.416667,"saturated":false}},"moves":[],"reward":{"mean":0.606631,"exact":0.4375,"partial":0.169131,"near_blind":0.09375,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.573,"entropy_tokens":1760,"reward_std":0.343485,"kl_to_base":0.227,"kl_k3":0.023921,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":49.625,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":42989.0,"wall_s":0.263375,"transcript_tokens_mean":521.8,"transcript_tokens_p95":532,"transcript_tokens_max":532},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.34011740300047677},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01898,"kl_usd":0.00086,"spent_train_usd":0.188744},"time":{"rollouts_s":0.4,"kl_s":0.01,"train_s":0.0,"total_s":0.46},"tokens":{"root_prompt_tokens":30096,"root_completion_tokens":1760,"subcall_prompt_tokens":1524,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":11,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166394.1594872,"finished_at":1792166394.5150194,"pass":{"rate":0.5,"rate_with_infra":0.5,"groups":8,"trainable_groups":7,"all_zero_groups":0,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":2,"2/4":5,"3/4":0,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5625,"mean_reward":0.7016,"window_pass_rate":0.5,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.561781,"window_pass_rate":0.4375,"saturated":false}},"moves":[],"reward":{"mean":0.631691,"exact":0.5,"partial":0.131691,"near_blind":0.125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.57,"entropy_tokens":1760,"reward_std":0.293106,"kl_to_base":0.23,"kl_k3":0.024534,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":50.0,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":41096.2,"wall_s":0.211406,"transcript_tokens_mean":516.4,"transcript_tokens_p95":530,"transcript_tokens_max":530},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.33212396700264435},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018854,"kl_usd":0.000867,"spent_train_usd":0.207598},"time":{"rollouts_s":0.3,"kl_s":0.01,"train_s":0.0,"total_s":0.36},"tokens":{"root_prompt_tokens":29752,"root_completion_tokens":1760,"subcall_prompt_tokens":1536,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":12,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166394.5476468,"finished_at":1792166395.0163271,"pass":{"rate":0.53125,"rate_with_infra":0.53125,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":2,"2/4":3,"3/4":3,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.69875,"window_pass_rate":0.520833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5625,"mean_reward":0.67125,"window_pass_rate":0.458333,"saturated":false}},"moves":[],"reward":{"mean":0.685,"exact":0.53125,"partial":0.15375,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.567,"entropy_tokens":1760,"reward_std":0.306654,"kl_to_base":0.233,"kl_k3":0.025154,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":50.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":39129.6,"wall_s":0.313812,"transcript_tokens_mean":522.4,"transcript_tokens_p95":536,"transcript_tokens_max":536},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.7114289599990116},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.019016,"kl_usd":0.000866,"spent_train_usd":0.226614},"time":{"rollouts_s":0.4,"kl_s":0.01,"train_s":0.0,"total_s":0.47},"tokens":{"root_prompt_tokens":30136,"root_completion_tokens":1760,"subcall_prompt_tokens":1560,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":13,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166395.0592144,"finished_at":1792166395.4887407,"pass":{"rate":0.625,"rate_with_infra":0.625,"groups":8,"trainable_groups":7,"all_zero_groups":0,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":1,"2/4":3,"3/4":3,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.61,"window_pass_rate":0.520833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.75,"mean_reward":0.825,"window_pass_rate":0.583333,"saturated":false}},"moves":[],"reward":{"mean":0.7175,"exact":0.625,"partial":0.0925,"near_blind":0.125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.564,"entropy_tokens":1760,"reward_std":0.326608,"kl_to_base":0.236,"kl_k3":0.025781,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":53.625,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":41193.4,"wall_s":0.265594,"transcript_tokens_mean":523.4,"transcript_tokens_p95":534,"transcript_tokens_max":534},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.302057944003991},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.019088,"kl_usd":0.000875,"spent_train_usd":0.245702},"time":{"rollouts_s":0.37,"kl_s":0.01,"train_s":0.0,"total_s":0.43},"tokens":{"root_prompt_tokens":30200,"root_completion_tokens":1760,"subcall_prompt_tokens":1652,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":14,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166395.5311704,"finished_at":1792166395.9375021,"pass":{"rate":0.625,"rate_with_infra":0.625,"groups":8,"trainable_groups":6,"all_zero_groups":0,"all_one_groups":2,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":1,"2/4":4,"3/4":1,"4/4":2}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.625,"mean_reward":0.780356,"window_pass_rate":0.541667,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.625,"mean_reward":0.69,"window_pass_rate":0.645833,"saturated":false}},"moves":[],"reward":{"mean":0.735178,"exact":0.625,"partial":0.110178,"near_blind":0.0625,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.561,"entropy_tokens":1760,"reward_std":0.245183,"kl_to_base":0.239,"kl_k3":0.026415,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":48.25,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":39504.9,"wall_s":0.176156,"transcript_tokens_mean":521.2,"transcript_tokens_p95":528,"transcript_tokens_max":528},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.28656442299779883},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018958,"kl_usd":0.000868,"spent_train_usd":0.26466},"time":{"rollouts_s":0.24,"kl_s":0.12,"train_s":0.0,"total_s":0.41},"tokens":{"root_prompt_tokens":30064,"root_completion_tokens":1760,"subcall_prompt_tokens":1480,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":15,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166395.9822962,"finished_at":1792166396.2985926,"pass":{"rate":0.65625,"rate_with_infra":0.65625,"groups":8,"trainable_groups":7,"all_zero_groups":0,"all_one_groups":1,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":0,"2/4":4,"3/4":3,"4/4":1}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.625,"mean_reward":0.752856,"window_pass_rate":0.583333,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.6875,"mean_reward":0.7375,"window_pass_rate":0.6875,"saturated":false}},"moves":[],"reward":{"mean":0.745178,"exact":0.65625,"partial":0.088928,"near_blind":0.125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.558,"entropy_tokens":1760,"reward_std":0.313742,"kl_to_base":0.242,"kl_k3":0.027056,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":48.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":38202.5,"wall_s":0.176469,"transcript_tokens_mean":516.2,"transcript_tokens_p95":523,"transcript_tokens_max":523},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.2930844090001301},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01883,"kl_usd":0.000862,"spent_train_usd":0.28349},"time":{"rollouts_s":0.25,"kl_s":0.01,"train_s":0.0,"total_s":0.32},"tokens":{"root_prompt_tokens":29744,"root_completion_tokens":1760,"subcall_prompt_tokens":1496,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":16,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166396.3661222,"finished_at":1792166396.7922816,"pass":{"rate":0.46875,"rate_with_infra":0.46875,"groups":8,"trainable_groups":8,"all_zero_groups":0,"all_one_groups":0,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":3,"2/4":3,"3/4":2,"4/4":0}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.5,"mean_reward":0.814931,"window_pass_rate":0.583333,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.4375,"mean_reward":0.5375,"window_pass_rate":0.583333,"saturated":false}},"moves":[],"reward":{"mean":0.676216,"exact":0.46875,"partial":0.207466,"near_blind":0.09375,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.555,"entropy_tokens":1760,"reward_std":0.284917,"kl_to_base":0.245,"kl_k3":0.027705,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":51.375,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":42243.1,"wall_s":0.280375,"transcript_tokens_mean":520.9,"transcript_tokens_p95":536,"transcript_tokens_max":536},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.310897804999513},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018992,"kl_usd":0.000872,"spent_train_usd":0.302482},"time":{"rollouts_s":0.36,"kl_s":0.01,"train_s":0.0,"total_s":0.43},"tokens":{"root_prompt_tokens":30040,"root_completion_tokens":1760,"subcall_prompt_tokens":1580,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":17,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166396.8273149,"finished_at":1792166397.2466784,"pass":{"rate":0.78125,"rate_with_infra":0.78125,"groups":8,"trainable_groups":5,"all_zero_groups":0,"all_one_groups":3,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":1,"2/4":0,"3/4":4,"4/4":3}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.75,"mean_reward":0.921669,"window_pass_rate":0.625,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.8125,"mean_reward":0.876781,"window_pass_rate":0.645833,"saturated":false}},"moves":[],"reward":{"mean":0.899225,"exact":0.78125,"partial":0.117975,"near_blind":0.0,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.552,"entropy_tokens":1760,"reward_std":0.139171,"kl_to_base":0.248,"kl_k3":0.02836,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":50.875,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":42685.8,"wall_s":0.174469,"transcript_tokens_mean":519.9,"transcript_tokens_p95":526,"transcript_tokens_max":526},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.35665931399944384},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01896,"kl_usd":0.000872,"spent_train_usd":0.321442},"time":{"rollouts_s":0.25,"kl_s":0.12,"train_s":0.0,"total_s":0.42},"tokens":{"root_prompt_tokens":29976,"root_completion_tokens":1760,"subcall_prompt_tokens":1564,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":18,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166397.2919269,"finished_at":1792166397.6112304,"pass":{"rate":0.75,"rate_with_infra":0.75,"groups":8,"trainable_groups":6,"all_zero_groups":0,"all_one_groups":2,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":1,"2/4":0,"3/4":5,"4/4":2}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.8125,"mean_reward":0.927919,"window_pass_rate":0.6875,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.6875,"mean_reward":0.7125,"window_pass_rate":0.645833,"saturated":false}},"moves":[],"reward":{"mean":0.820209,"exact":0.75,"partial":0.070209,"near_blind":0.03125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.549,"entropy_tokens":1760,"reward_std":0.203153,"kl_to_base":0.251,"kl_k3":0.029022,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":51.5,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":37571.8,"wall_s":0.184875,"transcript_tokens_mean":523.5,"transcript_tokens_p95":537,"transcript_tokens_max":537},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.3031866099963736},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.019065,"kl_usd":0.000876,"spent_train_usd":0.340507},"time":{"rollouts_s":0.25,"kl_s":0.01,"train_s":0.0,"total_s":0.32},"tokens":{"root_prompt_tokens":30208,"root_completion_tokens":1760,"subcall_prompt_tokens":1584,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":19,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166397.6581817,"finished_at":1792166398.113438,"pass":{"rate":0.8125,"rate_with_infra":0.8125,"groups":8,"trainable_groups":6,"all_zero_groups":0,"all_one_groups":2,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":0,"2/4":0,"3/4":6,"4/4":2}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.875,"mean_reward":0.875,"window_pass_rate":0.8125,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.75,"mean_reward":0.838888,"window_pass_rate":0.75,"saturated":false}},"moves":[{"family":"tickets_all","from":1,"to":2,"pass_rate":0.8125,"applied":false},{"family":"tickets_customer","from":1,"to":2,"pass_rate":0.75,"applied":false}],"reward":{"mean":0.856944,"exact":0.8125,"partial":0.044444,"near_blind":0.03125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.546,"entropy_tokens":1760,"reward_std":0.247781,"kl_to_base":0.254,"kl_k3":0.029692,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":51.0,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":41733.6,"wall_s":0.297875,"transcript_tokens_mean":522.0,"transcript_tokens_p95":530,"transcript_tokens_max":530},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.2795568489991638},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.01901,"kl_usd":0.000866,"spent_train_usd":0.359517},"time":{"rollouts_s":0.39,"kl_s":0.01,"train_s":0.0,"total_s":0.46},"tokens":{"root_prompt_tokens":30112,"root_completion_tokens":1760,"subcall_prompt_tokens":1568,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}},{"step":20,"status":"trained","branch":0,"lr":1e-05,"started_at":1792166398.1616795,"finished_at":1792166398.6227865,"pass":{"rate":0.75,"rate_with_infra":0.75,"groups":8,"trainable_groups":6,"all_zero_groups":0,"all_one_groups":2,"other_equal_groups":0,"small_groups":0,"histogram":{"0/4":0,"1/4":0,"2/4":2,"3/4":4,"4/4":2}},"families":{"tickets_all":{"level":1,"episodes":16,"scored":16,"pass_rate":0.625,"mean_reward":0.816662,"window_pass_rate":0.770833,"saturated":false},"tickets_customer":{"level":1,"episodes":16,"scored":16,"pass_rate":0.875,"mean_reward":0.9,"window_pass_rate":0.770833,"saturated":false}},"moves":[{"family":"tickets_all","from":1,"to":2,"pass_rate":0.7708,"applied":false},{"family":"tickets_customer","from":1,"to":2,"pass_rate":0.7708,"applied":false}],"reward":{"mean":0.858331,"exact":0.75,"partial":0.108331,"near_blind":0.03125,"submitted":1.0,"hacked":0,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0}},"policy":{"entropy":0.543,"entropy_tokens":1760,"reward_std":0.212192,"kl_to_base":0.257,"kl_k3":0.030368,"grad_norm":0.7,"probs_corr":0.997,"clip_fraction":0.001,"importance_ratio_mean":1.0,"importance_ratio_p95":null,"importance_ratio_p99":null,"loss":-0.05,"kl_tokens":220,"kl_failed":0,"kl_misaligned":0},"shape":{"subcalls":1.0,"budget_hit":0.0,"turns":2.0,"first_turn_submit":0.0,"no_code_turns":0.0,"repl_errors":0.0,"timeouts":0.0,"root_completion_tokens":55.0,"subcall_tokens":45.75,"truncated_turns":0.0,"episodes_with_truncated_turn":0.0,"output_truncations":0.0,"context_chars":39531.4,"wall_s":0.244781,"transcript_tokens_mean":513.6,"transcript_tokens_p95":520,"transcript_tokens_max":520},"infra":{"episodes":32,"infra":0,"rate":0.0,"kinds":{},"attempts":100,"retries":0,"rate_limited":0,"server_errors":0,"timeouts":0,"connection_errors":0,"rejected":0,"peak_in_flight":30,"limiter_wait_s":0.31128255000203353},"infra_pause":null,"skip_train":null,"cost":{"step_usd":0.018718,"kl_usd":0.000856,"spent_train_usd":0.378235},"time":{"rollouts_s":0.4,"kl_s":0.01,"train_s":0.0,"total_s":0.46},"tokens":{"root_prompt_tokens":29576,"root_completion_tokens":1760,"subcall_prompt_tokens":1400,"subcall_completion_tokens":64,"root_calls":64,"subcalls":32}}],"evals":[{"checkpoint":20,"name":"heldout-seed1","branch":0,"at":1792166400.6148906,"cost_usd":0.056337,"ran":100,"summary":{"episodes":100,"n":100,"accuracy":0.8,"accuracy_se":0.04,"mean_reward":0.8803759999999999,"submitted":1.0,"first_turn_submit":0.0,"turns":2.0,"subcalls":1.0,"budget_hit":0.0,"hacked":0,"infra_episodes":0,"items":null,"graded":null,"infra":null,"complete":null,"hacks":{"early_submit":0,"copied_answer":0,"escape_attempt":0,"timeout_loop":0,"test_tamper":0,"grader_tamper":0,"test_aware":0,"network_try":0},"by_family":{"tickets_all":{"n":50,"accuracy":0.7},"tickets_customer":{"n":50,"accuracy":0.9}},"by_level":{"tickets_all/L1":{"n":50,"accuracy":0.7},"tickets_customer/L1":{"n":50,"accuracy":0.9}},"by_source":{},"by_language":{}}}],"abandoned":[],"stop_rules":{"plateau":{"state":"n/a","text":"no selection-set eval yet","action":"stop"},"overfitting":{"state":"n/a","text":"needs two selection evals after training starts","action":"stop"},"frying":{"state":"n/a","text":"no capability check at checkpoint 0","action":"stop"},"saturation":{"state":"ok","text":"0 of 2 families saturated, 0 at their top level","action":"stop"},"hacking":{"state":"ok","text":"detectors fired on 0.0% of episodes over the last 10 steps (0.0% the 10 before)","action":"pause"}},"audits":{"10":{"status":"pending","audited":0,"sampled":16,"clean_share":null},"20":{"status":"pending","audited":0,"sampled":24,"clean_share":null}},"notices":[{"at":1792166360.5283384,"step":0,"kind":"start","text":"second_seed run started at learning rate 1e-05, ceilings train $14, eval $3"},{"at":1792166394.109733,"step":10,"kind":"audit","text":"Claude audit sample for checkpoint 10 is ready"},{"at":1792166398.0788684,"step":18,"kind":"level","text":"tickets_all would move up from level 1 to 2 (pass rate 81% over 48 episodes)"},{"at":1792166398.078876,"step":18,"kind":"level","text":"tickets_customer would move up from level 1 to 2 (pass rate 75% over 48 episodes)"},{"at":1792166398.590514,"step":19,"kind":"level","text":"tickets_all would move up from level 1 to 2 (pass rate 77% over 48 episodes)"},{"at":1792166398.5905187,"step":19,"kind":"level","text":"tickets_customer would move up from level 1 to 2 (pass rate 77% over 48 episodes)"},{"at":1792166400.6149163,"step":20,"kind":"eval","text":"heldout-seed1 at checkpoint 20: accuracy 80.0% over 100 ($0.056)"},{"at":1792166400.7482386,"step":20,"kind":"audit","text":"Claude audit sample for checkpoint 20 is ready"},{"at":1792166400.80375,"step":20,"kind":"lr_decision","text":"all checks passed, so production may start at 2e-05"},{"at":1792166400.8037555,"step":20,"kind":"finished","text":"max_steps: reached 20 steps. Best checkpoint: 20 (80.0% on heldout-seed1)."}],"baselines":[{"label":"Base model as an RLM (20-step run)","eval":"heldout-seed1","accuracy":0.5,"n":100},{"label":"GRPO, first seed (20-step run)","eval":"heldout-seed1","accuracy":0.7,"n":100},{"label":"RLSD (20-step run)","eval":"heldout-seed1","accuracy":0.59,"n":100}],"samples":[{"key":"01c0fc6d689d","why":"fail","step":20,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with a technical fault in the app or website (crashes, errors, login or page failures)? Answer with a single integer.","context_chars":37204,"context_lines":286,"context_head":"[ticket 20000] from Wei Chen: Good morning, The parcel never turned up even though the app claims it was handed over. This is the second time this month. Please advise.\n[ticket 20001] from Lucas Silva: Hey there. My card shows two identical charges for the monitor. I've been a customer for 4 years.\n[ticket 20002] from Emma Brown: Hey there. The tracking page throws an error for every order number I enter. Regards.","gold":"48","answer":"46","submitted":true,"reward":0.5333,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.5333,"err":2.0,"e_blind":6.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"286\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 46\nprint(answer)\nsubmit(answer)\n","output":"46\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Wei Chen: Good morning, The parcel never turned up even though the app claims it was handed over. This is the second time this month. Please advise.","output":"ok","error":false}],"wall_s":0.369,"branch":0},{"key":"0618a053fbb6","why":"win","step":20,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Wei Chen report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":33464,"context_lines":258,"context_head":"[ticket 20000] from Diego Ramos: Hi, Is there a student discount on subscriptions?. Ref 83523. Let me know.\n[ticket 20001] from Priya Nair: Hey, I took the day off to receive it and nobody ever knocked. Ref 17877. Please advise.\n[ticket 20002] from Kenji Sato: To whom it may concern, My card shows two identical charges for the kettle. Cheers.","gold":"15","answer":"15","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":4.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"258\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 15\nprint(answer)\nsubmit(answer)\n","output":"15\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Diego Ramos: Hi, Is there a student discount on subscriptions?. Ref 83523. Let me know.","output":"ok","error":false}],"wall_s":0.161,"branch":0},{"key":"120dee58ef36","why":"fail","step":19,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Emma Brown report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":35970,"context_lines":279,"context_head":"[ticket 20000] from Jack Wilson: Hiya, I get signed out every few minutes on the website. My account email is on file. Cheers.\n[ticket 20001] from Maria Lopez: Good morning, The coupon was accepted at checkout but I was charged full price. My account email is on file.\n[ticket 20002] from Kenji Sato: Hi support, You promised money back for the jacket 6 days ago and my bank shows nothing. This is order 16315. Please advise.","gold":"10","answer":"11","submitted":true,"reward":0.4,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.4,"err":1.0,"e_blind":2.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"279\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 11\nprint(answer)\nsubmit(answer)\n","output":"11\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Jack Wilson: Hiya, I get signed out every few minutes on the website. My account email is on file. Cheers.","output":"ok","error":false}],"wall_s":0.229,"branch":0},{"key":"11b0e2f5297e","why":"win","step":19,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Wei Chen report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":46357,"context_lines":361,"context_head":"[ticket 20000] from Omar Haddad: Hiya, The driver tossed it over the fence and it landed in a puddle. This is order 69337. Please advise.\n[ticket 20001] from Wei Chen: Quick note: I get signed out every few minutes on the website. Order #16200. Thanks.\n[ticket 20002] from Aisha Khan: To whom it may concern, Just wanted to say the kettle is fantastic and I'd buy it again. Order #15609. Hope to hear back soon.","gold":"20","answer":"20","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":4.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"361\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 20\nprint(answer)\nsubmit(answer)\n","output":"20\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Omar Haddad: Hiya, The driver tossed it over the fence and it landed in a puddle. This is order 69337. Please advise.","output":"ok","error":false}],"wall_s":0.335,"branch":0},{"key":"1dcb374d439c","why":"fail","step":18,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with the delivery or shipping of an order (late, lost, misdelivered, damaged in transit, or incomplete)? Answer with a single integer.","context_chars":37884,"context_lines":295,"context_head":"[ticket 20000] from Kenji Sato: Good morning, Photo uploads for my jacket review keep failing halfway. Cheers.\n[ticket 20001] from Diego Ramos: Hello team, The box I received contained someone else's order. My account email is on file.\n[ticket 20002] from Wei Chen: Hey, I took the day off to receive it and nobody ever knocked. Thanks.","gold":"76","answer":"77","submitted":true,"reward":0.6667,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.6667,"err":1.0,"e_blind":6.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"295\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 77\nprint(answer)\nsubmit(answer)\n","output":"77\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Kenji Sato: Good morning, Photo uploads for my jacket review keep failing halfway. Cheers.","output":"ok","error":false}],"wall_s":0.221,"branch":0},{"key":"051dfaa405cf","why":"win","step":18,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Emma Brown report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":32074,"context_lines":252,"context_head":"[ticket 20000] from Grace Kim: To whom it may concern, The parcel arrived safely, could you tell me how to register the warranty?. My account email is on file. Hope to hear back soon.\n[ticket 20001] from Emma Brown: No complaints about shipping this time, it arrived in perfect condition. Let me know.\n[ticket 20002] from Lucas Silva: I had no trouble logging in, I'd just like to update my email address. This is order 45606. Thank you!","gold":"12","answer":"12","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":1.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"252\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 12\nprint(answer)\nsubmit(answer)\n","output":"12\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Grace Kim: To whom it may concern, The parcel arrived safely, could you tell me how to register the warranty?. My account email is on file. Hope to hear back soon.","output":"ok","error":false}],"wall_s":0.22,"branch":0},{"key":"0357c0c1ac58","why":"fail","step":17,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Priya Nair report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":48275,"context_lines":374,"context_head":"[ticket 20000] from Wei Chen: Hello, Clicking pay does absolutely nothing on your site. My account email is on file. Thank you!\n[ticket 20001] from Wei Chen: Hi, Just wanted to say the desk chair is fantastic and I'd buy it again. Bought it as a gift. Thank you!\n[ticket 20002] from Lucas Silva: Hey, I get signed out every few minutes on the website. This is the second time this month. Let me know.","gold":"10","answer":"12","submitted":true,"reward":0.5714,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.5714,"err":2.0,"e_blind":7.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"374\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 12\nprint(answer)\nsubmit(answer)\n","output":"12\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Wei Chen: Hello, Clicking pay does absolutely nothing on your site. My account email is on file. Thank you!","output":"ok","error":false}],"wall_s":0.155,"branch":0},{"key":"04480ce8bc01","why":"win","step":17,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Kenji Sato report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":45080,"context_lines":345,"context_head":"[ticket 20000] from Kenji Sato: To whom it may concern, The receipt total doesn't match what left my account. Ref 30713. Let me know.\n[ticket 20001] from Emma Brown: Quick note: I had no trouble logging in, I'd just like to update my email address. Bought it as a gift. Appreciate it!\n[ticket 20002] from Kenji Sato: Hi, The courier left it with a neighbour I've never met and now it's gone. Let me know.","gold":"28","answer":"28","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":13.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"345\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 28\nprint(answer)\nsubmit(answer)\n","output":"28\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Kenji Sato: To whom it may concern, The receipt total doesn't match what left my account. Ref 30713. Let me know.","output":"ok","error":false}],"wall_s":0.105,"branch":0},{"key":"0cf242a35ae0","why":"fail","step":16,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Emma Brown report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":38113,"context_lines":294,"context_head":"[ticket 20000] from Diego Ramos: Just wanted to say the headphones is fantastic and I'd buy it again.\n[ticket 20001] from Priya Nair: I took the day off to receive it and nobody ever knocked. Ref 14260. Please advise.\n[ticket 20002] from Emma Brown: Hey there. No complaints about shipping this time, it arrived in perfect condition. I've been a customer for 5 years.","gold":"13","answer":"14","submitted":true,"reward":0.0,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.0,"err":1.0,"e_blind":0.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"294\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 14\nprint(answer)\nsubmit(answer)\n","output":"14\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Diego Ramos: Just wanted to say the headphones is fantastic and I'd buy it again.","output":"ok","error":false}],"wall_s":0.308,"branch":0},{"key":"19b21b9b124d","why":"win","step":16,"family":"tickets_customer","level":1,"edit":false,"language":null,"question":"How many tickets from Omar Haddad report an actual problem of any kind (delivery, billing, or technical)? Questions, praise, and requests are not problems. Answer with a single integer.","context_chars":46141,"context_lines":361,"context_head":"[ticket 20000] from Priya Nair: Quick note: The order went to my old flat despite me updating the address. This is order 15561. Thank you!\n[ticket 20001] from Lucas Silva: Quick note: The parcel never turned up even though the app claims it was handed over. This is the second time this month. Thanks.\n[ticket 20002] from Lucas Silva: Hello, I had no trouble logging in, I'd just like to update my email address. This is the second time this month.","gold":"15","answer":"15","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":1.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"361\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 15\nprint(answer)\nsubmit(answer)\n","output":"15\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Priya Nair: Quick note: The order went to my old flat despite me updating the address. This is order 15561. Thank you!","output":"ok","error":false}],"wall_s":0.294,"branch":0},{"key":"10386c000131","why":"fail","step":15,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with billing or payment (wrong or duplicate charges, unexpected fees, missing refunds, price changes)? Answer with a single integer.","context_chars":35247,"context_lines":271,"context_head":"[ticket 20000] from Sofia Rossi: Hi support, The plan renewed at a higher price without any notice. My account email is on file. Hope to hear back soon.\n[ticket 20001] from Kenji Sato: Hiya, Just wanted to say the blender is fantastic and I'd buy it again. My account email is on file.\n[ticket 20002] from Aisha Khan: Hey, You promised money back for the speaker 4 days ago and my bank shows nothing. Please advise.","gold":"57","answer":"58","submitted":true,"reward":0.64,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.64,"err":1.0,"e_blind":5.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"271\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 58\nprint(answer)\nsubmit(answer)\n","output":"58\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Sofia Rossi: Hi support, The plan renewed at a higher price without any notice. My account email is on file. Hope to hear back soon.","output":"ok","error":false}],"wall_s":0.22,"branch":0},{"key":"10bfb3b419d3","why":"win","step":15,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with the delivery or shipping of an order (late, lost, misdelivered, damaged in transit, or incomplete)? Answer with a single integer.","context_chars":43762,"context_lines":339,"context_head":"[ticket 20000] from Nina Ivanova: To whom it may concern, The search bar returns nothing, even for products on your homepage.\n[ticket 20001] from Kenji Sato: Hey there. How much do you charge for express delivery to Canada?. Bought it as a gift.\n[ticket 20002] from Grace Kim: Hiya, The courier left it with a neighbour I've never met and now it's gone. This is order 43618.","gold":"78","answer":"78","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":3.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"339\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 78\nprint(answer)\nsubmit(answer)\n","output":"78\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Nina Ivanova: To whom it may concern, The search bar returns nothing, even for products on your homepage.","output":"ok","error":false}],"wall_s":0.194,"branch":0},{"key":"29dc91c7f536","why":"fail","step":10,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with the delivery or shipping of an order (late, lost, misdelivered, damaged in transit, or incomplete)? Answer with a single integer.","context_chars":45686,"context_lines":347,"context_head":"[ticket 20000] from Omar Haddad: To whom it may concern, The search bar returns nothing, even for products on your homepage. Bought it as a gift. Please advise.\n[ticket 20001] from Emma Brown: Good morning, Will the jacket come back in stock soon?. My account email is on file. Hope to hear back soon.\n[ticket 20002] from Jack Wilson: Hey there. The box I received contained someone else's order. Thank you!","gold":"100","answer":"103","submitted":true,"reward":0.6588,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.6588,"err":3.0,"e_blind":17.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"347\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 103\nprint(answer)\nsubmit(answer)\n","output":"103\n","error":"","stdout_chars":4,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Omar Haddad: To whom it may concern, The search bar returns nothing, even for products on your homepage. Bought it as a gift. Please advise.","output":"ok","error":false}],"wall_s":0.376,"branch":0},{"key":"25ca74b1d79e","why":"win","step":10,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with the delivery or shipping of an order (late, lost, misdelivered, damaged in transit, or incomplete)? Answer with a single integer.","context_chars":45686,"context_lines":347,"context_head":"[ticket 20000] from Omar Haddad: To whom it may concern, The search bar returns nothing, even for products on your homepage. Bought it as a gift. Please advise.\n[ticket 20001] from Emma Brown: Good morning, Will the jacket come back in stock soon?. My account email is on file. Hope to hear back soon.\n[ticket 20002] from Jack Wilson: Hey there. The box I received contained someone else's order. Thank you!","gold":"100","answer":"100","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":17.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"347\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 100\nprint(answer)\nsubmit(answer)\n","output":"100\n","error":"","stdout_chars":4,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Omar Haddad: To whom it may concern, The search bar returns nothing, even for products on your homepage. Bought it as a gift. Please advise.","output":"ok","error":false}],"wall_s":0.138,"branch":0},{"key":"0395df979f89","why":"fail","step":1,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with a technical fault in the app or website (crashes, errors, login or page failures)? Answer with a single integer.","context_chars":36021,"context_lines":277,"context_head":"[ticket 20000] from Aisha Khan: Quick note: The box I received contained someone else's order. This is the second time this month.\n[ticket 20001] from Aisha Khan: Hey, The plan renewed at a higher price without any notice. I've been a customer for 10 years. Please advise.\n[ticket 20002] from Grace Kim: Hi support, The parcel never turned up even though the app claims it was handed over. This is the second time this month. Let me know.","gold":"53","answer":"54","submitted":true,"reward":0.0,"correct":false,"components":{"parsed":1.0,"exact":0.0,"partial":0.0,"err":1.0,"e_blind":0.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"277\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 54\nprint(answer)\nsubmit(answer)\n","output":"54\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Aisha Khan: Quick note: The box I received contained someone else's order. This is the second time this month.","output":"ok","error":false}],"wall_s":0.445,"branch":0},{"key":"060d87f8179b","why":"win","step":1,"family":"tickets_all","level":1,"edit":false,"language":null,"question":"How many tickets report a problem with billing or payment (wrong or duplicate charges, unexpected fees, missing refunds, price changes)? Answer with a single integer.","context_chars":36583,"context_lines":283,"context_head":"[ticket 20000] from Emma Brown: Hi support, Clicking pay does absolutely nothing on your site. My account email is on file. Regards.\n[ticket 20001] from Maria Lopez: Good morning, No complaints about shipping this time, it arrived in perfect condition. I've been a customer for 3 years. Let me know.\n[ticket 20002] from Kenji Sato: Hey there. The order went to my old flat despite me updating the address. I've been a customer for 3 years. Hope to hear back soon.","gold":"55","answer":"55","submitted":true,"reward":1.0,"correct":true,"components":{"parsed":1.0,"exact":1.0,"partial":0.0,"err":0.0,"e_blind":1.0,"near_blind":0.0},"hacks":[],"infra_kind":null,"turn_count":2,"turns_omitted":0,"turns":[{"plan":"Look at the structure first.","code":"lines = context.splitlines()\nprint(len(lines))\nprint(llm('Summarize: ' + lines[0][:200]))\n","output":"283\nok\n","error":"","stdout_chars":7,"submitted":false,"restarted":false,"finish":"stop","tokens":34},{"plan":"Submit.","code":"n = len(context)\nanswer = 55\nprint(answer)\nsubmit(answer)\n","output":"55\n","error":"","stdout_chars":3,"submitted":true,"restarted":false,"finish":"stop","tokens":21}],"subcalls_used":1,"timeouts":0,"events":0,"rejected":0,"subcalls":[{"prompt":"Summarize: [ticket 20000] from Emma Brown: Hi support, Clicking pay does absolutely nothing on your site. My account email is on file. Regards.","output":"ok","error":false}],"wall_s":0.464,"branch":0}]}</script>
+<script>
+(function () {
+  "use strict";
+  var D = null;
+  try { D = JSON.parse(document.getElementById("dash-data").textContent); } catch (e) { D = null; }
+  if (!D || !D.run) {
+    document.getElementById("main").innerHTML = "";
+    var p = document.createElement("p"); p.className = "empty"; p.textContent = "No run data in this page yet.";
+    document.getElementById("main").appendChild(p);
+    return;
+  }
+
+  // ------------------------------------------------------------------ helpers
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function get(o, path) { for (var i = 0; i < path.length; i++) { if (o == null) return null; o = o[path[i]]; } return o == null ? null : o; }
+  function median(a) { a = a.filter(isNum).slice().sort(function (x, y) { return x - y; }); if (!a.length) return null; var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+  function mean(a) { a = a.filter(isNum); return a.length ? a.reduce(function (s, v) { return s + v; }, 0) / a.length : null; }
+  var F = {
+    pct: function (v) { return isNum(v) ? (v * 100).toFixed(Math.abs(v) >= 0.995 || v === 0 ? 0 : 1) + "%" : "–"; },
+    pct2: function (v) { return isNum(v) ? (v * 100).toFixed(2) + "%" : "–"; },
+    num: function (v) { if (!isNum(v)) return "–"; var a = Math.abs(v); if (a >= 10000) return Math.round(v).toLocaleString("en-US"); if (a >= 100) return v.toFixed(0); if (a >= 10) return v.toFixed(1); if (a >= 1) return v.toFixed(2); if (a === 0) return "0"; return v.toPrecision(3); },
+    int: function (v) { return isNum(v) ? Math.round(v).toLocaleString("en-US") : "–"; },
+    usd: function (v) { return isNum(v) ? "$" + (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) : "–"; },
+    usd3: function (v) { return isNum(v) ? "$" + v.toFixed(3) : "–"; },
+    usd0: function (v) { return isNum(v) ? "$" + Math.round(v) : "–"; },
+    secs: function (v) { if (!isNum(v)) return "–"; if (v < 90) return v.toFixed(v < 10 ? 1 : 0) + " s"; if (v < 5400) return (v / 60).toFixed(1) + " min"; return (v / 3600).toFixed(1) + " h"; },
+    mins: function (v) { return isNum(v) ? (v / 60).toFixed(v < 600 ? 1 : 0) : "–"; },
+    lr: function (v) { if (!isNum(v)) return "–"; if (v === 0) return "0"; return v.toExponential(1).replace(".0e", "e"); },
+    compact: function (v) { if (!isNum(v)) return "–"; var a = Math.abs(v); if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M"; if (a >= 1e4) return (v / 1e3).toFixed(0) + "K"; if (a >= 1e3) return (v / 1e3).toFixed(1) + "K"; return F.num(v); }
+  };
+  function clock(t) { if (!isNum(t)) return "–"; var d = new Date(t * 1000); return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function stamp(t) { if (!isNum(t)) return "–"; var d = new Date(t * 1000); return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + clock(t); }
+  function ago(t) { if (!isNum(t)) return ""; var s = Math.max(0, Date.now() / 1000 - t); if (s < 60) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago"; if (s < 86400) return (s / 3600).toFixed(1) + " h ago"; return Math.round(s / 86400) + " d ago"; }
+
+  var run = D.run, cfg = run.config || {}, steps = D.steps || [], evals = D.evals || [];
+  var last = steps.length ? steps[steps.length - 1] : null;
+  var FAMILY_SLOT = { aggregation: 1, callgraph: 2, needle: 3, repo_loc: 4, repo_loc_select: 4, edit_real: 5, edit_synth: 7, edit_synth_heldout: 7, tickets_all: 6, tickets_customer: 7 };
+  var fams = Object.keys(cfg.mix || {});
+  steps.forEach(function (r) { Object.keys(r.families || {}).forEach(function (f) { if (fams.indexOf(f) < 0) fams.push(f); }); });
+  var spare = [5, 8, 7, 6];
+  fams.forEach(function (f) { if (!FAMILY_SLOT[f]) FAMILY_SLOT[f] = spare.shift() || 8; });
+  function famColor(f) { return "var(--c" + (FAMILY_SLOT[f] || 8) + ")"; }
+  function famLabel(f) { return f.replace(/_/g, " "); }
+  // the edit block (spec §12.9): absent on old runs and on steps with no edit episode
+  function ed(r, key) { var e = r && r.edit; return e && e.episodes !== 0 && isNum(e[key]) ? e[key] : null; }
+  var editSteps = steps.filter(function (r) { return r.edit && r.edit.episodes !== 0; });
+  var hasEdit = editSteps.length > 0;
+  var editFams = fams.filter(function (f) { return /^edit_/.test(f); });
+
+  // shared step axis: 0 .. the last step seen (at least 10)
+  var lastStep = 0;
+  steps.forEach(function (r) { lastStep = Math.max(lastStep, r.step); });
+  (D.abandoned || []).forEach(function (a) { (a.steps || []).forEach(function (r) { lastStep = Math.max(lastStep, r.step); }); });
+  evals.forEach(function (e) { lastStep = Math.max(lastStep, e.checkpoint || 0); });
+  var X0 = 0, X1 = Math.max(10, lastStep);
+
+  function series(label, color, f, opts) {
+    opts = opts || {};
+    var pts = [];
+    steps.forEach(function (r) { var v = f(r); if (isNum(v)) pts.push([r.step, v]); });
+    return Object.assign({ label: label, color: color, pts: pts }, opts);
+  }
+  function ghosts(f) {
+    return (D.abandoned || []).map(function (a, i) {
+      var pts = []; (a.steps || []).forEach(function (r) { var v = f(r); if (isNum(v)) pts.push([r.step, v]); });
+      return { label: "rolled back (branch " + a.branch + ")", ghost: true, pts: pts };
+    }).filter(function (s) { return s.pts.length; });
+  }
+  function rollbackMarks() {
+    return (D.abandoned || []).map(function (a) { return { x: a.after, label: "rollback" }; });
+  }
+
+  // ------------------------------------------------------------------ charts
+  var registry = [], tip = $("tip");
+  var ro = typeof ResizeObserver === "function" ? new ResizeObserver(function (entries) {
+    entries.forEach(function (en) { var c = en.target.__chart; if (c && Math.abs(en.contentRect.width - c.w) > 2) c.draw(); });
+  }) : null;
+
+  function niceTicks(lo, hi, n) {
+    if (lo === hi) { hi = lo + (lo === 0 ? 1 : Math.abs(lo) * 0.5); lo = lo === 0 ? 0 : lo - Math.abs(lo) * 0.5; }
+    var span = hi - lo, raw = span / Math.max(1, n), mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+    var step = (r >= 5 ? 10 : r >= 2 ? 5 : r >= 1 ? 2 : 1) * mag;
+    if (r < 1.5) step = mag; else if (r < 3) step = 2 * mag; else if (r < 7) step = 5 * mag; else step = 10 * mag;
+    var t0 = Math.floor(lo / step + 1e-9) * step, t1 = Math.ceil(hi / step - 1e-9) * step, out = [];
+    for (var t = t0; t <= t1 + step * 1e-6; t += step) out.push(+t.toPrecision(12));
+    return out;
+  }
+  function xTicks() { var span = X1 - X0, step = span <= 12 ? 2 : span <= 30 ? 5 : span <= 80 ? 10 : span <= 200 ? 25 : 50, out = []; for (var t = 0; t <= X1; t += step) out.push(t); return out; }
+
+  function chart(host, spec) {
+    var fig = el("figure", "chart"), cap = el("figcaption");
+    var title = el("div", "c-title", spec.title), val = el("div", "c-val");
+    cap.appendChild(title); cap.appendChild(val);
+    if (spec.note) cap.appendChild(el("div", "c-note", spec.note));
+    fig.appendChild(cap);
+    var shown = spec.series.filter(function (s) { return !s.ghost && !s.threshold; });
+    var legendItems = spec.series.filter(function (s) { return s.pts.length || !s.ghost; });
+    if (shown.length >= 2 || legendItems.some(function (s) { return s.ghost || s.threshold; })) {
+      var lg = el("div", "legend"), seen = {};
+      legendItems.forEach(function (s) {
+        var lab = s.ghost ? "rolled back" : s.label; if (seen[lab]) return; seen[lab] = 1;
+        var it = el("span"), k = el("span", "key" + (spec.kind === "bar" ? " box" : "") + (s.ghost ? " ghost" : ""));
+        if (!s.ghost) k.style.background = s.threshold ? "var(--ink-2)" : s.color;
+        if (s.threshold) k.style.opacity = "0.55";
+        it.appendChild(k); it.appendChild(document.createTextNode(lab)); lg.appendChild(it);
+      });
+      fig.appendChild(lg);
+    }
+    var plot = el("div", "plot"); plot.tabIndex = 0; plot.setAttribute("role", "img");
+    fig.appendChild(plot); host.appendChild(fig);
+    var fmt = spec.fmt || F.num;
+    var main = shown[0];
+    if (spec.headline) val.textContent = spec.headline;
+    else if (main && main.pts.length) val.textContent = fmt(main.pts[main.pts.length - 1][1]);
+    else val.textContent = "no data yet";
+    plot.setAttribute("aria-label", spec.title + ": latest " + val.textContent + ". Values are in the table view.");
+
+    var c = { spec: spec, plot: plot, w: 0 };
+    var xs, maps, cross, dots, X, Y, m, H;
+    c.draw = function () {
+      var W = Math.max(220, Math.round(plot.clientWidth || 300)); c.w = W;
+      H = spec.height || 132;
+      var endLabels = spec.endLabels && shown.length >= 2 && shown.length <= 4;
+      m = { l: 40, r: endLabels ? 78 : 12, t: 12, b: 20 };
+      var all = [];
+      spec.series.forEach(function (s) { s.pts.forEach(function (p) { all.push(p[1]); if (s.se) { var e = s.se[p[0]]; if (isNum(e)) { all.push(p[1] + e); all.push(p[1] - e); } } }); });
+      if (spec.kind === "bar" && spec.stacked) {
+        var tot = {}; spec.series.forEach(function (s) { s.pts.forEach(function (p) { tot[p[0]] = (tot[p[0]] || 0) + p[1]; }); });
+        all = Object.keys(tot).map(function (k) { return tot[k]; });
+      }
+      (spec.refs || []).forEach(function (r) { if (isNum(r.y)) all.push(r.y); });
+      var lo = spec.yMin != null ? spec.yMin : Math.min.apply(null, all.length ? all : [0]);
+      var hi = spec.yMax != null ? spec.yMax : Math.max.apply(null, all.length ? all : [1]);
+      if (spec.zero !== false && spec.yMin == null) lo = Math.min(lo, 0);
+      if (spec.yMaxAtLeast != null) hi = Math.max(hi, spec.yMaxAtLeast);
+      var ticks = niceTicks(lo, hi, 3);
+      if (spec.yMin == null) lo = ticks[0]; if (spec.yMax == null) hi = ticks[ticks.length - 1];
+      ticks = ticks.filter(function (t) { return t >= lo - 1e-12 && t <= hi + 1e-12; });
+      var x0 = spec.x0 != null ? spec.x0 : X0, x1 = X1;
+      X = function (s) { return m.l + (s - x0) / Math.max(1e-9, x1 - x0) * (W - m.l - m.r); };
+      Y = function (v) { return m.t + (1 - (v - lo) / Math.max(1e-12, hi - lo)) * (H - m.t - m.b); };
+      var svg = sv("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H });
+      ticks.forEach(function (t) {
+        svg.appendChild(sv("line", { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), "class": t === lo ? "base-l" : "grid-l" }));
+        var tx = sv("text", { x: m.l - 6, y: Y(t) + 3.5, "text-anchor": "end", "class": "ax-t" }); tx.textContent = (spec.tickFmt || fmt)(t); svg.appendChild(tx);
+      });
+      xTicks().forEach(function (t) {
+        if (t < x0 || t > x1) return;
+        var tx = sv("text", { x: X(t), y: H - 5, "text-anchor": "middle", "class": "ax-t" }); tx.textContent = String(t); svg.appendChild(tx);
+      });
+      (spec.refs || []).forEach(function (r) {
+        if (!isNum(r.y) || r.y < lo || r.y > hi) return;
+        svg.appendChild(sv("line", { x1: m.l, x2: W - m.r, y1: Y(r.y), y2: Y(r.y), "class": "ref-l" }));
+        var tx = sv("text", { x: W - m.r - 2, y: Y(r.y) - 3, "text-anchor": "end", "class": "ref-t" }); tx.textContent = r.label; svg.appendChild(tx);
+      });
+      (spec.xmarks || []).forEach(function (mk) {
+        if (!isNum(mk.x)) return;
+        svg.appendChild(sv("line", { x1: X(mk.x), x2: X(mk.x), y1: m.t, y2: H - m.b, "class": "xmark-l" }));
+        var tx = sv("text", { x: X(mk.x) + 3, y: m.t + 8, "class": "xmark-t" }); tx.textContent = mk.label; svg.appendChild(tx);
+      });
+      xs = {}; maps = [];
+      if (spec.kind === "bar") {
+        var band = (W - m.l - m.r) / Math.max(1, x1 - x0 + 1), bw = Math.max(1, Math.min(24, band - (band > 4 ? 1.5 : 0.5)));
+        var acc = {};
+        spec.series.forEach(function (s) {
+          var mp = {};
+          s.pts.forEach(function (p) {
+            var base = spec.stacked ? (acc[p[0]] || 0) : 0, top = base + p[1]; xs[p[0]] = 1; mp[p[0]] = p[1];
+            if (p[1] > 0) {
+              var y1 = Y(top), y0 = Y(base);
+              svg.appendChild(sv("rect", { x: X(p[0]) - bw / 2, y: y1, width: bw, height: Math.max(0.5, y0 - y1), style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:" + (bw > 3 ? 1 : 0.5) }));
+            }
+            if (spec.stacked) acc[p[0]] = top;
+          });
+          maps.push({ s: s, mp: mp });
+        });
+      } else {
+        spec.series.slice().reverse().forEach(function (s) {
+          var mp = {}; s.pts.forEach(function (p) { mp[p[0]] = p[1]; if (!s.ghost) xs[p[0]] = 1; });
+          maps.push({ s: s, mp: mp });
+          if (!s.pts.length) return;
+          var d = "", prev = null, gap = spec.maxGap || 1;
+          s.pts.forEach(function (p) {
+            var px = X(p[0]).toFixed(1), py = Y(p[1]).toFixed(1);
+            if (spec.stepLine && prev) d += "L" + px + "," + Y(prev[1]).toFixed(1);
+            d += (prev && p[0] - prev[0] <= gap ? "L" : "M") + px + "," + py; prev = p;
+          });
+          if (s.area && !s.ghost) {
+            var first = s.pts[0], lastp = s.pts[s.pts.length - 1];
+            svg.appendChild(sv("path", { d: d + "L" + X(lastp[0]).toFixed(1) + "," + Y(Math.max(lo, 0)).toFixed(1) + "L" + X(first[0]).toFixed(1) + "," + Y(Math.max(lo, 0)).toFixed(1) + "Z", style: "fill:" + s.color + ";opacity:0.10;stroke:none" }));
+          }
+          var stroke = s.ghost ? "var(--muted)" : s.threshold ? "var(--ink-2)" : s.color;
+          svg.appendChild(sv("path", { d: d, fill: "none", style: "stroke:" + stroke + ";stroke-width:" + (s.ghost || s.threshold ? 1.5 : 2) + ";stroke-linejoin:round;stroke-linecap:round;opacity:" + (s.ghost ? 0.55 : s.threshold ? 0.5 : 1) }));
+          if (s.se) s.pts.forEach(function (p) { var e = s.se[p[0]]; if (isNum(e)) svg.appendChild(sv("line", { x1: X(p[0]), x2: X(p[0]), y1: Y(p[1] - e), y2: Y(p[1] + e), style: "stroke:" + s.color + ";stroke-width:1.5;opacity:0.6" })); });
+          if (s.markers) s.pts.forEach(function (p) { svg.appendChild(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 3.5, style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:2" })); });
+          if (!s.ghost && !s.threshold) {
+            var lp = s.pts[s.pts.length - 1];
+            svg.appendChild(sv("circle", { cx: X(lp[0]), cy: Y(lp[1]), r: 4, style: "fill:" + s.color + ";stroke:var(--panel);stroke-width:2" }));
+          }
+          if (s.ring) s.ring.forEach(function (x) { if (isNum(mp[x])) svg.appendChild(sv("circle", { cx: X(x), cy: Y(mp[x]), r: 7, fill: "none", style: "stroke:var(--ink);stroke-width:1.5" })); });
+        });
+        maps.reverse();  // drawn last-first so the first series sits on top; listed first-first
+        if (endLabels) {
+          var ends = shown.filter(function (s) { return s.pts.length; }).map(function (s) { var p = s.pts[s.pts.length - 1]; return { s: s, x: X(p[0]), y: Y(p[1]) }; });
+          var ys = ends.map(function (e) { return e.y; }).sort(function (a, b) { return a - b; }), clash = false;
+          for (var i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] < 11) clash = true;
+          if (!clash) ends.forEach(function (e) { var t = sv("text", { x: e.x + 8, y: e.y + 3.5, "class": "end-t" }); t.textContent = e.s.label; svg.appendChild(t); });
+        }
+      }
+      cross = sv("line", { x1: 0, x2: 0, y1: m.t, y2: H - m.b, "class": "cross", visibility: "hidden" });
+      svg.appendChild(cross);
+      dots = maps.filter(function (o) { return spec.kind !== "bar" && !o.s.threshold; }).map(function (o) {
+        var dt = sv("circle", { r: 4, visibility: "hidden", style: "fill:" + (o.s.ghost ? "var(--muted)" : o.s.color) + ";stroke:var(--panel);stroke-width:2" });
+        svg.appendChild(dt); return { o: o, dt: dt };
+      });
+      var hit = sv("rect", { x: m.l, y: 0, width: Math.max(1, W - m.l - m.r), height: H, fill: "transparent" });
+      svg.appendChild(hit);
+      var keys = Object.keys(xs).map(Number).sort(function (a, b) { return a - b; });
+      function nearest(px) { var best = null, bd = 1e9; keys.forEach(function (k) { var d = Math.abs(X(k) - px); if (d < bd) { bd = d; best = k; } }); return best; }
+      hit.addEventListener("pointermove", function (ev) { var r = svg.getBoundingClientRect(); setHover(nearest(ev.clientX - r.left), c, ev); });
+      hit.addEventListener("pointerleave", function () { setHover(null, c); });
+      plot.onkeydown = function (ev) {
+        if (!keys.length) return; var i = keys.indexOf(hoverStep);
+        if (ev.key === "ArrowRight") i = Math.min(keys.length - 1, i < 0 ? keys.length - 1 : i + 1);
+        else if (ev.key === "ArrowLeft") i = Math.max(0, i < 0 ? keys.length - 1 : i - 1);
+        else return;
+        ev.preventDefault(); setHover(keys[i], c, null);
+      };
+      plot.onblur = function () { setHover(null, c); };
+      plot.innerHTML = ""; plot.appendChild(svg);
+      if (hoverStep != null) c.hover(hoverStep, false);
+    };
+    c.hover = function (s, isSource, ev) {
+      if (!cross) return;
+      if (s == null || s < (spec.x0 != null ? spec.x0 : X0) || s > X1) {
+        cross.setAttribute("visibility", "hidden"); dots.forEach(function (d) { d.dt.setAttribute("visibility", "hidden"); });
+        if (isSource) tip.hidden = true; return;
+      }
+      cross.setAttribute("x1", X(s)); cross.setAttribute("x2", X(s)); cross.setAttribute("visibility", "visible");
+      dots.forEach(function (d) { var v = d.o.mp[s]; if (isNum(v)) { d.dt.setAttribute("cx", X(s)); d.dt.setAttribute("cy", Y(v)); d.dt.setAttribute("visibility", "visible"); } else d.dt.setAttribute("visibility", "hidden"); });
+      if (!isSource) return;
+      tip.innerHTML = "";
+      tip.appendChild(el("div", "th", (spec.xLabel || "Step") + " " + s));
+      var any = false;
+      maps.forEach(function (o) {
+        var v = o.mp[s]; if (!isNum(v)) return; any = true;
+        var row = el("div", "tr"), k = el("span", "key" + (o.s.ghost ? " ghost" : ""));
+        if (!o.s.ghost) k.style.background = o.s.threshold ? "var(--ink-2)" : o.s.color;
+        row.appendChild(k); row.appendChild(el("b", null, (spec.tipFmt || fmt)(v)));
+        row.appendChild(el("span", null, o.s.ghost ? "rolled back" : o.s.label)); tip.appendChild(row);
+      });
+      if (!any) tip.appendChild(el("div", null, "no value at this step"));
+      tip.hidden = false;
+      var r = plot.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      var px = ev ? ev.clientX : r.left + X(s), py = ev ? ev.clientY : r.top + 20;
+      var left = px + 14; if (left + tw > window.innerWidth - 8) left = px - tw - 14;
+      tip.style.left = Math.max(8, left) + "px"; tip.style.top = Math.max(8, Math.min(window.innerHeight - th - 8, py - th - 10)) + "px";
+    };
+    plot.__chart = c; registry.push(c); c.draw(); if (ro) ro.observe(plot);
+    return c;
+  }
+  var hoverStep = null;
+  function setHover(s, src, ev) { hoverStep = s; registry.forEach(function (c) { c.hover(s, c === src, ev); }); }
+  window.addEventListener("scroll", function () { if (!tip.hidden) { tip.hidden = true; } }, { passive: true });
+
+  function sparkline(svgHost, pts, color) {
+    if (pts.length < 2) return;
+    var w = 200, h = 30, ys = pts.map(function (p) { return p[1]; }), lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+    if (hi - lo < 1e-9) { hi += 0.5; lo -= 0.5; }
+    var x0 = pts[0][0], x1 = pts[pts.length - 1][0];
+    function X(x) { return 2 + (x - x0) / Math.max(1, x1 - x0) * (w - 8); } function Y(v) { return 3 + (1 - (v - lo) / (hi - lo)) * (h - 6); }
+    var d = pts.map(function (p, i) { return (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join("");
+    var s = sv("svg", { viewBox: "0 0 " + w + " " + h, preserveAspectRatio: "none", "aria-hidden": "true" });
+    s.appendChild(sv("path", { d: d, fill: "none", style: "stroke:var(--axis);stroke-width:1.5;vector-effect:non-scaling-stroke" }));
+    var lp = pts[pts.length - 1];
+    s.appendChild(sv("circle", { cx: X(lp[0]), cy: Y(lp[1]), r: 3, style: "fill:" + color }));
+    svgHost.appendChild(s);
+  }
+
+  // ------------------------------------------------------------------ header
+  var STATUS = {
+    running: ["Running", "t-good", "●"], paused: ["Paused for Rishi", "t-warn", "‖"], stopped: ["Stopped", "t-serious", "■"],
+    finished: ["Finished", "t-good", "✓"], crashed: ["Crashed", "t-crit", "×"], interrupted: ["Interrupted", "t-crit", "×"],
+    waiting: ["Waiting to start", "t-muted", "○"]
+  };
+  var KIND = { second_seed: "Second seed (step 10)", production: "Production (step 12)" };
+  $("run-name").textContent = run.name || "RLM run";
+  $("kind").textContent = KIND[run.kind] || run.kind || "";
+  $("dry").hidden = !D.dry_run;
+  var st = STATUS[run.status] || [run.status || "unknown", "t-muted", "?"];
+  var pill = $("status"); pill.className = "pill " + st[1] + (run.status === "running" ? " running" : "");
+  pill.innerHTML = ""; var ic = el("span", run.status === "running" ? "dot" : "ic", run.status === "running" ? null : st[2]); pill.appendChild(ic); pill.appendChild(document.createTextNode(st[0]));
+  if (run.status === "waiting") {  // `dashboard.py waiting`: the page between runs, with no data yet
+    $("reason").hidden = false;
+    $("reason").textContent = (run.name || "The next run") + " hasn't started yet. This page switches to it when its first update lands.";
+  } else if (run.stop && run.status !== "running") {
+    $("reason").hidden = false;
+    $("reason").textContent = "Rule " + run.stop.rule + " at step " + run.stop.at_step + ": " + run.stop.reason + (run.best ? ". Best checkpoint " + run.best.checkpoint + " (" + F.pct(run.best.accuracy) + " on " + run.best.eval + ")." : "");
+  }
+
+  var durations = steps.slice(-5).map(function (r) { return get(r, ["time", "total_s"]); });
+  var medStep = median(durations);
+  function inProgress() {
+    if (run.status !== "running" || !run.live) return null;
+    var started = last ? last.finished_at : run.created_at;
+    evals.forEach(function (e) { if (isNum(e.at) && e.at > started && run.live.step > (last ? last.step : 0)) started = e.at; });
+    return { step: run.live.step, phase: run.live.phase, started: started };
+  }
+  var PHASE = { rollouts: "rolling out", kl: "re-scoring for KL", training: "training on W&B", eval: "running the selection eval", capability: "running the capability check" };
+  function renderReadout() {
+    var box = $("readout"); box.innerHTML = "";
+    function item(label, value) { var s = el("span"); s.appendChild(document.createTextNode(label + " ")); s.appendChild(el("b", null, value)); box.appendChild(s); }
+    item("step", String(last ? last.step : 0) + (cfg.max_steps ? " of " + cfg.max_steps : ""));
+    item("checkpoint", String(run.latest != null ? run.latest : 0) + (run.branch ? " · branch " + run.branch : ""));
+    item("lr", F.lr(get(D, ["lr", "current"])));
+    var ip = inProgress();
+    if (ip) {
+      var t = "step " + ip.step + " " + (PHASE[ip.phase] || ip.phase);
+      if (isNum(medStep) && isNum(ip.started) && (ip.phase === "rollouts" || ip.phase === "kl" || ip.phase === "training")) t += ", due ~" + clock(ip.started + medStep);
+      item("now", t);
+    }
+    item("updated", clock(D.built_at) + " (" + ago(D.built_at) + ")");
+    if (isNum(medStep)) item("median step", F.secs(medStep));
+    var stale = $("stale"), age = Date.now() / 1000 - D.built_at, limit = Math.max(900, 3 * (medStep || 300));
+    if (run.status === "running" && age > limit) {
+      stale.hidden = false;
+      stale.textContent = "No new data for " + Math.round(age / 60) + " minutes, longer than three typical steps. The run or the session that publishes this page may have stopped.";
+    } else if (run.status === "running" && isNum(run.heartbeat_age_s) && run.heartbeat_age_s > 300) {
+      stale.hidden = false;
+      stale.textContent = "The training loop had not written its state for " + Math.round(run.heartbeat_age_s / 60) + " minutes when this page was built. It may have stopped without saying so.";
+    } else stale.hidden = true;
+  }
+  renderReadout(); setInterval(renderReadout, 15000);
+
+  // ------------------------------------------------------------------ overview
+  var tiles = $("tiles");
+  function tile(label, value, unit, ctx, spark, color) {
+    var t = el("div", "tile"); t.appendChild(el("div", "lab", label));
+    var v = el("div", "val", value); if (unit) v.appendChild(el("small", null, unit)); t.appendChild(v);
+    if (ctx) t.appendChild(el("div", "ctx", ctx));
+    if (spark) sparkline(t, spark, color || "var(--c1)");
+    tiles.appendChild(t); return t;
+  }
+  var passPts = steps.filter(function (r) { return isNum(get(r, ["pass", "rate"])); }).map(function (r) { return [r.step, r.pass.rate]; });
+  var pass10 = mean(steps.slice(-10).map(function (r) { return get(r, ["pass", "rate"]); }));
+  tile("Training pass rate, last step", last ? F.pct(get(last, ["pass", "rate"])) : "–", null,
+       "Mean over the last 10 steps " + F.pct(pass10) + (last ? " · trainable groups " + get(last, ["pass", "trainable_groups"]) + " of " + get(last, ["pass", "groups"]) : ""), passPts.slice(-40), "var(--c1)");
+  if (hasEdit) {
+    var lastEd = editSteps[editSteps.length - 1], n10 = 0, c10 = 0;
+    editSteps.slice(-10).forEach(function (r) { var n = ed(r, "episodes"), v = ed(r, "resolved"); if (isNum(n) && isNum(v)) { n10 += n; c10 += v * n; } });
+    tile("Edit tasks resolved, last step", F.pct(ed(lastEd, "resolved")), null,
+         "Over the last 10 steps " + (n10 ? F.pct(c10 / n10) : "–") + " · " + F.int(ed(lastEd, "episodes")) + " edit episodes at step " + lastEd.step,
+         editSteps.filter(function (r) { return isNum(ed(r, "resolved")); }).map(function (r) { return [r.step, r.edit.resolved]; }).slice(-40), "var(--c1)");
+  }
+  var selName = cfg.selection || cfg.final_eval;
+  var selPts = evals.filter(function (e) { return e.name === selName && isNum(get(e, ["summary", "accuracy"])); });
+  var base0 = selPts.filter(function (e) { return e.checkpoint === 0; })[0];
+  if (selPts.length) {
+    var latestE = selPts[selPts.length - 1];
+    tile((run.best ? "Best " : "Latest ") + selName, F.pct(run.best ? run.best.accuracy : latestE.summary.accuracy), null,
+         (run.best ? "checkpoint " + run.best.checkpoint + " · " : "") + "latest " + F.pct(latestE.summary.accuracy) + " at checkpoint " + latestE.checkpoint + (base0 ? " · base model " + F.pct(base0.summary.accuracy) : ""),
+         selPts.map(function (e) { return [e.checkpoint, e.summary.accuracy]; }), "var(--c1)");
+  } else tile(selName ? selName : "Evals", "–", null, selName ? "No eval yet. " + (cfg.eval_every ? "It runs every " + cfg.eval_every + " steps." : "It runs at step " + cfg.max_steps + ".") : "No eval configured.");
+  var sp = D.spend || {}, ceil = sp.ceilings || {};
+  tile("Inference spent this run", F.usd(sp.total_usd), null, "steps " + F.usd(sp.train_usd) + " of " + F.usd(ceil.train) + " · evals " + F.usd(sp.eval_usd) + " of " + F.usd(ceil.eval));
+  var rules = D.stop_rules || {}, rnames = Object.keys(rules), fired = rnames.filter(function (k) { return rules[k].state === "fired"; }), watch = rnames.filter(function (k) { return rules[k].state === "watch"; });
+  tile("Stop rules", fired.length ? fired.length + " fired" : watch.length ? watch.length + " to watch" : rnames.length ? "all clear" : "–", null,
+       fired.length ? fired.join(", ") : watch.length ? watch.join(", ") : rnames.length ? rnames.length + " rules checked after step " + (last ? last.step : 0) : "Checked once the first step is done.");
+  var ctl = (D.controller || {}).families || {}, levelTxt = Object.keys(ctl).map(function (f) { return famLabel(f) + " L" + ctl[f].level + "/" + ctl[f].max_level; });
+  var lvTile = tile("Difficulty levels", Object.keys(ctl).length ? Object.keys(ctl).map(function (f) { return ctl[f].level; }).join(" · ") : "–", null, levelTxt.join(", ") || "Every family starts at level 1.");
+  if (Object.keys(ctl).length > 4) lvTile.querySelector(".val").className = "val dense";  // six families with the edit ones
+  function mixText() {
+    var mix = cfg.mix || {}, names = Object.keys(mix).filter(function (f) { return isNum(mix[f]) && mix[f] > 0; });
+    if (!names.length) return "aggregation 25%, callgraph 10%, needle 10%, repo loc 15%, edit real 25% and edit synth 15%";
+    var parts = names.map(function (f) { return famLabel(f) + " " + Math.round(mix[f] * 100) + "%"; });
+    return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+  }
+  var mixHasEdit = Object.keys(cfg.mix || {}).some(function (f) { return /^edit_/.test(f); });
+  $("overview-sub").textContent = (run.kind === "second_seed" ? "The 20-step GRPO replication on the ticket tasks, run on environment v2. Its held-out eval is compared with the first seed's 0.70." : "GRPO at " + (cfg.tasks_per_step || 8) + " tasks × " + (cfg.rollouts || 4) + " rollouts a step on " + mixText() + ", until a stop rule fires or the spend ceiling is reached." + (mixHasEdit || hasEdit ? " Edit episodes are graded by hidden tests and run with 20 turns instead of 12." : "")) + (D.dry_run ? " This is a dry run of the training loop with a fake model, for testing the page." : "");
+
+  // ------------------------------------------------------------------ cost
+  var meters = $("meters");
+  function meter(label, value, cap, note) {
+    var m = el("div", "meter"), row = el("div", "row"); row.appendChild(el("span", null, label)); row.appendChild(el("b", null, F.usd(value) + (isNum(cap) ? " of " + F.usd(cap) : "")));
+    m.appendChild(row);
+    var tr = el("div", "track"), f = el("div", "fill"), share = isNum(cap) && cap > 0 ? Math.min(1, Math.max(0, value / cap)) : 0;
+    f.style.width = (share * 100).toFixed(1) + "%"; if (share > 0.95) f.className = "fill crit"; else if (share > 0.8) f.className = "fill warn";
+    tr.appendChild(f); tr.setAttribute("role", "meter"); tr.setAttribute("aria-valuemin", "0"); tr.setAttribute("aria-valuemax", String(cap || 0)); tr.setAttribute("aria-valuenow", String(value || 0)); tr.setAttribute("aria-label", label);
+    m.appendChild(tr); if (note) m.appendChild(el("div", "sub", note)); meters.appendChild(m);
+  }
+  var recentCost = mean(steps.slice(-5).map(function (r) { return get(r, ["cost", "step_usd"]); }));
+  var leftTrain = isNum(ceil.train) ? ceil.train - (sp.train_usd || 0) : null;
+  var stepsLeft = isNum(leftTrain) && isNum(recentCost) && recentCost > 0 ? Math.floor(leftTrain / recentCost) : null;
+  meter("Steps (rollouts and KL)", sp.train_usd || 0, ceil.train, isNum(recentCost) ? F.usd3(recentCost) + " a step over the last 5 · about " + (stepsLeft != null ? F.int(stepsLeft) + " steps left at that rate" : "–") : "No step measured yet.");
+  var mainEvals = evals.filter(function (e) { return e.name !== "capability"; });
+  meter("Evals", sp.eval_usd || 0, ceil.eval, evals.length ? evals.length + " evals so far" + (mainEvals.length ? ", the latest " + mainEvals[mainEvals.length - 1].name + " " + F.usd3(mainEvals[mainEvals.length - 1].cost_usd) : "") : "No eval yet.");
+  var pot = D.pot || {};
+  var potUsed = (pot.inference_usd || 0) - (pot.inference_left_usd || 0) + (sp.total_usd || 0);
+  // spec §12.11: a ceiling above its split can only be paid from the reserve
+  var overSplit = (isNum(ceil.train) && isNum(pot.production_usd) && ceil.train > pot.production_usd) || (isNum(ceil.eval) && isNum(pot.evals_usd) && ceil.eval > pot.evals_usd);
+  meter("W&B inference pot used (estimate)", potUsed, pot.inference_usd,
+        "About " + F.usd(pot.inference_left_usd) + " was left on " + pot.as_of + ", before this run, so about " + F.usd(Math.max(0, (pot.inference_left_usd || 0) - (sp.total_usd || 0))) + " is left now. " +
+        "It is split: second seed " + F.usd0(pot.second_seed_usd) + ", baselines " + F.usd0(pot.baselines_usd) + ", production ceiling " + F.usd0(pot.production_usd) + ", evals " + F.usd0(pot.evals_usd) + ", reserve " + F.usd0(pot.reserve_usd) + ". " +
+        (overSplit ? "This run's ceilings are above their split, so the " + F.usd0(pot.reserve_usd) + " reserve is in use." : "The " + F.usd0(pot.reserve_usd) + " reserve is untouched; spending it is Rishi's call."));
+  meter("Training GPU pot used (estimate)", (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0), pot.gpu_usd, "This run: " + F.usd(sp.training_gpu_usd_est || 0) + " at ~$0.16 a step. A separate pot, and not a constraint.");
+  var cc = $("cost-charts");
+  chart(cc, { title: "Cost per step", kind: "bar", fmt: F.usd3, series: [series("rollouts and sub-calls", "var(--c1)", function (r) { return isNum(get(r, ["cost", "step_usd"])) ? r.cost.step_usd - (get(r, ["cost", "kl_usd"]) || 0) : null; }), series("KL re-score", "var(--c2)", function (r) { return get(r, ["cost", "kl_usd"]); })], stacked: true, headline: last ? F.usd3(get(last, ["cost", "step_usd"])) : null });
+  var cum = [], accum = 0; steps.forEach(function (r) { accum += get(r, ["cost", "step_usd"]) || 0; cum.push([r.step, accum]); });
+  chart(cc, { title: "Step spend so far", fmt: F.usd, series: [{ label: "steps spend", color: "var(--c1)", pts: cum, area: true }], refs: isNum(ceil.train) && accum > ceil.train * 0.5 ? [{ y: ceil.train, label: "ceiling " + F.usd(ceil.train) }] : [], note: isNum(ceil.train) ? "The loop never starts a step that would cross the " + F.usd(ceil.train) + " ceiling." : null });
+
+  // ------------------------------------------------------------------ pass rates
+  var pc = $("pass-charts");
+  chart(pc, { title: "Pass rate", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [series("without infra", "var(--c1)", function (r) { return get(r, ["pass", "rate"]); }), series("with infra", "var(--c2)", function (r) { return get(r, ["pass", "rate_with_infra"]); })].concat(ghosts(function (r) { return get(r, ["pass", "rate"]); })), xmarks: rollbackMarks() });
+  chart(pc, { title: "Pass rate by family (controller's 3-step window)", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true,
+              series: fams.map(function (f) { return series(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "window_pass_rate"]); }); }),
+              refs: [{ y: 0.7, label: "up 70%" }, { y: 0.2, label: "down 20%" }] });
+  chart(pc, { title: "Difficulty level by family", fmt: function (v) { return "L" + v; }, tickFmt: function (v) { return v % 1 ? "" : "L" + v; }, yMin: 1, yMax: Math.max(5, Math.max.apply(null, Object.keys(ctl).map(function (f) { return ctl[f].max_level || 5; }).concat([5]))), stepLine: true, endLabels: true,
+              series: fams.map(function (f) { return series(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "level"]); }); }) });
+  chart(pc, { title: "Groups per step", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: (cfg.tasks_per_step || 8),
+              series: [series("trainable", "var(--c1)", function (r) { return get(r, ["pass", "trainable_groups"]); }), series("all 0", "var(--c2)", function (r) { return get(r, ["pass", "all_zero_groups"]); }),
+                       series("all 1", "var(--c3)", function (r) { return get(r, ["pass", "all_one_groups"]); }), series("other equal", "var(--c4)", function (r) { return get(r, ["pass", "other_equal_groups"]); }),
+                       series("too small", "var(--c5)", function (r) { return get(r, ["pass", "small_groups"]); })],
+              headline: last ? get(last, ["pass", "trainable_groups"]) + " trainable" : null, note: "All-equal groups give GRPO no signal and are dropped, not refilled." });
+  if (hasEdit || mixHasEdit) $("pass-sub").textContent += " An edit task whose group came back all 0 twice, or all 1 once, is retired and not drawn again.";
+  var pe = $("pass-extra");
+  // histogram of the last 10 steps
+  (function () {
+    var bins = ["0/4", "1/4", "2/4", "3/4", "4/4"], tot = {}, recent = steps.slice(-10);
+    recent.forEach(function (r) { bins.forEach(function (b) { tot[b] = (tot[b] || 0) + (get(r, ["pass", "histogram", b]) || 0); }); });
+    var fig = el("figure", "chart"), cap = el("figcaption"); cap.appendChild(el("div", "c-title", "Correct rollouts per group, last " + recent.length + " steps")); cap.appendChild(el("div", "c-val", F.int(bins.reduce(function (s, b) { return s + (tot[b] || 0); }, 0)) + " groups"));
+    cap.appendChild(el("div", "c-note", "A group is one task's 4 rollouts. Mass at 0/4 or 4/4 means the levels are off."));
+    fig.appendChild(cap);
+    var W = 420, H = 132, mx = Math.max.apply(null, bins.map(function (b) { return tot[b] || 0; }).concat([1])), s = sv("svg", { viewBox: "0 0 " + W + " " + H, width: "100%", height: H, role: "img", "aria-label": "Histogram of correct rollouts per group" });
+    var bw = Math.min(24, (W - 40) / bins.length - 12);
+    bins.forEach(function (b, i) {
+      var cx = 30 + (i + 0.5) * (W - 40) / bins.length, v = tot[b] || 0, h = (H - 40) * v / mx, y = H - 22 - h;
+      s.appendChild(sv("rect", { x: cx - bw / 2, y: y, width: bw, height: Math.max(0, h), rx: 3, style: "fill:" + (b === "0/4" || b === "4/4" ? "var(--c2)" : "var(--c1)") }));
+      var vt = sv("text", { x: cx, y: y - 4, "text-anchor": "middle", "class": "ax-t" }); vt.textContent = String(v); s.appendChild(vt);
+      var lt = sv("text", { x: cx, y: H - 6, "text-anchor": "middle", "class": "ax-t" }); lt.textContent = b; s.appendChild(lt);
+    });
+    s.appendChild(sv("line", { x1: 20, x2: W - 10, y1: H - 22, y2: H - 22, "class": "base-l" }));
+    var pl = el("div", "plot"); pl.appendChild(s); fig.appendChild(pl); pe.appendChild(fig);
+  })();
+  // pass rate by family and level
+  (function () {
+    var fig = el("figure", "chart"), cap = el("figcaption"); cap.appendChild(el("div", "c-title", "Pass rate by family and level, whole run")); cap.appendChild(el("div", "c-val", ""));
+    cap.appendChild(el("div", "c-note", "Correct over scored rollouts at each level. The outlined cell is each family's current level."));
+    fig.appendChild(cap);
+    var maxL = 1; Object.keys(ctl).forEach(function (f) { maxL = Math.max(maxL, ctl[f].max_level || 5); }); maxL = Math.max(maxL, 5);
+    var agg = {};
+    steps.forEach(function (r) { Object.keys(r.families || {}).forEach(function (f) { var x = r.families[f]; if (!isNum(x.level) || !isNum(x.scored) || !x.scored) return; var k = f + "/" + x.level; agg[k] = agg[k] || { c: 0, n: 0 }; agg[k].n += x.scored; agg[k].c += (x.pass_rate || 0) * x.scored; }); });
+    var wrap = el("div", "scroll"), t = el("table", "heat"), hr = el("tr");
+    hr.appendChild(el("th", null, "family")); for (var L = 1; L <= maxL; L++) hr.appendChild(el("th", "n", "L" + L)); t.appendChild(hr);
+    fams.forEach(function (f) {
+      var tr = el("tr"), name = el("td", "fam"), k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; name.appendChild(k); name.appendChild(document.createTextNode(famLabel(f))); tr.appendChild(name);
+      for (var L = 1; L <= maxL; L++) {
+        var a = agg[f + "/" + L], td = el("td", "cell");
+        if (a && a.n) {
+          var rate = a.c / a.n, idx = Math.min(6, Math.max(0, Math.round(rate * 6)));
+          td.style.background = "var(--seq-" + idx + ")";
+          td.style.color = "var(--seq-t-" + idx + ")";
+          td.textContent = F.pct(rate); td.appendChild(el("small", null, Math.round(a.n) + " rollouts"));
+        } else { td.textContent = "–"; td.style.color = "var(--muted)"; }
+        if (ctl[f] && ctl[f].level === L) td.className += " now";
+        tr.appendChild(td);
+      }
+      t.appendChild(tr);
+    });
+    wrap.appendChild(t); fig.appendChild(wrap); pe.appendChild(fig);
+  })();
+
+  // ------------------------------------------------------------------ policy
+  var po = $("policy-charts");
+  function rollingThreshold(path, window, frac, kind) {
+    var out = [], vals = steps.map(function (r) { return [r.step, get(r, path)]; });
+    for (var i = 0; i < vals.length; i++) {
+      var prev = vals.slice(Math.max(0, i - window), i).map(function (p) { return p[1]; }).filter(isNum);
+      if (prev.length < 3) continue;
+      var ref = kind === "max" ? Math.max.apply(null, prev) : mean(prev);
+      out.push([vals[i][0], ref * frac]);
+    }
+    return out;
+  }
+  chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "collapse line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks() });
+  chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks() });
+  chart(po, { title: "KL to base (logged, not in the loss)", fmt: F.num, series: [series("KL (k1)", "var(--c1)", function (r) { return get(r, ["policy", "kl_to_base"]); }), series("k3 estimator", "var(--c2)", function (r) { return get(r, ["policy", "kl_k3"]); })].concat(ghosts(function (r) { return get(r, ["policy", "kl_to_base"]); })), note: "From 4 rollouts a step re-scored under the base model." });
+  var gnMed = median(steps.map(function (r) { return get(r, ["policy", "grad_norm"]); }));
+  chart(po, { title: "Grad norm", fmt: F.num, series: [series("grad norm", "var(--c1)", function (r) { return get(r, ["policy", "grad_norm"]); })].concat(ghosts(function (r) { return get(r, ["policy", "grad_norm"]); })), refs: isNum(gnMed) ? [{ y: 3 * gnMed, label: "3× median" }] : [], maxGap: 3 });
+  chart(po, { title: "probs_corr (trainer vs sampler logprobs)", fmt: function (v) { return isNum(v) ? v.toFixed(3) : "–"; }, zero: false, series: [series("probs_corr", "var(--c1)", function (r) { return get(r, ["policy", "probs_corr"]); })], refs: [{ y: 0.98, label: "0.98 floor" }], yMaxAtLeast: 1, maxGap: 3 });
+  chart(po, { title: "Clip fraction (CISPO, weights clipped to [0, 5])", fmt: F.pct2, series: [series("clipped tokens", "var(--c1)", function (r) { return get(r, ["policy", "clip_fraction"]); })], maxGap: 3, note: "The 20-step run read ~97% with the clip forced to 1. Near 0 is the new normal." });
+  chart(po, { title: "Importance ratio", fmt: F.num, zero: false, endLabels: true, series: [series("mean", "var(--c1)", function (r) { return get(r, ["policy", "importance_ratio_mean"]); }), series("p95", "var(--c2)", function (r) { return get(r, ["policy", "importance_ratio_p95"]); }), series("p99", "var(--c3)", function (r) { return get(r, ["policy", "importance_ratio_p99"]); })], maxGap: 3 });
+  chart(po, { title: "Learning rate", fmt: F.lr, tickFmt: F.lr, stepLine: true, series: [series("learning rate", "var(--c1)", function (r) { return r.lr; })], yMin: 0, yMaxAtLeast: 2.5e-5, xmarks: rollbackMarks(), note: D.lr && D.lr.fallback_used ? "Fell back to " + F.lr(D.lr.floor) + " after a collapse (spec §5.2)." : "Falls back to " + F.lr(get(D, ["lr", "floor"])) + " after a collapse at 2e-5." });
+  chart(po, { title: "Train loss", fmt: F.num, zero: false, series: [series("loss", "var(--c1)", function (r) { return get(r, ["policy", "loss"]); })], maxGap: 3 });
+
+  // ------------------------------------------------------------------ behaviour
+  var bh = $("behaviour-charts");
+  chart(bh, { title: "Sub-calls per episode", fmt: F.num, series: [series("sub-calls", "var(--c1)", function (r) { return get(r, ["shape", "subcalls"]); }, { area: true })], refs: [{ y: 30, label: "budget 30" }], yMaxAtLeast: 5, note: "Watch for sub-calls climbing toward 30 without accuracy following." });
+  chart(bh, { title: "Budget-hit rate", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes that used all 30", "var(--c1)", function (r) { return get(r, ["shape", "budget_hit"]); })] });
+  chart(bh, { title: "Root turns per episode", fmt: F.num, series: [series("turns", "var(--c1)", function (r) { return get(r, ["shape", "turns"]); }, { area: true })], refs: hasEdit ? [{ y: 12, label: "read cap 12" }, { y: 20, label: "edit cap 20" }] : [{ y: 12, label: "cap 12" }], yMaxAtLeast: 4, note: hasEdit ? "A mean over read and edit episodes, so it rises with the edit share." : null });
+  chart(bh, { title: "First-turn submits", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("first-turn submit", "var(--c1)", function (r) { return get(r, ["shape", "first_turn_submit"]); })] });
+  chart(bh, { title: "Trouble per episode", fmt: F.num, endLabels: true, yMaxAtLeast: 1, series: [series("REPL errors", "var(--c1)", function (r) { return get(r, ["shape", "repl_errors"]); }), series("cell timeouts", "var(--c2)", function (r) { return get(r, ["shape", "timeouts"]); }), series("turns without code", "var(--c3)", function (r) { return get(r, ["shape", "no_code_turns"]); }), series("outputs cut at 2,000 chars", "var(--c4)", function (r) { return get(r, ["shape", "output_truncations"]); })], note: hasEdit ? "A cell times out after 120 s of compute in a read episode and 300 s in an edit episode." : "A cell times out after 120 s of compute." });
+  chart(bh, { title: "Root transcript length (tokens)", fmt: F.compact, endLabels: true, series: [series("mean", "var(--c1)", function (r) { return get(r, ["shape", "transcript_tokens_mean"]); }), series("p95", "var(--c2)", function (r) { return get(r, ["shape", "transcript_tokens_p95"]); }), series("max", "var(--c3)", function (r) { return get(r, ["shape", "transcript_tokens_max"]); })], note: "Sets packed_sequence_length for production." });
+  chart(bh, { title: "Output tokens per episode", fmt: F.compact, endLabels: true, series: [series("root", "var(--c1)", function (r) { return get(r, ["shape", "root_completion_tokens"]); }), series("sub-calls", "var(--c2)", function (r) { return get(r, ["shape", "subcall_tokens"]); })] });
+  chart(bh, { title: "Context size (characters)", fmt: F.compact, series: [series("mean context", "var(--c1)", function (r) { return get(r, ["shape", "context_chars"]); }, { area: true })], note: hasEdit ? "Read families grow from ~35K characters at level 1 to ~400K at the top. An edit episode's context is only its task and file list, so the edit share pulls the mean down." : "Rises as families move up levels: ~35K at level 1, ~400K at level 5." });
+  chart(bh, { title: "Episodes with a turn cut off at the token cap", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.1, series: [series("episodes with a cut-off turn", "var(--c1)", function (r) { return get(r, ["shape", "episodes_with_truncated_turn"]); })], note: hasEdit ? "Root turns are capped at 3,072 output tokens in read episodes and 4,096 in edit episodes." : "Root turns are capped at 3,072 output tokens." });
+
+  // ------------------------------------------------------------------ editing (spec §12.9)
+  (function () {
+    $("editing").hidden = !hasEdit; $("nav-editing").hidden = !hasEdit;
+    if (!hasEdit) return;
+    var eh = $("edit-charts"), lastE = editSteps[editSteps.length - 1];
+    function es(label, color, key) { return series(label, color, function (r) { return ed(r, key); }); }
+    // a family has 4-8 edit episodes a step, so each line pools its last 3 steps (the controller's window)
+    function pooled3(label, color, count, rate) {
+      var pts = [];
+      steps.forEach(function (r, i) {
+        var n = 0, c = 0;
+        steps.slice(Math.max(0, i - 2), i + 1).forEach(function (q) { var k = count(q), v = rate(q); if (isNum(k) && k > 0 && isNum(v)) { n += k; c += v * k; } });
+        if (n && isNum(rate(r))) pts.push([r.step, c / n]);
+      });
+      return { label: label, color: color, pts: pts };
+    }
+    var resolvedAll = pooled3("all edits", "var(--c1)", function (r) { return ed(r, "episodes"); }, function (r) { return ed(r, "resolved"); });
+    chart(eh, { title: "Resolved rate, last 3 steps", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true,
+                headline: resolvedAll.pts.length ? F.pct(resolvedAll.pts[resolvedAll.pts.length - 1][1]) : null,
+                series: [resolvedAll].concat(editFams.map(function (f) { return pooled3(famLabel(f), famColor(f), function (r) { return get(r, ["families", f, "scored"]); }, function (r) { return get(r, ["families", f, "pass_rate"]); }); })),
+                xmarks: rollbackMarks(), note: "Share of edit episodes with every hidden test passing, pooled over 3 steps, overall and per family. Healthy: rising, edit real below edit synth." });
+    chart(eh, { title: "Hidden tests", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [es("f2p passing", "var(--c1)", "f2p_pass"), es("p2p broken", "var(--c2)", "p2p_broken")],
+                note: "Mean share of fail-to-pass tests passing, and share of episodes that broke a pass-to-pass test. Healthy: the first rising, the second low." });
+    chart(eh, { title: "Submitted, and submitted no change", fmt: F.pct, yMin: 0, yMax: 1, endLabels: true, series: [es("submitted", "var(--c1)", "submitted"), es("empty diff", "var(--c2)", "empty_diff")],
+                note: "Share that called submit, and share whose diff was empty. Healthy: submitted near 100%, empty diff near 0." });
+    chart(eh, { title: "Tested after the last edit, before submit", fmt: F.pct, yMin: 0, yMax: 1, series: [es("tested before submit", "var(--c1)", "tested_before_submit")],
+                note: "Share that ran a test command between their last edit and submit. Healthy: high and rising; checking before submitting is the RLM way." });
+    chart(eh, { title: "Test runs and edit-test cycles per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, series: [es("test runs", "var(--c1)", "test_runs"), es("edit cycles", "var(--c2)", "edit_cycles")],
+                note: "Mean test commands, and edit-then-test cycles, per episode. Healthy: at least one of each; many cycles with no gain in resolved is flailing." });
+    chart(eh, { title: "Turn of the first edit", fmt: F.num, yMin: 0, yMaxAtLeast: 4, series: [es("turns to first edit", "var(--c1)", "turns_to_first_edit")],
+                note: "Mean turn of the first write to the repository, out of 20. Healthy: a few turns of exploring first, well before the cap." });
+    var TOOLS = ["read_file", "find_files", "grep", "edit_file", "write_file", "shell", "diff"];
+    var lastCalls = (lastE.edit && lastE.edit.tool_calls) || {}, totalCalls = TOOLS.reduce(function (n, t) { return isNum(lastCalls[t]) ? (n || 0) + lastCalls[t] : n; }, null);
+    chart(eh, { title: "Tool calls per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, headline: isNum(totalCalls) ? F.num(totalCalls) : null,
+                series: TOOLS.map(function (t, i) { return series(t, "var(--c" + (i + 1) + ")", function (r) { var c = r.edit && r.edit.episodes !== 0 && r.edit.tool_calls; return c && isNum(c[t]) ? c[t] : null; }); }),
+                note: "Mean calls of each of the seven REPL tools per episode; the headline is all seven together at the latest step. Healthy: search and read early, edits followed by shell runs, and diff before submit." });
+    chart(eh, { title: "Edits that failed per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("failed edits", "var(--c1)", "edit_errors")],
+                note: "edit_file calls that raised because the old text wasn't found or wasn't unique; the file is left untouched. Healthy: falling as it learns to copy exact text." });
+    chart(eh, { title: "Plain Python instead of the tools", fmt: F.pct, yMin: 0, yMax: 1, series: [es("raw open or subprocess", "var(--c1)", "raw_io_share")],
+                note: "Share of repository writes and commands made with open or subprocess rather than the tools. Not penalised; it shows which way the root prefers to work." });
+    chart(eh, { title: "Lines changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 10, series: [es("diff lines", "var(--c1)", "diff_lines")],
+                note: "Mean changed lines in the submitted diff; the grader refuses over 2,000. Healthy: near the tasks' patch sizes, not ballooning." });
+    chart(eh, { title: "Files changed per diff", fmt: F.num, yMin: 0, yMaxAtLeast: 2, series: [es("files changed", "var(--c1)", "files_changed")],
+                note: "Mean files the submitted diff touches. Level 1 needs one file, level 4 three or more, so it should rise with levels." });
+    chart(eh, { title: "Reading done by sub-calls", fmt: F.pct, yMin: 0, yMax: 1, series: [es("sub-call read share", "var(--c1)", "subcall_read_share")],
+                note: "Characters sent to sub-calls over those plus characters printed to the root. Healthy for an RLM: high, with reading delegated." });
+    chart(eh, { title: "Review sub-calls per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("review sub-calls", "var(--c1)", "review_subcalls")],
+                note: "Sub-calls whose prompt holds a diff, the root asking for a review. Healthy: above 0, and more on bigger tasks." });
+    chart(eh, { title: "Repeated cells per episode (loop signal)", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("repeated cells", "var(--c1)", "repeated_cells")],
+                note: "Cells identical to an earlier cell in the same episode. Healthy: near 0; a climb means the root is stuck in a loop." });
+    chart(eh, { title: "Blocked network attempts per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 1, series: [es("network tries", "var(--c1)", "network_tries")],
+                note: "Logged only: network try never zeroes the reward. Healthy: near 0; a rise means it keeps trying to install or download." });
+    chart(eh, { title: "Grader time per episode", fmt: F.secs, tickFmt: function (v) { return v + " s"; }, yMin: 0, yMaxAtLeast: 30, series: [es("grader seconds", "var(--c1)", "grader_s")],
+                note: "Mean seconds the hidden-test run took. Each task's cap is at least 600 s, and higher for tasks whose tests run slowly. Healthy: steady and far below the cap." });
+    chart(eh, { title: "Grader re-runs per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, series: [es("grader re-runs", "var(--c1)", "grader_retries")],
+                note: "A grader that hits its cap runs once more, alone, with double the cap, so a slow disk can't fail a good answer; only a second timeout counts against the model. Healthy: near 0; a climb means the drive is struggling with the run's load." });
+    // resolved by language, pooled over steps and weighted by episodes
+    var host = $("edit-langs"), cut = editSteps.length > 10 ? editSteps[editSteps.length - 10].step : -Infinity, run10 = {}, all = {};
+    editSteps.forEach(function (r) {
+      var by = get(r, ["edit", "by_language"]) || {};
+      Object.keys(by).forEach(function (l) {
+        var g = by[l]; if (!isNum(g.episodes)) return;
+        [all].concat(r.step >= cut ? [run10] : []).forEach(function (acc) {
+          var a = acc[l] = acc[l] || { n: 0, c: 0, k: 0 }; a.n += g.episodes;
+          if (isNum(g.resolved)) { a.c += g.resolved * g.episodes; a.k += g.episodes; }
+        });
+      });
+    });
+    var langs = Object.keys(all).sort(function (a, b) { return (a === "other") - (b === "other") || all[b].n - all[a].n || (a < b ? -1 : 1); });
+    var fig = el("figure", "chart"), cap = el("figcaption");
+    cap.appendChild(el("div", "c-title", "Resolved by repository language, whole run")); cap.appendChild(el("div", "c-val", langs.length + (langs.length === 1 ? " language" : " languages")));
+    cap.appendChild(el("div", "c-note", "Edit episodes and the share resolved, pooled over steps; the last column is resolved / episodes over the last 10 steps. Healthy: no language stuck near 0% while the others climb."));
+    fig.appendChild(cap);
+    if (!langs.length) { fig.appendChild(el("p", "empty", "No step has logged languages yet.")); host.appendChild(fig); return; }
+    function rate(a) { return a && a.k ? F.pct(a.c / a.k) : "–"; }
+    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+    ["language", "episodes", "resolved", "last 10 steps"].forEach(function (x, i) { var th = el("th", i ? "n" : null, x); if (i === 3) th.style.whiteSpace = "normal"; hr.appendChild(th); }); t.appendChild(hr);
+    langs.forEach(function (l) {
+      var tr = el("tr"), r10 = run10[l];
+      tr.appendChild(el("td", null, l)); tr.appendChild(el("td", "n", F.int(all[l].n))); tr.appendChild(el("td", "n", rate(all[l])));
+      tr.appendChild(el("td", "n", r10 ? rate(r10) + " / " + F.int(r10.n) : "–")); t.appendChild(tr);
+    });
+    wrap.appendChild(t); fig.appendChild(wrap); host.appendChild(fig);
+  })();
+
+  // ------------------------------------------------------------------ reward
+  var rw = $("reward-charts");
+  chart(rw, { title: "Exact accuracy and mean reward", fmt: F.pct, tipFmt: F.num, yMin: 0, yMax: 1, endLabels: true, series: [series("exact accuracy", "var(--c1)", function (r) { return get(r, ["reward", "exact"]); }), series("mean reward", "var(--c2)", function (r) { return get(r, ["reward", "mean"]); })], note: hasEdit ? "Over every episode; an edit episode counts as exact when it is resolved." : null });
+  chart(rw, { title: "Partial credit and near-blind answers", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, endLabels: true, series: [series("partial credit", "var(--c1)", function (r) { return get(r, ["reward", "partial"]); }), series("near the blind guess", "var(--c2)", function (r) { return get(r, ["reward", "near_blind"]); })], note: "A rising near-blind rate means answers are drifting toward the metadata guess." });
+  // spec §7 and §12.6: every rule zeroes the reward except network_try, which is only logged (grey)
+  var RULES = { early_submit: ["early submit", 1], copied_answer: ["copied answer", 2], escape_attempt: ["escape attempt", 3], timeout_loop: ["timeout loop", 4],
+                test_tamper: ["test tamper", 5], grader_tamper: ["grader tamper", 7], test_aware: ["test aware", 6], network_try: ["network try (logged only)", 0] };
+  var RULE_ORDER = Object.keys(RULES);
+  var rulesSeen = {}; steps.forEach(function (r) { Object.keys(get(r, ["reward", "hacks"]) || {}).forEach(function (k) { rulesSeen[k] = 1; }); });
+  var ruleNames = Object.keys(rulesSeen).length ? Object.keys(rulesSeen) : RULE_ORDER.slice(0, hasEdit ? 8 : 4);
+  ruleNames.sort(function (a, b) { var i = RULE_ORDER.indexOf(a), j = RULE_ORDER.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || (a < b ? -1 : 1); });
+  function ruleLabel(k) { return RULES[k] ? RULES[k][0] : k.replace(/_/g, " "); }
+  function ruleColor(k, i) { return !RULES[k] ? "var(--c" + (i % 8 + 1) + ")" : RULES[k][1] ? "var(--c" + RULES[k][1] + ")" : "var(--muted)"; }
+  var hackTotal = steps.reduce(function (s, r) { return s + (get(r, ["reward", "hacked"]) || 0); }, 0);
+  chart(rw, { title: "Hack-detector hits by rule", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: 2, headline: hackTotal + " this run",
+              series: ruleNames.map(function (k, i) { return series(ruleLabel(k), ruleColor(k, i), function (r) { return get(r, ["reward", "hacks", k]); }); }),
+              note: ruleNames.indexOf("network_try") >= 0 ? "Every rule zeroes the rollout's reward except network try, which is only logged (grey)." : "Every rule zeroes the rollout's reward before the group mean." });
+  chart(rw, { title: "Episodes that submitted", fmt: F.pct, yMin: 0, yMax: 1, series: [series("submitted", "var(--c1)", function (r) { return get(r, ["reward", "submitted"]); })] });
+  (function () {
+    var host = $("audits"), keys = Object.keys(D.audits || {}).map(Number).sort(function (a, b) { return a - b; });
+    var h = el("div", "c-title", "Claude audit of sampled wins (clean solve rate)"); host.appendChild(h);
+    if (!keys.length) { host.appendChild(el("p", "empty", "The first audit sample is written at checkpoint 10.")); return; }
+    var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+    ["checkpoint", "wins sampled", "audited", "clean share", "status"].forEach(function (x, i) { hr.appendChild(el("th", i && i < 4 ? "n" : null, x)); }); t.appendChild(hr);
+    keys.forEach(function (c) { var a = D.audits[String(c)], tr = el("tr"); tr.appendChild(el("td", null, String(c))); tr.appendChild(el("td", "n", F.int(a.sampled))); tr.appendChild(el("td", "n", F.int(a.audited))); tr.appendChild(el("td", "n", F.pct(a.clean_share))); tr.appendChild(el("td", null, a.status === "audited" ? "audited" : a.status === "no_sample" ? "no wins to sample" : "waiting for the audit")); t.appendChild(tr); });
+    wrap.appendChild(t); host.appendChild(wrap);
+  })();
+
+  // ------------------------------------------------------------------ infra
+  var inf = $("infra-charts");
+  chart(inf, { title: "Infra error rate", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.02, series: [series("infra episodes", "var(--c1)", function (r) { return get(r, ["infra", "rate"]); }, { area: true })], refs: [{ y: 0.01, label: "1% pause line" }], note: run.kind === "second_seed" ? "Any infra episode pauses the second seed." : "Production pauses above 1% over the last 10 steps (4 of 320 episodes)." });
+  chart(inf, { title: "Request trouble per step", fmt: F.int, yMin: 0, yMaxAtLeast: 2, endLabels: true, series: [series("429s", "var(--c1)", function (r) { return get(r, ["infra", "rate_limited"]); }), series("5xx", "var(--c2)", function (r) { return get(r, ["infra", "server_errors"]); }), series("retries", "var(--c3)", function (r) { return get(r, ["infra", "retries"]); })] });
+  chart(inf, { title: "Step time (minutes)", kind: "bar", stacked: true, fmt: F.mins, tipFmt: F.secs, headline: last ? F.secs(get(last, ["time", "total_s"])) : null,
+               series: [series("rollouts", "var(--c1)", function (r) { return get(r, ["time", "rollouts_s"]); }), series("KL", "var(--c2)", function (r) { return get(r, ["time", "kl_s"]); }), series("training", "var(--c3)", function (r) { return get(r, ["time", "train_s"]); })] });
+  chart(inf, { title: "Tokens per step", fmt: F.compact, endLabels: true, series: [series("root prompt", "var(--c1)", function (r) { return get(r, ["tokens", "root_prompt_tokens"]); }), series("sub-call prompt", "var(--c2)", function (r) { return get(r, ["tokens", "subcall_prompt_tokens"]); }), series("root output", "var(--c3)", function (r) { return get(r, ["tokens", "root_completion_tokens"]); })] });
+  chart(inf, { title: "Requests in flight, step peak", fmt: F.int, yMin: 0, yMaxAtLeast: 32, series: [series("peak in flight", "var(--c1)", function (r) { return get(r, ["infra", "peak_in_flight"]); })], refs: [{ y: 30, label: "cap 30" }] });
+
+  // ------------------------------------------------------------------ evals
+  var ev = $("eval-charts");
+  var evalNames = []; evals.forEach(function (e) { if (evalNames.indexOf(e.name) < 0) evalNames.push(e.name); });
+  var sub = [];
+  if (cfg.selection) sub.push("The selection set (" + cfg.selection + ", 64 fixed tasks) runs every " + cfg.eval_every + " steps, with the capability check, and picks the best checkpoint.");
+  if (cfg.final_eval) sub.push("The final eval (" + cfg.final_eval + ") runs once at step " + cfg.max_steps + ".");
+  sub.push("Checkpoint 0 is the base model. Bars show ±1 standard error.");
+  $("evals-sub").textContent = sub.join(" ");
+  function evalSeries(name, color) {
+    var pts = [], se = {};
+    evals.filter(function (e) { return e.name === name && isNum(get(e, ["summary", "accuracy"])); }).forEach(function (e) { pts.push([e.checkpoint, e.summary.accuracy]); if (isNum(e.summary.accuracy_se)) se[e.checkpoint] = e.summary.accuracy_se; });
+    return { label: name, color: color, pts: pts, se: se, markers: true };
+  }
+  var refs = [];
+  (D.baselines || []).forEach(function (b) { if (evalNames.indexOf(b.eval) >= 0 || b.eval === cfg.final_eval) refs.push({ y: b.accuracy, label: b.label.replace(/ \(20-step run\)/, "") + " " + F.pct(b.accuracy) }); });
+  var mainEval = cfg.selection || cfg.final_eval;
+  if (mainEval) {
+    var s1 = evalSeries(mainEval, "var(--c1)"); if (run.best && run.best.eval === mainEval) s1.ring = [run.best.checkpoint];
+    chart(ev, { title: "Accuracy on " + mainEval, xLabel: "Checkpoint", fmt: F.pct, yMin: 0, yMax: 1, maxGap: Infinity, series: [s1], refs: refs, height: 170, headline: s1.pts.length ? F.pct(s1.pts[s1.pts.length - 1][1]) + " latest" : "not run yet", note: run.best ? "Ringed: the best checkpoint so far, " + run.best.checkpoint + "." : null });
+  }
+  if (evals.some(function (e) { return e.name === "capability"; })) {
+    var cap = evalSeries("capability", "var(--c2)"); cap.label = "capability check";
+    var c0 = cap.pts.filter(function (p) { return p[0] === 0; })[0];
+    chart(ev, { title: "Capability check (frying)", xLabel: "Checkpoint", fmt: F.pct, yMin: 0, yMax: 1, maxGap: Infinity, series: [cap], refs: c0 ? [{ y: c0[1] - 0.02, label: "2 points below checkpoint 0" }] : [], height: 170, note: "About 100 IFEval, MMLU-Pro, CRUXEval and chat prompts at temperature 0." });
+  } else if (cfg.has_capability_set) {
+    ev.appendChild(el("p", "empty", "The capability check runs with each selection eval."));
+  }
+  (function () {
+    var host = $("eval-table"), main = evals.filter(function (e) { return e.name === mainEval; });
+    if (!main.length) { host.appendChild(el("p", "empty", mainEval ? "No " + mainEval + " result yet." : "No eval configured.")); return; }
+    var first = main[0], latest = main[main.length - 1];
+    // by_family, then (spec §12.9) by_language for the edit tasks; languages get no swatch, since colour means family
+    [["by_family", "family", "By family"], ["by_language", "language", "Edit tasks by language"]].forEach(function (g) {
+      var names = Object.keys(get(latest, ["summary", g[0]]) || {});
+      if (!names.length) return;
+      if (g[0] === "by_language") names.sort(function (a, b) { return (a === "other") - (b === "other") || (get(latest, ["summary", g[0], b, "n"]) || 0) - (get(latest, ["summary", g[0], a, "n"]) || 0) || (a < b ? -1 : 1); });
+      host.appendChild(el("div", "c-title", g[2] + ": checkpoint " + first.checkpoint + " against checkpoint " + latest.checkpoint));
+      var wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+      [g[1], "tasks", "checkpoint " + first.checkpoint, "checkpoint " + latest.checkpoint, "change"].forEach(function (x, i) { hr.appendChild(el("th", i ? "n" : null, x)); }); t.appendChild(hr);
+      names.forEach(function (f) {
+        var a = get(first, ["summary", g[0], f, "accuracy"]), b = get(latest, ["summary", g[0], f, "accuracy"]), tr = el("tr"), nm = el("td");
+        if (g[0] === "by_family") { var k = el("span", "key box"); k.style.background = famColor(f); k.style.marginRight = "6px"; nm.appendChild(k); }
+        nm.appendChild(document.createTextNode(g[0] === "by_family" ? famLabel(f) : f)); tr.appendChild(nm);
+        tr.appendChild(el("td", "n", F.int(get(latest, ["summary", g[0], f, "n"])))); tr.appendChild(el("td", "n", F.pct(a))); tr.appendChild(el("td", "n", F.pct(b)));
+        tr.appendChild(el("td", "n", isNum(a) && isNum(b) ? (b - a >= 0 ? "+" : "−") + Math.abs((b - a) * 100).toFixed(0) + " pts" : "–")); t.appendChild(tr);
+      });
+      wrap.appendChild(t); host.appendChild(wrap);
+    });
+  })();
+
+  // ------------------------------------------------------------------ stop rules
+  (function () {
+    var host = $("rule-list");
+    var NAMES = { plateau: ["1. Plateau", "stop"], overfitting: ["2. Overfitting", "stop"], frying: ["3. Frying", "stop"], saturation: ["4. Saturation", "stop"], hacking: ["5. Hacking", "pause"] };
+    var STATE = { ok: ["OK", "t-good", "✓"], watch: ["Watch", "t-warn", "!"], fired: ["Fired", "t-crit", "×"], "n/a": ["Not yet", "t-muted", "–"] };
+    var names = Object.keys(D.stop_rules || {});
+    if (!names.length) { host.appendChild(el("p", "empty", "The rules are checked after the first step.")); }
+    names.forEach(function (k) {
+      var r = D.stop_rules[k], n = NAMES[k] || [k, r.action], s = STATE[r.state] || STATE["n/a"], row = el("div", "rule");
+      var nm = el("div", "nm", n[0]); nm.appendChild(el("small", null, r.action === "pause" ? "pauses for Rishi" : "stops, keeps the best")); row.appendChild(nm);
+      var tx = el("div", "tx"), p = el("span", "pill " + s[1]); p.appendChild(el("span", "ic", s[2])); p.appendChild(document.createTextNode(s[0])); tx.appendChild(p); tx.appendChild(el("span", null, r.text)); row.appendChild(tx);
+      host.appendChild(row);
+    });
+    var lr = D.lr || {}, row = el("div", "rule"), nm = el("div", "nm", "Learning-rate rule"); nm.appendChild(el("small", null, lr.rule === "fallback" ? "rolls back once, then rule 3" : "fixed")); row.appendChild(nm);
+    var tx = el("div", "tx"), ok = !lr.fallback_used, p = el("span", "pill " + (ok ? "t-good" : "t-warn")); p.appendChild(el("span", "ic", ok ? "✓" : "!")); p.appendChild(document.createTextNode(ok ? "No collapse" : "Fell back")); tx.appendChild(p);
+    tx.appendChild(el("span", null, ok ? "At " + F.lr(lr.current) + ". An entropy drop below 70% of its 10-step peak, or reward std under half its 10-step mean for 3 steps, " + (lr.current > lr.floor ? "rolls back to the last good checkpoint and continues at " + F.lr(lr.floor) + "." : "pauses the run for Rishi.") : "Collapse (" + (lr.fallback && lr.fallback.signal) + ") at step " + (lr.fallback && lr.fallback.at_step) + "; rolled back to checkpoint " + (lr.fallback && lr.fallback.to_checkpoint) + " at " + F.lr(lr.current) + ". Another collapse fires rule 3."));
+    row.appendChild(tx); host.appendChild(row);
+    if (lr.decision) {
+      var drow = el("div", "rule"), dn = el("div", "nm", "Production's learning rate"); dn.appendChild(el("small", null, "decided by this run")); drow.appendChild(dn);
+      var dt = el("div", "tx"), dp = el("span", "pill " + (lr.decision.passed ? "t-good" : "t-warn")); dp.appendChild(el("span", "ic", lr.decision.passed ? "✓" : "!")); dp.appendChild(document.createTextNode(F.lr(lr.decision.production_lr))); dt.appendChild(dp); dt.appendChild(el("span", null, lr.decision.note));
+      drow.appendChild(dt); host.appendChild(drow);
+    }
+    var infraRow = el("div", "rule"), inm = el("div", "nm", "Infra pause"); inm.appendChild(el("small", null, "pauses for Rishi")); infraRow.appendChild(inm);
+    var itx = el("div", "tx"), lastPause = last && last.infra_pause, ip = el("span", "pill " + (lastPause ? "t-crit" : "t-good")); ip.appendChild(el("span", "ic", lastPause ? "×" : "✓")); ip.appendChild(document.createTextNode(lastPause ? "Fired" : "OK")); itx.appendChild(ip);
+    itx.appendChild(el("span", null, lastPause || (run.kind === "second_seed" ? "Any infra episode in a step pauses the run." : "More than 1% infra episodes over the last 10 steps pauses the run.")));
+    infraRow.appendChild(itx); host.appendChild(infraRow);
+  })();
+
+  // ------------------------------------------------------------------ notices
+  var ui = { notices: "all", samples: "all", open: {} };
+  var GROUPS = {
+    all: ["All", null],
+    interventions: ["Interventions", /^(start|resume|rollback|lr|lr_fallback|lr_decision|ceiling|operator|paused|stopped|finished|pending)$/],
+    warnings: ["Warnings", /^(detectors|collapse|infra|logging|template|prune|skip|interrupted|crashed|capability|rule)$/],
+    evals: ["Evals and audits", /^(eval|audit)$/],
+    levels: ["Level moves", /^level$/]
+  };
+  var TONE = { rollback: "t-crit", lr_fallback: "t-crit", crashed: "t-crit", interrupted: "t-crit", paused: "t-warn", detectors: "t-warn", collapse: "t-warn", infra: "t-warn", logging: "t-warn", template: "t-warn", stopped: "t-serious", finished: "t-good", resume: "t-good", start: "t-good" };
+  function renderNotices() {
+    var host = $("notice-list"); host.innerHTML = "";
+    var re = GROUPS[ui.notices] ? GROUPS[ui.notices][1] : null;
+    var list = (D.notices || []).slice().reverse().filter(function (n) { return !re || re.test(n.kind); });
+    if (!list.length) { host.appendChild(el("li", "empty", "Nothing here yet.")); }
+    list.forEach(function (n) {
+      var li = el("li"), t = el("time", null, stamp(n.at)); li.appendChild(t); li.appendChild(el("span", "st", "step " + n.step));
+      var body = el("span"); body.appendChild(el("span", "kd " + (TONE[n.kind] || ""), n.kind.replace(/_/g, " "))); body.appendChild(document.createTextNode(n.text)); li.appendChild(body); host.appendChild(li);
+    });
+  }
+  function chips(hostId, groups, key, render) {
+    var host = $(hostId); host.innerHTML = "";
+    Object.keys(groups).forEach(function (g) {
+      var b = el("button", "chip", groups[g][0]); b.type = "button"; b.setAttribute("aria-pressed", String(ui[key] === g));
+      b.onclick = function () { ui[key] = g; chips(hostId, groups, key, render); render(); }; host.appendChild(b);
+    });
+  }
+
+  // ------------------------------------------------------------------ samples
+  var SGROUPS = { all: ["All", null], win: ["Wins", "win"], fail: ["Failures", "fail"], flagged: ["Flagged", "flagged"] };
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+  function pre(text) { var p = el("pre"); p.textContent = text; return p; }
+  function renderSamples() {
+    var host = $("sample-list"); host.innerHTML = "";
+    var list = (D.samples || []).filter(function (s) { var g = SGROUPS[ui.samples][1]; return !g || s.why === g || (g === "flagged" && s.why === "infra"); });
+    if (!list.length) { host.appendChild(el("p", "empty", (D.samples || []).length ? "No transcripts in this group." : "Transcripts appear after the first step.")); return; }
+    list.forEach(function (s) {
+      var d = el("details", "sample"); d.open = !!ui.open[s.key];
+      d.addEventListener("toggle", function () { if (d.open) ui.open[s.key] = 1; else delete ui.open[s.key]; });
+      var sm = el("summary"), WHY = { win: ["Win", "t-good", "✓"], fail: ["Failure", "t-serious", "×"], flagged: ["Flagged", "t-crit", "!"], infra: ["Infra", "t-warn", "!"] }[s.why] || [s.why, "t-muted", "·"];
+      var p = el("span", "pill " + WHY[1]); p.appendChild(el("span", "ic", WHY[2])); p.appendChild(document.createTextNode(WHY[0])); sm.appendChild(p);
+      var fk = el("span"), k = el("span", "key box"); k.style.background = famColor(s.family); k.style.marginRight = "6px"; fk.appendChild(k); fk.appendChild(document.createTextNode(famLabel(s.family) + " · level " + s.level + (s.language ? " · " + s.language : ""))); sm.appendChild(fk);
+      sm.appendChild(el("span", "meta", "step " + s.step + " · reward " + F.num(s.reward) + " · " + plural(s.turn_count, "turn") + " · " + plural(s.subcalls_used || 0, "sub-call") + (s.hacks && s.hacks.length ? " · " + s.hacks.join(", ") : "") + (s.infra_kind ? " · infra: " + s.infra_kind : "")));
+      d.appendChild(sm);
+      var body = el("div", "sbody");
+      body.appendChild(el("h4", null, s.edit ? "Task" : "Question")); body.appendChild(el("p", null, s.question));
+      if (s.edit) body.appendChild(el("h4", null, "Context: the task and the repository's file list, " + F.int(s.context_chars) + " characters; the files are on disk"));
+      else { body.appendChild(el("h4", null, "Context: " + F.int(s.context_chars) + " characters in " + F.int(s.context_lines) + " lines; the first 3 lines")); body.appendChild(pre(s.context_head || "(not shown)")); }
+      (s.turns || []).forEach(function (t, i) {
+        var idx = i < 3 || !s.turns_omitted ? i + 1 : s.turn_count - (s.turns.length - i) + 1;
+        if (s.turns_omitted && i === 3) body.appendChild(el("p", "sub", "… " + s.turns_omitted + " turns not shown …"));
+        var tb = el("div", "turn"); tb.appendChild(el("h4", null, "Turn " + idx + (t.tokens ? " · " + t.tokens + " tokens" : "") + (t.finish === "length" ? " · cut off at the token cap" : "")));
+        if (t.plan) tb.appendChild(el("p", null, t.plan));
+        if (t.code) tb.appendChild(pre(t.code));
+        if (t.output || t.error) tb.appendChild(pre((t.output ? t.output : "") + (t.error ? (t.output ? "\n" : "") + "Error: " + t.error : "")));
+        if (t.restarted) tb.appendChild(el("p", "sub", "The REPL was restarted after this cell."));
+        body.appendChild(tb);
+      });
+      if ((s.subcalls || []).length) {
+        body.appendChild(el("h4", null, "Sub-calls: the first " + s.subcalls.length + " of " + (s.subcalls_used || s.subcalls.length)));
+        s.subcalls.forEach(function (c) { body.appendChild(pre("prompt: " + c.prompt + "\noutput: " + (c.error ? "(failed)" : c.output))); });
+      }
+      body.appendChild(el("h4", null, "Scoring"));
+      var dl = el("dl", "verdict");
+      function dd(a, b) { dl.appendChild(el("dt", null, a)); dl.appendChild(el("dd", null, b)); }
+      dd("submitted", s.submitted ? s.answer : "(no submit)"); dd(s.edit ? "graded by" : "gold", s.edit ? "hidden tests, never shown here" : s.gold); dd("reward", F.num(s.reward) + (s.correct ? (s.edit ? " (resolved)" : " (exact)") : ""));
+      var comp = Object.keys(s.components || {}).map(function (k) { return k + " " + F.num(s.components[k]); }).join(", "); if (comp) dd("components", comp);
+      dd("detectors", s.hacks && s.hacks.length ? s.hacks.join(", ") : "none fired"); if (s.events || s.rejected) dd("sandbox", s.events + " audit events, " + s.rejected + " refused bridge requests");
+      body.appendChild(dl);
+      d.appendChild(body); host.appendChild(d);
+    });
+  }
+
+  // ------------------------------------------------------------------ table view
+  var COLS = [["step", function (r) { return r.step; }, String], ["status", function (r) { return r.status; }, String], ["pass", function (r) { return get(r, ["pass", "rate"]); }, F.pct]]
+    .concat(hasEdit ? [["resolved", function (r) { return ed(r, "resolved"); }, F.pct], ["tested", function (r) { return ed(r, "tested_before_submit"); }, F.pct]] : [])
+    .concat([["trainable", function (r) { return get(r, ["pass", "trainable_groups"]); }, F.int], ["entropy", function (r) { return get(r, ["policy", "entropy"]); }, F.num],
+              ["KL", function (r) { return get(r, ["policy", "kl_to_base"]); }, F.num], ["reward std", function (r) { return get(r, ["policy", "reward_std"]); }, F.num],
+              ["grad norm", function (r) { return get(r, ["policy", "grad_norm"]); }, F.num], ["clip", function (r) { return get(r, ["policy", "clip_fraction"]); }, F.pct2],
+              ["sub-calls", function (r) { return get(r, ["shape", "subcalls"]); }, F.num], ["turns", function (r) { return get(r, ["shape", "turns"]); }, F.num],
+              ["hacks", function (r) { return get(r, ["reward", "hacked"]); }, F.int], ["infra", function (r) { return get(r, ["infra", "rate"]); }, F.pct],
+              ["cost", function (r) { return get(r, ["cost", "step_usd"]); }, F.usd3], ["time", function (r) { return get(r, ["time", "total_s"]); }, F.secs]]);
+  (function () {
+    var host = $("step-table");
+    if (!steps.length) { host.appendChild(el("p", "empty", "No steps yet.")); return; }
+    var t = el("table"), hr = el("tr");
+    COLS.forEach(function (c, i) { hr.appendChild(el("th", i > 1 ? "n" : null, c[0])); }); t.appendChild(hr);
+    steps.slice(-15).reverse().forEach(function (r) { var tr = el("tr"); COLS.forEach(function (c, i) { tr.appendChild(el("td", i > 1 ? "n" : null, c[2](c[1](r)))); }); t.appendChild(tr); });
+    host.appendChild(t);
+  })();
+  function flatten(o, prefix, out) {
+    Object.keys(o).forEach(function (k) { var v = o[k], key = prefix ? prefix + "." + k : k; if (v && typeof v === "object" && !Array.isArray(v)) flatten(v, key, out); else if (!Array.isArray(v)) out[key] = v; });
+    return out;
+  }
+  function csv() {
+    var rows = steps.map(function (r) { return flatten(r, "", {}); }), cols = [];
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+    function q(v) { if (v == null) return ""; var s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+    return [cols.join(",")].concat(rows.map(function (r) { return cols.map(function (c) { return q(r[c]); }).join(","); })).join("\n");
+  }
+  $("copy-csv").onclick = function () {
+    var text = csv(), box = $("csv-box"), btn = this;
+    function fallback() { box.hidden = false; box.value = text; box.focus(); box.select(); btn.textContent = "Select and copy the text below"; }
+    try {
+      navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied " + steps.length + " steps"; setTimeout(function () { btn.textContent = "Copy all steps as CSV"; }, 2500); }, fallback);
+    } catch (e) { fallback(); }
+  };
+  $("foot-src").textContent = "This page mirrors results/" + (run.name || "run") + ".json, which the training loop rewrites every step; W&B holds the same metrics under rlm/. Built " + stamp(D.built_at) + ", run started " + stamp(run.created_at) + ".";
+
+  // ------------------------------------------------------------------ flags (comments) and live updates
+  function boot(prev) {
+    prev = prev || {};
+    if (prev.notices && GROUPS[prev.notices]) ui.notices = prev.notices;
+    if (prev.samples && SGROUPS[prev.samples]) ui.samples = prev.samples;
+    if (prev.open) ui.open = prev.open;
+    chips("notice-filter", GROUPS, "notices", renderNotices); renderNotices();
+    chips("sample-filter", SGROUPS, "samples", renderSamples); renderSamples();
+    var lastSeen = prev.lastStep, now = last ? last.step : 0;
+    if (isNum(lastSeen) && now > lastSeen) {
+      var toast = $("toast"); toast.textContent = (now - lastSeen === 1 ? "Step " + now + " arrived" : "Steps " + (lastSeen + 1) + " to " + now + " arrived"); toast.hidden = false;
+      setTimeout(function () { toast.hidden = true; }, 6000);
+    }
+  }
+  var hot = window.claude && window.claude.hot;
+  try { if (hot && typeof hot.snapshot === "function") hot.snapshot(function () { return { notices: ui.notices, samples: ui.samples, open: ui.open, lastStep: last ? last.step : 0 }; }); } catch (e) { /* the viewer's own update hook; optional */ }
+  try { if (hot && typeof hot.ready === "function") hot.ready(boot); else boot((hot && hot.data) || {}); } catch (e) { boot({}); }
+
+  if (window.claude && typeof window.claude.use === "function") {
+    window.claude.use("comments").then(function (comments) {
+      if (!comments) return;
+      var buttons = document.querySelectorAll("button.flag");
+      Array.prototype.forEach.call(buttons, function (b) {
+        b.hidden = false;
+        b.onclick = function () {
+          var section = b.closest("section");
+          comments.openComposer({ element: section }).then(function (r) { if (r && r.opened === false) b.textContent = "Close your open comment first"; }, function (err) {
+            if (err && (err.code === "unavailable" || err.code === "not_granted" || err.code === "forbidden")) Array.prototype.forEach.call(buttons, function (x) { x.hidden = true; });
+          });
+        };
+      });
+    }, function () { /* no comments here: the shell's own comment mode still works */ });
+  }
+})();
+</script>

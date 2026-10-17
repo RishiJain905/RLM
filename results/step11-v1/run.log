@@ -1,0 +1,346 @@
+spent so far $0.00; ceiling $12
+  rlm: 0 done; to run: read 48 x $0.040 (plan estimate), edit 32 x $0.110 (plan estimate) = $5.44
+  direct: 0 done; to run: read 48 x $0.030 (plan estimate) = $1.44
+projected total $6.88
+[direct] 1/48 aggregation L1: correct, 1 turns, $0.006, 13 s | spent $0.01 of $12
+[direct] 2/48 aggregation L1: correct, 1 turns, $0.008, 14 s | spent $0.01 of $12
+[direct] 3/48 aggregation L2: correct, 1 turns, $0.020, 33 s | spent $0.03 of $12
+[direct] 4/48 aggregation L1: wrong, 1 turns, $0.024, 123 s | spent $0.06 of $12
+[direct] 5/48 aggregation L1: wrong, 1 turns, $0.026, 70 s | spent $0.09 of $12
+[direct] 6/48 aggregation L2: wrong, 1 turns, $0.028, 79 s | spent $0.14 of $12
+[direct] 7/48 aggregation L2: wrong, 1 turns, $0.033, 90 s | spent $0.21 of $12
+[direct] 8/48 aggregation L2: wrong, 1 turns, $0.034, 93 s | spent $0.30 of $12
+[rlm] 1/80 aggregation L5: wrong, 2 turns, $0.001, 124 s | spent $0.36 of $12
+[rlm] 2/80 aggregation L1: correct, 3 turns, $0.003, 135 s | spent $0.40 of $12
+[rlm] 3/80 needle L3: wrong, 5 turns, $0.004, 143 s | spent $0.43 of $12
+[rlm] 4/80 aggregation L2: correct, 2 turns, $0.001, 143 s | spent $0.43 of $12
+[rlm] 5/80 aggregation L4: correct, 3 turns, $0.002, 143 s | spent $0.43 of $12
+[rlm] 6/80 aggregation L1: correct, 5 turns, $0.008, 143 s | spent $0.43 of $12
+[rlm] 7/80 needle L2: wrong, 5 turns, $0.008, 143 s | spent $0.43 of $12
+[rlm] 8/80 needle L3: correct, 4 turns, $0.005, 143 s | spent $0.43 of $12
+[rlm] 9/80 needle L2: wrong, 7 turns, $0.008, 143 s | spent $0.43 of $12
+[direct] 9/48 aggregation L3: wrong, 1 turns, $0.032, 86 s | spent $0.52 of $12
+[direct] 10/48 aggregation L3: wrong, 1 turns, $0.043, 126 s | spent $0.64 of $12
+[direct] 11/48 aggregation L4: correct, 1 turns, $0.052, 86 s | spent $0.72 of $12
+[direct] 12/48 aggregation L3: wrong, 1 turns, $0.040, 114 s | spent $0.78 of $12
+[rlm] 10/80 aggregation L5: correct, 2 turns, $0.003, 189 s | spent $0.83 of $12
+[rlm] 11/80 needle L1: correct, 6 turns, $0.010, 189 s | spent $0.83 of $12
+[direct] 13/48 callgraph L1: correct, 1 turns, $0.008, 16 s | spent $0.86 of $12
+[rlm] 12/80 aggregation L2: wrong, 7 turns, $0.016, 203 s | spent $0.90 of $12
+[rlm] 13/80 aggregation L5: correct, 5 turns, $0.010, 217 s | spent $0.93 of $12
+[rlm] 14/80 aggregation L1: wrong, 6 turns, $0.013, 217 s | spent $0.93 of $12
+[rlm] 15/80 callgraph L5: wrong, 12 turns, $0.008, 217 s | spent $0.93 of $12
+[rlm] 16/80 callgraph L1: wrong, 12 turns, $0.010, 217 s | spent $0.93 of $12
+[rlm] 17/80 aggregation L3: wrong, 12 turns, $0.035, 217 s | spent $0.93 of $12
+[direct] 14/48 aggregation L5: wrong, 1 turns, $0.040, 45 s | spent $0.99 of $12
+[direct] 15/48 callgraph L1: correct, 1 turns, $0.007, 28 s | spent $1.01 of $12
+[direct] 16/48 aggregation L4: wrong, 1 turns, $0.040, 118 s | spent $1.06 of $12
+[rlm] 18/80 callgraph L2: wrong, 12 turns, $0.041, 225 s | spent $1.06 of $12
+[direct] 17/48 aggregation L5: correct, 1 turns, $0.075, 78 s | spent $1.18 of $12
+[direct] 18/48 callgraph L2: correct, 1 turns, $0.011, 16 s | spent $1.21 of $12
+[direct] 19/48 callgraph L2: correct, 1 turns, $0.017, 35 s | spent $1.34 of $12
+[direct] 20/48 needle L1: correct, 1 turns, $0.005, 9 s | spent $1.39 of $12
+[direct] 21/48 callgraph L3: correct, 1 turns, $0.019, 50 s | spent $1.45 of $12
+[direct] 22/48 needle L2: correct, 1 turns, $0.010, 8 s | spent $1.47 of $12
+[rlm] 19/80 aggregation L1: wrong, 12 turns, $0.026, 290 s | spent $1.53 of $12
+[rlm] 20/80 aggregation L4: wrong, 12 turns, $0.024, 292 s | spent $1.53 of $12
+[rlm] 21/80 callgraph L1: wrong, 12 turns, $0.008, 297 s | spent $1.55 of $12
+[rlm] 22/80 needle L5: wrong, 12 turns, $0.010, 298 s | spent $1.55 of $12
+[rlm] 23/80 repo_loc_select L1: wrong, 12 turns, $0.030, 302 s | spent $1.57 of $12
+[rlm] 24/80 aggregation L2: correct, 8 turns, $0.055, 303 s | spent $1.57 of $12
+[rlm] 25/80 callgraph L3: correct, 11 turns, $0.017, 307 s | spent $1.58 of $12
+[rlm] 26/80 callgraph L4: wrong, 12 turns, $0.041, 311 s | spent $1.59 of $12
+[rlm] 27/80 needle L4: wrong, 12 turns, $0.010, 316 s | spent $1.61 of $12
+[direct] 23/48 callgraph L4: correct, 1 turns, $0.041, 84 s | spent $1.66 of $12
+[rlm] 28/80 tickets_all L1: wrong, 12 turns, $0.008, 176 s | spent $1.67 of $12
+[rlm] 29/80 callgraph L2: wrong, 12 turns, $0.045, 324 s | spent $1.67 of $12
+[rlm] 30/80 aggregation L3: wrong, 11 turns, $0.067, 325 s | spent $1.69 of $12
+[rlm] 31/80 repo_loc_select L3: wrong, 12 turns, $0.008, 185 s | spent $1.69 of $12
+[direct] 24/48 needle L2: correct, 1 turns, $0.022, 54 s | spent $1.72 of $12
+[direct] 25/48 needle L3: wrong, 1 turns, $0.019, 14 s | spent $1.75 of $12
+[rlm] 32/80 aggregation L4: correct, 12 turns, $0.079, 333 s | spent $1.75 of $12
+[rlm] 33/80 edit_real_select L1 s1: wrong, 20 turns, $0.023, 334 s | spent $1.75 of $12
+[rlm] 34/80 repo_loc_select L4: correct, 9 turns, $0.012, 197 s | spent $1.76 of $12
+[rlm] 35/80 edit_real_select L1 s1: wrong, 20 turns, $0.016, 342 s | spent $1.76 of $12
+[rlm] 36/80 repo_loc_select L1: wrong, 12 turns, $0.031, 219 s | spent $1.76 of $12
+[direct] 26/48 needle L3: wrong, 1 turns, $0.032, 75 s | spent $1.82 of $12
+[rlm] 37/80 repo_loc_select L2: wrong, 12 turns, $0.021, 212 s | spent $1.83 of $12
+[direct] 27/48 needle L4: wrong, 1 turns, $0.033, 37 s | spent $1.93 of $12
+[direct] 28/48 repo_loc_select L1: correct, 1 turns, $0.008, 16 s | spent $1.94 of $12
+[rlm] 38/80 repo_loc_select L1: correct, 11 turns, $0.033, 236 s | spent $1.97 of $12
+[direct] 29/48 needle L5: correct, 1 turns, $0.042, 40 s | spent $2.01 of $12
+[rlm] 39/80 aggregation L3: wrong, 11 turns, $0.071, 378 s | spent $2.02 of $12
+[direct] 30/48 repo_loc_select L1: correct, 1 turns, $0.008, 15 s | spent $2.04 of $12
+[direct] 31/48 repo_loc_select L2: correct, 1 turns, $0.010, 11 s | spent $2.05 of $12
+[rlm] 40/80 repo_loc_select L4: correct, 12 turns, $0.044, 251 s | spent $2.07 of $12
+[direct] 32/48 repo_loc_select L2: wrong, 1 turns, $0.012, 17 s | spent $2.10 of $12
+[direct] 33/48 repo_loc_select L3: correct, 1 turns, $0.019, 18 s | spent $2.16 of $12
+[direct] 34/48 repo_loc_select L3: correct, 1 turns, $0.021, 40 s | spent $2.20 of $12
+[rlm] 41/80 repo_loc_select L2: wrong, 12 turns, $0.009, 280 s | spent $2.21 of $12
+[rlm] 42/80 repo_loc_select L3: correct, 12 turns, $0.058, 285 s | spent $2.23 of $12
+[rlm] 43/80 tickets_all L3: correct, 10 turns, $0.033, 240 s | spent $2.23 of $12
+[rlm] 44/80 tickets_customer L1: correct, 5 turns, $0.008, 218 s | spent $2.24 of $12
+[rlm] 45/80 edit_real_select L2: wrong, 20 turns, $0.041, 435 s | spent $2.24 of $12
+[rlm] 46/80 edit_real_select L2 s1: wrong, 20 turns, $0.043, 435 s | spent $2.24 of $12
+[direct] 35/48 repo_loc_select L4: correct, 1 turns, $0.025, 17 s | spent $2.27 of $12
+[direct] 36/48 repo_loc_select L1: correct, 1 turns, $0.023, 76 s | spent $2.29 of $12
+[direct] 37/48 tickets_all L1: correct, 1 turns, $0.015, 28 s | spent $2.36 of $12
+[rlm] 47/80 tickets_customer L2: correct, 4 turns, $0.008, 251 s | spent $2.36 of $12
+[rlm] 48/80 tickets_all L2: wrong, 12 turns, $0.084, 279 s | spent $2.36 of $12
+[rlm] 49/80 tickets_customer L3: correct, 11 turns, $0.036, 295 s | spent $2.41 of $12
+[rlm] 50/80 tickets_all L5: wrong, 12 turns, $0.019, 309 s | spent $2.41 of $12
+[rlm] 51/80 tickets_customer L5: correct, 9 turns, $0.042, 297 s | spent $2.41 of $12
+[direct] 38/48 tickets_all L2: wrong, 1 turns, $0.030, 78 s | spent $2.44 of $12
+[rlm] 52/80 edit_real_select L2: wrong, 20 turns, $0.030, 198 s | spent $2.47 of $12
+[direct] 39/48 tickets_all L3: wrong, 1 turns, $0.035, 90 s | spent $2.51 of $12
+[direct] 40/48 tickets_customer L1: correct, 1 turns, $0.007, 14 s | spent $2.51 of $12
+[rlm] 53/80 edit_real_select L1: correct, 13 turns, $0.025, 482 s | spent $2.53 of $12
+[rlm] 54/80 edit_real_select L1: correct, 9 turns, $0.010, 418 s | spent $2.53 of $12
+[direct] 41/48 tickets_customer L2: correct, 1 turns, $0.016, 29 s | spent $2.56 of $12
+[direct] 42/48 callgraph L5: wrong, 1 turns, $0.029, 376 s | spent $2.60 of $12
+[rlm] 55/80 edit_real_select L2 s1: wrong, 20 turns, $0.019, 75 s | spent $2.60 of $12
+[rlm] 56/80 edit_real_select L2: correct, 11 turns, $0.026, 262 s | spent $2.60 of $12
+[rlm] 57/80 edit_real_select L1: correct, 14 turns, $0.040, 435 s | spent $2.61 of $12
+[rlm] 58/80 edit_real_select L1 s1: correct, 19 turns, $0.044, 468 s | spent $2.71 of $12
+[rlm] 59/80 edit_real_select L1 s1: wrong, 20 turns, $0.040, 74 s | spent $2.71 of $12
+[rlm] 60/80 edit_real_select L2 s1: correct, 18 turns, $0.046, 215 s | spent $2.71 of $12
+[direct] 43/48 tickets_customer L3: correct, 1 turns, $0.034, 73 s | spent $2.75 of $12
+[rlm] 61/80 edit_real_select L3: wrong, 20 turns, $0.045, 66 s | spent $2.80 of $12
+[rlm] 62/80 edit_synth L1: wrong, 20 turns, $0.015, 92 s | spent $2.94 of $12
+[rlm] 63/80 edit_synth L2: correct, 12 turns, $0.014, 55 s | spent $2.95 of $12
+[rlm] 64/80 aggregation L2: wrong, 12 turns, $0.143, 728 s | spent $2.96 of $12
+[rlm] 65/80 edit_synth L4: wrong, 20 turns, $0.018, 85 s | spent $3.01 of $12
+[rlm] 66/80 edit_real_select L1: wrong, 20 turns, $0.045, 132 s | spent $3.01 of $12
+[rlm] 67/80 edit_synth L3: wrong, 20 turns, $0.040, 95 s | spent $3.02 of $12
+[rlm] 68/80 edit_real_select L2: wrong, 20 turns, $0.100, 179 s | spent $3.07 of $12
+[direct] 44/48 repo_loc_select L4: wrong, 1 turns, $0.037, 353 s | spent $3.12 of $12
+[rlm] 69/80 edit_synth L2 s1: correct, 8 turns, $0.008, 18 s | spent $3.21 of $12
+[rlm] 70/80 edit_synth L1 s1: correct, 11 turns, $0.014, 39 s | spent $3.23 of $12
+[rlm] 71/80 edit_synth L5: wrong, 20 turns, $0.016, 133 s | spent $3.24 of $12
+[rlm] 72/80 edit_synth L2: correct, 20 turns, $0.026, 84 s | spent $3.24 of $12
+[rlm] 73/80 edit_real_select L2 s1: wrong, 20 turns, $0.029, 98 s | spent $3.24 of $12
+[rlm] 74/80 edit_real_select L3 s1: wrong, 20 turns, $0.058, 71 s | spent $3.24 of $12
+[rlm] 75/80 edit_synth L3 s1: correct, 19 turns, $0.040, 66 s | spent $3.35 of $12
+[rlm] 76/80 edit_synth L5 s1: correct, 10 turns, $0.028, 56 s | spent $3.35 of $12
+[rlm] 77/80 edit_synth L2 s1: correct, 18 turns, $0.030, 56 s | spent $3.35 of $12
+[rlm] 78/80 edit_real_select L1 s1: wrong, 20 turns, $0.059, 165 s | spent $3.39 of $12
+[rlm] 79/80 edit_synth L4 s1: correct, 17 turns, $0.034, 122 s | spent $3.40 of $12
+[direct] 44/48 aggregation L5: infra server_error | spent $3.40 of $12
+[direct] 44/48 tickets_customer L5: infra server_error | spent $3.40 of $12
+[direct] 44/48 aggregation L4: infra server_error | spent $3.40 of $12
+[direct] 44/48 tickets_all L5: infra server_error | spent $3.40 of $12
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/baselines.py", line 132, in run_live
+    return await go(run, tasks, arms, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/baselines.py", line 144, in go
+    summary = await run.run(tasks, arms, retry_infra=args.retry_infra)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/baselines.py", line 433, in run
+    await asyncio.gather(*(self._one(*b) for b in _interleave(batches)))
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/baselines.py", line 372, in _one
+    ep = await run_episode(job.task, client=client, root_model=self.base_model,
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/env.py", line 275, in run_episode
+    result = CellResult("", 0, bridge.NO_CODE_BLOCK_ERROR) if code is None else await box.run_cell(code)
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/editbox.py", line 547, in run_cell
+    result = await super().run_cell(code)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/sandbox.py", line 327, in run_cell
+    outcome = await self._wait(message, infra, started, blocked_start)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/sandbox.py", line 377, in _wait
+    done, _ = await asyncio.wait({message, infra}, timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 464, in wait
+    return await _wait(fs, timeout, return_when, loop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 550, in _wait
+    await waiter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/f/Personal/RLM/RLM/scripts/baselines.py", line 233, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/baselines.py", line 226, in main
+    summary = asyncio.run((run_dry if args.dry_run else run_live)(args, arms))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 123, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+--- session 2: rlm (last episode) + rlm_medium
+spent so far $5.55; ceiling $12
+  rlm: 79 done; to run: edit 1 x $0.033 = $0.03
+  rlm_medium: 0 done; to run: read 48 x $0.065 (plan estimate), edit 16 x $0.180 (plan estimate) = $6.00
+projected total $11.58
+[rlm_medium] 1/64 aggregation L2: correct, 2 turns, $0.002, 116 s | spent $5.58 of $12
+[rlm_medium] 2/64 aggregation L4: correct, 2 turns, $0.002, 116 s | spent $5.58 of $12
+[rlm_medium] 3/64 aggregation L1: correct, 2 turns, $0.002, 129 s | spent $5.63 of $12
+[rlm_medium] 4/64 aggregation L1: correct, 3 turns, $0.008, 140 s | spent $5.71 of $12
+[rlm_medium] 5/64 aggregation L3: correct, 7 turns, $0.031, 167 s | spent $5.85 of $12
+[rlm_medium] 6/64 aggregation L4: correct, 4 turns, $0.028, 185 s | spent $5.94 of $12
+[rlm_medium] 7/64 aggregation L2: correct, 6 turns, $0.030, 194 s | spent $6.01 of $12
+[rlm_medium] 8/64 edit_real_select L1: wrong, 20 turns, $0.035, 235 s | spent $6.19 of $12
+[rlm_medium] 9/64 aggregation L1: wrong, 12 turns, $0.053, 237 s | spent $6.19 of $12
+[rlm_medium] 10/64 aggregation L3: wrong, 10 turns, $0.084, 267 s | spent $6.35 of $12
+[rlm_medium] 11/64 edit_real_select L2: correct, 20 turns, $0.040, 277 s | spent $6.43 of $12
+[rlm_medium] 12/64 aggregation L4: wrong, 12 turns, $0.071, 299 s | spent $6.48 of $12
+[rlm_medium] 13/64 aggregation L1: wrong, 10 turns, $0.088, 334 s | spent $6.56 of $12
+[rlm_medium] 14/64 edit_real_select L1: correct, 8 turns, $0.012, 256 s | spent $6.56 of $12
+[rlm_medium] 15/64 edit_real_select L2: wrong, 20 turns, $0.092, 343 s | spent $6.61 of $12
+[rlm_medium] 16/64 aggregation L2: wrong, 10 turns, $0.140, 358 s | spent $6.66 of $12
+[rlm_medium] 17/64 edit_real_select L1: correct, 13 turns, $0.022, 275 s | spent $6.67 of $12
+[rlm_medium] 18/64 aggregation L3: wrong, 12 turns, $0.106, 367 s | spent $6.67 of $12
+[rlm_medium] 19/64 edit_real_select L2: correct, 20 turns, $0.051, 129 s | spent $6.69 of $12
+[rlm_medium] 20/64 edit_real_select L1: correct, 20 turns, $0.039, 327 s | spent $6.69 of $12
+[rlm_medium] 21/64 aggregation L2: correct, 5 turns, $0.049, 407 s | spent $6.75 of $12
+[rlm_medium] 22/64 edit_synth L1: correct, 10 turns, $0.013, 88 s | spent $6.78 of $12
+[rlm_medium] 23/64 edit_real_select L1: correct, 20 turns, $0.069, 145 s | spent $6.78 of $12
+[rlm_medium] 24/64 edit_synth L2: correct, 17 turns, $0.025, 108 s | spent $6.83 of $12
+[rlm_medium] 25/64 edit_synth L3: correct, 13 turns, $0.035, 103 s | spent $6.85 of $12
+[rlm_medium] 26/64 edit_synth L2: correct, 8 turns, $0.028, 63 s | spent $6.88 of $12
+[rlm_medium] 27/64 edit_synth L4: correct, 18 turns, $0.026, 164 s | spent $6.92 of $12
+[rlm_medium] 28/64 edit_synth L5: wrong, 20 turns, $0.034, 153 s | spent $6.97 of $12
+[rlm] 80/80 edit_real_select L1: wrong, 20 turns, $0.098, 608 s | spent $6.99 of $12
+[rlm_medium] 29/64 edit_real_select L3: wrong, 20 turns, $0.078, 313 s | spent $7.02 of $12
+[rlm_medium] 30/64 edit_real_select L2: wrong, 19 turns, $0.077, 308 s | spent $7.02 of $12
+STOPPED AT THE CEILING: 34 episode(s) were not started
+step11-v1 on selection-v2: spent $7.02 of $12
+  rlm: 80 scored of 80 planned, accuracy 42.5% ± 5.5%, infra attempts 0 ({}), est $2.39
+    read: 41.7% over 48, $0.026 an episode, median 231 s, 9.1 turns, 2.3 sub-calls
+    edit: 43.8% over 32, $0.035 an episode, median 127 s, 17.5 turns, 0.0 sub-calls
+    edit turn cap: 19 hits (56% of edit episodes unresolved at the cap)
+      edit_real: 30% of 20, $0.042, 18.2 turns
+      edit_real/L1: 40% of 10, $0.040, 17.5 turns
+      edit_real/L2: 25% of 8, $0.042, 18.6 turns
+      edit_real/L3: 0% of 2, $0.051, 20.0 turns
+      edit_real/go: 50% of 8, $0.030, 16.9 turns
+      edit_real/javascript: 33% of 6, $0.043, 18.2 turns
+      edit_real/python: 0% of 6, $0.056, 20.0 turns
+      edit_synth: 67% of 12, $0.024, 16.2 turns
+      edit_synth/L1: 50% of 2, $0.015, 15.5 turns
+      edit_synth/L2: 100% of 4, $0.020, 14.5 turns
+      edit_synth/L3: 50% of 2, $0.040, 19.5 turns
+      edit_synth/L4: 50% of 2, $0.026, 18.5 turns
+      edit_synth/L5: 50% of 2, $0.022, 15.0 turns
+      edit_synth/python: 67% of 12, $0.024, 16.2 turns
+  direct: 44 scored of 48 planned, accuracy 59.1% ± 7.4%, infra attempts 4 ({'server_error': 4}), est $1.09
+    read: 59.1% over 44, $0.025 an episode, median 42 s, 1.0 turns, 0.0 sub-calls
+  rlm_medium: 30 scored of 64 planned, accuracy 63.3% ± 8.8%, infra attempts 0 ({}), est $1.37
+    read: 57.1% over 14, $0.050 an episode, median 215 s, 6.9 turns, 7.1 sub-calls
+    edit: 68.8% over 16, $0.042 an episode, median 199 s, 16.6 turns, 0.0 sub-calls
+    edit turn cap: 8 hits (25% of edit episodes unresolved at the cap)
+      edit_real: 60% of 10, $0.051, 18.0 turns
+      edit_real/L1: 80% of 5, $0.035, 16.2 turns
+      edit_real/L2: 50% of 4, $0.065, 19.8 turns
+      edit_real/L3: 0% of 1, $0.078, 20.0 turns
+      edit_real/go: 75% of 4, $0.041, 15.2 turns
+      edit_real/javascript: 33% of 3, $0.051, 19.7 turns
+      edit_real/python: 67% of 3, $0.066, 20.0 turns
+      edit_synth: 83% of 6, $0.027, 14.3 turns
+      edit_synth/L1: 100% of 1, $0.013, 10.0 turns
+      edit_synth/L2: 100% of 2, $0.026, 12.5 turns
+      edit_synth/L3: 100% of 1, $0.035, 13.0 turns
+      edit_synth/L4: 100% of 1, $0.026, 18.0 turns
+      edit_synth/L5: 0% of 1, $0.034, 20.0 turns
+      edit_synth/python: 83% of 6, $0.027, 14.3 turns
+  rlm_vs_direct_read: 43.2% vs 59.1% over 44 tasks, diff -15.9% ± 9.7%
+  medium_vs_rlm: 63.3% vs 43.3% over 30 tasks, diff +20.0% ± 7.0%
+  medium_vs_rlm_read: 57.1% vs 42.9% over 14 tasks, diff +14.3% ± 9.7%
+  medium_vs_rlm_edit: 68.8% vs 43.8% over 16 tasks, diff +25.0% ± 10.2%
+EXIT=0
+--- session 3: rlm_medium (the 34 the first gate skipped)
+spent so far $7.02; ceiling $12
+  rlm_medium: 30 done; to run: read 34 x $0.050 = $1.69
+projected total $8.70
+[rlm_medium] 31/64 aggregation L5: correct, 2 turns, $0.001, 146 s | spent $7.08 of $12
+[rlm_medium] 32/64 needle L2: wrong, 3 turns, $0.003, 146 s | spent $7.08 of $12
+[rlm_medium] 33/64 aggregation L5: correct, 2 turns, $0.001, 147 s | spent $7.09 of $12
+[rlm_medium] 34/64 tickets_customer L1: correct, 2 turns, $0.005, 151 s | spent $7.11 of $12
+[rlm_medium] 35/64 aggregation L5: wrong, 2 turns, $0.004, 158 s | spent $7.16 of $12
+[rlm_medium] 36/64 needle L3: wrong, 3 turns, $0.003, 164 s | spent $7.19 of $12
+[rlm_medium] 37/64 tickets_customer L2: correct, 3 turns, $0.013, 176 s | spent $7.27 of $12
+[rlm_medium] 38/64 needle L1: correct, 6 turns, $0.008, 177 s | spent $7.27 of $12
+[rlm_medium] 39/64 repo_loc_select L3: correct, 6 turns, $0.011, 177 s | spent $7.27 of $12
+[rlm_medium] 40/64 repo_loc_select L2: wrong, 6 turns, $0.014, 178 s | spent $7.27 of $12
+[rlm_medium] 41/64 repo_loc_select L4: correct, 6 turns, $0.012, 186 s | spent $7.32 of $12
+[rlm_medium] 42/64 needle L2: correct, 9 turns, $0.016, 189 s | spent $7.35 of $12
+[rlm_medium] 43/64 repo_loc_select L2: wrong, 6 turns, $0.016, 201 s | spent $7.40 of $12
+[rlm_medium] 44/64 needle L5: wrong, 9 turns, $0.016, 205 s | spent $7.43 of $12
+[rlm_medium] 45/64 needle L4: wrong, 12 turns, $0.020, 205 s | spent $7.43 of $12
+[rlm_medium] 46/64 callgraph L1: correct, 9 turns, $0.020, 210 s | spent $7.47 of $12
+[rlm_medium] 47/64 callgraph L1: wrong, 12 turns, $0.017, 233 s | spent $7.61 of $12
+[rlm_medium] 48/64 callgraph L2: wrong, 11 turns, $0.022, 239 s | spent $7.63 of $12
+[rlm_medium] 49/64 needle L3: correct, 10 turns, $0.010, 240 s | spent $7.63 of $12
+[rlm_medium] 50/64 repo_loc_select L1: wrong, 9 turns, $0.036, 244 s | spent $7.66 of $12
+[rlm_medium] 51/64 tickets_all L1: wrong, 12 turns, $0.043, 245 s | spent $7.67 of $12
+[rlm_medium] 52/64 repo_loc_select L1: correct, 12 turns, $0.029, 255 s | spent $7.73 of $12
+[rlm_medium] 53/64 callgraph L2: wrong, 10 turns, $0.042, 265 s | spent $7.78 of $12
+[rlm_medium] 54/64 callgraph L3: correct, 11 turns, $0.044, 273 s | spent $7.82 of $12
+[rlm_medium] 55/64 repo_loc_select L3: wrong, 11 turns, $0.046, 273 s | spent $7.82 of $12
+[rlm_medium] 56/64 tickets_all L5: correct, 5 turns, $0.025, 278 s | spent $7.87 of $12
+[rlm_medium] 57/64 tickets_all L2: correct, 12 turns, $0.076, 291 s | spent $7.90 of $12
+[rlm_medium] 58/64 tickets_customer L3: correct, 9 turns, $0.045, 146 s | spent $7.91 of $12
+[rlm_medium] 59/64 callgraph L4: wrong, 12 turns, $0.056, 293 s | spent $7.91 of $12
+[rlm_medium] 60/64 repo_loc_select L4: correct, 12 turns, $0.043, 299 s | spent $7.93 of $12
+[rlm_medium] 61/64 callgraph L5: correct, 12 turns, $0.071, 320 s | spent $7.97 of $12
+[rlm_medium] 62/64 tickets_customer L5: correct, 11 turns, $0.075, 195 s | spent $8.00 of $12
+[rlm_medium] 63/64 repo_loc_select L1: correct, 12 turns, $0.089, 376 s | spent $8.03 of $12
+[rlm_medium] 64/64 tickets_all L3: wrong, 12 turns, $0.090, 382 s | spent $8.04 of $12
+step11-v1 on selection-v2: spent $8.04 of $12
+  rlm: 80 scored of 80 planned, accuracy 42.5% ± 5.5%, infra attempts 0 ({}), est $2.39
+    read: 41.7% over 48, $0.026 an episode, median 231 s, 9.1 turns, 2.3 sub-calls
+    edit: 43.8% over 32, $0.035 an episode, median 127 s, 17.5 turns, 0.0 sub-calls
+    edit turn cap: 19 hits (56% of edit episodes unresolved at the cap)
+      edit_real: 30% of 20, $0.042, 18.2 turns
+      edit_real/L1: 40% of 10, $0.040, 17.5 turns
+      edit_real/L2: 25% of 8, $0.042, 18.6 turns
+      edit_real/L3: 0% of 2, $0.051, 20.0 turns
+      edit_real/go: 50% of 8, $0.030, 16.9 turns
+      edit_real/javascript: 33% of 6, $0.043, 18.2 turns
+      edit_real/python: 0% of 6, $0.056, 20.0 turns
+      edit_synth: 67% of 12, $0.024, 16.2 turns
+      edit_synth/L1: 50% of 2, $0.015, 15.5 turns
+      edit_synth/L2: 100% of 4, $0.020, 14.5 turns
+      edit_synth/L3: 50% of 2, $0.040, 19.5 turns
+      edit_synth/L4: 50% of 2, $0.026, 18.5 turns
+      edit_synth/L5: 50% of 2, $0.022, 15.0 turns
+      edit_synth/python: 67% of 12, $0.024, 16.2 turns
+  direct: 44 scored of 48 planned, accuracy 59.1% ± 7.4%, infra attempts 4 ({'server_error': 4}), est $1.09
+    read: 59.1% over 44, $0.025 an episode, median 42 s, 1.0 turns, 0.0 sub-calls
+  rlm_medium: 64 scored of 64 planned, accuracy 59.4% ± 6.1%, infra attempts 0 ({}), est $2.39
+    read: 56.2% over 48, $0.036 an episode, median 208 s, 7.9 turns, 2.7 sub-calls
+    edit: 68.8% over 16, $0.042 an episode, median 199 s, 16.6 turns, 0.0 sub-calls
+    edit turn cap: 8 hits (25% of edit episodes unresolved at the cap)
+      edit_real: 60% of 10, $0.051, 18.0 turns
+      edit_real/L1: 80% of 5, $0.035, 16.2 turns
+      edit_real/L2: 50% of 4, $0.065, 19.8 turns
+      edit_real/L3: 0% of 1, $0.078, 20.0 turns
+      edit_real/go: 75% of 4, $0.041, 15.2 turns
+      edit_real/javascript: 33% of 3, $0.051, 19.7 turns
+      edit_real/python: 67% of 3, $0.066, 20.0 turns
+      edit_synth: 83% of 6, $0.027, 14.3 turns
+      edit_synth/L1: 100% of 1, $0.013, 10.0 turns
+      edit_synth/L2: 100% of 2, $0.026, 12.5 turns
+      edit_synth/L3: 100% of 1, $0.035, 13.0 turns
+      edit_synth/L4: 100% of 1, $0.026, 18.0 turns
+      edit_synth/L5: 0% of 1, $0.034, 20.0 turns
+      edit_synth/python: 83% of 6, $0.027, 14.3 turns
+  rlm_vs_direct_read: 43.2% vs 59.1% over 44 tasks, diff -15.9% ± 9.7%
+  medium_vs_rlm: 59.4% vs 42.2% over 64 tasks, diff +17.2% ± 6.8%
+  medium_vs_rlm_read: 56.2% vs 41.7% over 48 tasks, diff +14.6% ± 8.4%
+  medium_vs_rlm_edit: 68.8% vs 43.8% over 16 tasks, diff +25.0% ± 10.2%
+EXIT=0

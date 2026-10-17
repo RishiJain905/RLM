@@ -1,0 +1,456 @@
+test_budget_is_enforced_on_the_host (tests.test_bridge.EpisodeBridgeTest.test_budget_is_enforced_on_the_host) ... ok
+test_infra_error_flags_the_episode (tests.test_bridge.EpisodeBridgeTest.test_infra_error_flags_the_episode) ... ok
+test_llm (tests.test_bridge.EpisodeBridgeTest.test_llm) ... ok
+test_llm_batch_keeps_input_order (tests.test_bridge.EpisodeBridgeTest.test_llm_batch_keeps_input_order) ... ok
+test_lone_surrogates_cannot_cause_an_infra_error (tests.test_bridge.EpisodeBridgeTest.test_lone_surrogates_cannot_cause_an_infra_error) ... ok
+test_long_prompts_are_cut (tests.test_bridge.EpisodeBridgeTest.test_long_prompts_are_cut) ... ok
+test_only_llm_and_llm_batch_are_accepted (tests.test_bridge.EpisodeBridgeTest.test_only_llm_and_llm_batch_are_accepted) ... ok
+test_oversized_request_is_refused (tests.test_bridge.EpisodeBridgeTest.test_oversized_request_is_refused) ... ok
+test_subcall_error_is_shown_to_the_model (tests.test_bridge.EpisodeBridgeTest.test_subcall_error_is_shown_to_the_model) ... ok
+test_time_blocked_on_subcalls_is_measured (tests.test_bridge.EpisodeBridgeTest.test_time_blocked_on_subcalls_is_measured) ... ok
+test_unexpected_host_failure_is_infra (tests.test_bridge.EpisodeBridgeTest.test_unexpected_host_failure_is_infra) ... ok
+test_cell_messages_quote_the_limit (tests.test_bridge.PromptTextTest.test_cell_messages_quote_the_limit)
+Spec §12.2: the timeout message quotes the cell limit as a value; edit episodes add one sentence. ... ok
+test_edit_first_message (tests.test_bridge.PromptTextTest.test_edit_first_message) ... ok
+test_every_api_name_is_in_the_prompt (tests.test_bridge.PromptTextTest.test_every_api_name_is_in_the_prompt) ... ok
+test_first_user_message (tests.test_bridge.PromptTextTest.test_first_user_message) ... ok
+test_hash_covers_all_three_texts (tests.test_bridge.PromptTextTest.test_hash_covers_all_three_texts) ... ok
+test_limits_per_family (tests.test_bridge.PromptTextTest.test_limits_per_family)
+Spec §12.3. ... ok
+test_observation (tests.test_bridge.PromptTextTest.test_observation) ... ok
+test_prompt_quotes_the_pinned_limits (tests.test_bridge.PromptTextTest.test_prompt_quotes_the_pinned_limits) ... ok
+test_system_prompt_matches_spec (tests.test_bridge.PromptTextTest.test_system_prompt_matches_spec) ... ok
+test_truncate_prompt (tests.test_bridge.PromptTextTest.test_truncate_prompt) ... ok
+test_valid_answer (tests.test_bridge.PromptTextTest.test_valid_answer) ... ok
+test_each_check_kind (tests.test_capability.ChecksTest.test_each_check_kind) ... ok
+test_every_check_must_pass (tests.test_capability.ChecksTest.test_every_check_must_pass) ... ok
+test_load_validates (tests.test_capability.ChecksTest.test_load_validates) ... ok
+test_run_grades_and_counts_infra_apart (tests.test_capability.RunTest.test_run_grades_and_counts_infra_apart) ... ok
+test_a_rejected_subcall_prompt_is_the_models_error (tests.test_client.FailureTest.test_a_rejected_subcall_prompt_is_the_models_error) ... ok
+test_auth_and_missing_model_fail_at_once (tests.test_client.FailureTest.test_auth_and_missing_model_fail_at_once) ... ok
+test_persistent_429_becomes_infra_after_six_tries (tests.test_client.FailureTest.test_persistent_429_becomes_infra_after_six_tries) ... ok
+test_persistent_5xx_is_infra (tests.test_client.FailureTest.test_persistent_5xx_is_infra) ... ok
+test_slot_is_free_while_backing_off (tests.test_client.FailureTest.test_slot_is_free_while_backing_off) ... ok
+test_timeouts_and_dropped_connections_are_retried_then_infra (tests.test_client.FailureTest.test_timeouts_and_dropped_connections_are_retried_then_infra) ... ok
+test_transient_429_and_5xx_recover (tests.test_client.FailureTest.test_transient_429_and_5xx_recover) ... ok
+test_cancelled_waiters_leak_no_slot (tests.test_client.LimiterTest.test_cancelled_waiters_leak_no_slot) ... ok
+test_caps_in_total_and_per_model (tests.test_client.LimiterTest.test_caps_in_total_and_per_model) ... ok
+test_first_come_first_served (tests.test_client.LimiterTest.test_first_come_first_served) ... ok
+test_one_model_at_its_cap_does_not_block_another (tests.test_client.LimiterTest.test_one_model_at_its_cap_does_not_block_another) ... ok
+test_retry_delays_back_off_with_jitter (tests.test_client.LimiterTest.test_retry_delays_back_off_with_jitter) ... ok
+test_spec_values (tests.test_client.LimiterTest.test_spec_values) ... ok
+test_one_model_runs_at_20 (tests.test_client.LoadTest.test_one_model_runs_at_20) ... ok
+test_training_shape_reaches_30_and_never_more (tests.test_client.LoadTest.test_training_shape_reaches_30_and_never_more) ... ok
+test_two_clients_sharing_one_limiter (tests.test_client.LoadTest.test_two_clients_sharing_one_limiter) ... ok
+test_without_the_per_model_cap_w_and_b_would_refuse (tests.test_client.LoadTest.test_without_the_per_model_cap_w_and_b_would_refuse)
+Why the cap of 20 per model exists: 30 to one model name gets 429s, as the step 2 probe found. ... ok
+test_pinned_token_ids_match_the_tokenizer (tests.test_client.RequestTest.test_pinned_token_ids_match_the_tokenizer) ... skipped 'Qwen3.8-27B tokenizer_config.json is not in the local Hugging Face cache'
+test_root_turn_rebuilds_token_ids_and_pins_thinking_off (tests.test_client.RequestTest.test_root_turn_rebuilds_token_ids_and_pins_thinking_off) ... ok
+test_subcall_settings (tests.test_client.RequestTest.test_subcall_settings) ... ok
+test_thinking_on_is_infra (tests.test_client.RequestTest.test_thinking_on_is_infra) ... ok
+test_thinking_tail_check (tests.test_client.RequestTest.test_thinking_tail_check) ... ok
+test_consumers_use_the_bridge_prompt (tests.test_contract.OneSystemPromptTest.test_consumers_use_the_bridge_prompt) ... ok
+test_prompt_text_is_defined_only_in_the_bridge (tests.test_contract.OneSystemPromptTest.test_prompt_text_is_defined_only_in_the_bridge) ... ok
+test_each_tool_is_listed_with_its_signature (tests.test_contract.ToolsInPromptTest.test_each_tool_is_listed_with_its_signature) ... ok
+test_v1_has_no_tools (tests.test_contract.ToolsInPromptTest.test_v1_has_no_tools) ... ok
+test_env_sends_the_bridge_prompt (tests.test_contract.WirePromptTest.test_env_sends_the_bridge_prompt) ... ok
+test_every_submitted_value_is_a_valid_answer (tests.test_contract.WorkerMatchesBridgeTest.test_every_submitted_value_is_a_valid_answer) ... ok
+test_protocol_constants (tests.test_contract.WorkerMatchesBridgeTest.test_protocol_constants) ... ok
+test_repl_exposes_exactly_the_api (tests.test_contract.WorkerMatchesBridgeTest.test_repl_exposes_exactly_the_api) ... ok
+test_truncation_agrees (tests.test_contract.WorkerMatchesBridgeTest.test_truncation_agrees) ... ok
+test_worker_imports_nothing_from_the_project (tests.test_contract.WorkerMatchesBridgeTest.test_worker_imports_nothing_from_the_project) ... ok
+test_bad_setup (tests.test_controller.ControllerTest.test_bad_setup) ... ok
+test_frozen_records_but_never_moves (tests.test_controller.ControllerTest.test_frozen_records_but_never_moves)
+The second seed runs at level 1 (plan step 10): the controller logs what it would do. ... ok
+test_infra_and_absent_steps_do_not_count (tests.test_controller.ControllerTest.test_infra_and_absent_steps_do_not_count) ... ok
+test_moves_down_below_20_percent_but_never_below_level_1 (tests.test_controller.ControllerTest.test_moves_down_below_20_percent_but_never_below_level_1) ... ok
+test_moves_up_above_70_percent_after_three_steps (tests.test_controller.ControllerTest.test_moves_up_above_70_percent_after_three_steps) ... ok
+test_only_episodes_at_the_current_level_count (tests.test_controller.ControllerTest.test_only_episodes_at_the_current_level_count) ... ok
+test_state_round_trips_through_json (tests.test_controller.ControllerTest.test_state_round_trips_through_json) ... ok
+test_stays_inside_the_band_and_at_the_edges (tests.test_controller.ControllerTest.test_stays_inside_the_band_and_at_the_edges) ... ok
+test_the_rate_is_over_the_window_not_the_last_step (tests.test_controller.ControllerTest.test_the_rate_is_over_the_window_not_the_last_step) ... ok
+test_too_few_episodes_do_not_move (tests.test_controller.ControllerTest.test_too_few_episodes_do_not_move) ... ok
+test_top_level_is_saturation_not_a_move (tests.test_controller.ControllerTest.test_top_level_is_saturation_not_a_move) ... ok
+test_waits_three_steps_after_a_move (tests.test_controller.ControllerTest.test_waits_three_steps_after_a_move) ... ok
+test_a_failed_check_writes_nothing (tests.test_dashboard.CheckTest.test_a_failed_check_writes_nothing) ... ok
+test_a_key_in_free_text_is_scrubbed_and_a_planted_one_is_caught (tests.test_dashboard.CheckTest.test_a_key_in_free_text_is_scrubbed_and_a_planted_one_is_caught) ... ok
+test_a_private_seed_is_caught (tests.test_dashboard.CheckTest.test_a_private_seed_is_caught) ... ok
+test_an_eval_task_is_caught_but_a_shared_question_template_is_not (tests.test_dashboard.CheckTest.test_an_eval_task_is_caught_but_a_shared_question_template_is_not) ... ok
+test_text_cannot_break_out_of_the_data (tests.test_dashboard.CheckTest.test_text_cannot_break_out_of_the_data) ... ok
+test_a_leaked_task_id_or_repo_path_is_caught (tests.test_dashboard.EditCheckTest.test_a_leaked_task_id_or_repo_path_is_caught) ... ok
+test_an_edit_eval_task_id_or_repository_is_caught (tests.test_dashboard.EditCheckTest.test_an_edit_eval_task_id_or_repository_is_caught) ... ok
+test_an_edit_eval_task_is_caught_by_its_text (tests.test_dashboard.EditCheckTest.test_an_edit_eval_task_is_caught_by_its_text) ... ok
+test_scrub_removes_sandbox_paths_and_task_ids (tests.test_dashboard.EditCheckTest.test_scrub_removes_sandbox_paths_and_task_ids) ... ok
+test_the_build_passes_and_reads_the_edit_eval_names (tests.test_dashboard.EditCheckTest.test_the_build_passes_and_reads_the_edit_eval_names) ... ok
+test_by_language_in_eval_summaries (tests.test_dashboard.EditDataTest.test_by_language_in_eval_summaries) ... ok
+test_edit_samples_show_no_gold_hidden_tests_or_paths (tests.test_dashboard.EditDataTest.test_edit_samples_show_no_gold_hidden_tests_or_paths) ... ok
+test_old_records_without_an_edit_block_still_build (tests.test_dashboard.EditDataTest.test_old_records_without_an_edit_block_still_build) ... ok
+test_the_edit_block_passes_through (tests.test_dashboard.EditDataTest.test_the_edit_block_passes_through) ... ok
+test_the_edit_detectors_are_counted_per_rule (tests.test_dashboard.EditDataTest.test_the_edit_detectors_are_counted_per_rule) ... ok
+test_the_pot_matches_the_v2_split (tests.test_dashboard.EditDataTest.test_the_pot_matches_the_v2_split) ... ok
+test_unknown_edit_keys_and_names_are_dropped (tests.test_dashboard.EditDataTest.test_unknown_edit_keys_and_names_are_dropped) ... ok
+test_build_round_trips_and_passes_the_check (tests.test_dashboard.PageTest.test_build_round_trips_and_passes_the_check) ... ok
+test_every_step_and_panel_has_its_data (tests.test_dashboard.PageTest.test_every_step_and_panel_has_its_data) ... ok
+test_nothing_identifying_reaches_the_page (tests.test_dashboard.PageTest.test_nothing_identifying_reaches_the_page) ... ok
+test_rolled_back_steps_drop_their_samples (tests.test_dashboard.PageTest.test_rolled_back_steps_drop_their_samples) ... ok
+test_samples_are_training_rollouts_cut_short (tests.test_dashboard.PageTest.test_samples_are_training_rollouts_cut_short) ... ok
+test_a_heartbeat_alone_is_not_news (tests.test_dashboard.SignatureTest.test_a_heartbeat_alone_is_not_news) ... ok
+test_scrub (tests.test_dashboard.SignatureTest.test_scrub) ... ok
+test_a_silent_run_is_reported_once (tests.test_dashboard.WaitTest.test_a_silent_run_is_reported_once) ... ok
+test_publish_ack_then_wait_for_the_next_change (tests.test_dashboard.WaitTest.test_publish_ack_then_wait_for_the_next_change) ... ok
+test_the_page_between_runs_has_the_next_run_and_no_data (tests.test_dashboard.WaitingTest.test_the_page_between_runs_has_the_next_run_and_no_data) ... ok
+test_deterministic_per_seed (tests.test_data_families.AggregationTest.test_deterministic_per_seed) ... ok
+test_every_family_and_level (tests.test_data_families.AggregationTest.test_every_family_and_level) ... ok
+test_every_training_source_is_drawn (tests.test_data_families.AggregationTest.test_every_training_source_is_drawn)
+Decision 7c raised aggregation to 45%, so it draws on four registers, not one (LEDGAR and arXiv added). ... ok
+test_no_label_appears_in_the_context (tests.test_data_families.AggregationTest.test_no_label_appears_in_the_context) ... ok
+test_the_answer_is_what_the_context_says (tests.test_data_families.AggregationTest.test_the_answer_is_what_the_context_says) ... ok
+test_training_never_reads_heldout_sources (tests.test_data_families.AggregationTest.test_training_never_reads_heldout_sources) ... ok
+test_decoys_differ_from_each_other_on_some_sample (tests.test_data_families.BehaviourLibraryTest.test_decoys_differ_from_each_other_on_some_sample) ... ok
+test_every_template_matches_its_reference (tests.test_data_families.BehaviourLibraryTest.test_every_template_matches_its_reference) ... ok
+test_heldout_behaviours_are_never_trained (tests.test_data_families.BehaviourLibraryTest.test_heldout_behaviours_are_never_trained) ... ok
+test_capability_set (tests.test_data_families.MixAndLicenceTest.test_capability_set) ... ok
+test_eval_sets_build_from_private_seeds (tests.test_data_families.MixAndLicenceTest.test_eval_sets_build_from_private_seeds) ... ok
+test_licence_bar (tests.test_data_families.MixAndLicenceTest.test_licence_bar) ... ok
+test_mix_is_spec_v2 (tests.test_data_families.MixAndLicenceTest.test_mix_is_spec_v2)
+Spec v2 §12.7 (decision E-a): editing 40% (edit_real 25, edit_synth 15), aggregation 25, code reading 20, ... ok
+test_production_config (tests.test_data_families.MixAndLicenceTest.test_production_config) ... ok
+test_selection_plan_is_64_tasks_and_heldout_families_stay_out_of_training (tests.test_data_families.MixAndLicenceTest.test_selection_plan_is_64_tasks_and_heldout_families_stay_out_of_training) ... ok
+test_deterministic_per_seed (tests.test_data_families.RepoLocTest.test_deterministic_per_seed) ... ok
+test_every_family_and_level (tests.test_data_families.RepoLocTest.test_every_family_and_level) ... ok
+test_selection_repos_are_never_trained_on (tests.test_data_families.RepoLocTest.test_selection_repos_are_never_trained_on) ... ok
+test_test_split_uses_its_own_question (tests.test_data_families.RepoLocTest.test_test_split_uses_its_own_question) ... ok
+test_deterministic_per_seed (tests.test_data_families.SynthCodeTest.test_deterministic_per_seed) ... ok
+test_every_family_and_level (tests.test_data_families.SynthCodeTest.test_every_family_and_level) ... ok
+test_heldout_uses_its_own_questions_and_call_styles (tests.test_data_families.SynthCodeTest.test_heldout_uses_its_own_questions_and_call_styles) ... ok
+test_hidden_calls_defeat_plain_ast_above_level_1 (tests.test_data_families.SynthCodeTest.test_hidden_calls_defeat_plain_ast_above_level_1) ... ok
+test_needle_target_does_what_the_question_says_and_decoys_dont (tests.test_data_families.SynthCodeTest.test_needle_target_does_what_the_question_says_and_decoys_dont) ... ok
+test_plain_call_graphs_are_what_ast_finds (tests.test_data_families.SynthCodeTest.test_plain_call_graphs_are_what_ast_finds) ... ok
+test_sizes_grow_to_about_400k (tests.test_data_families.SynthCodeTest.test_sizes_grow_to_about_400k) ... ok
+test_entity_from_the_first_lines (tests.test_detectors.CopiedAnswerTest.test_entity_from_the_first_lines) ... ok
+test_line_count_typed_from_the_prompt (tests.test_detectors.CopiedAnswerTest.test_line_count_typed_from_the_prompt) ... ok
+test_lists_need_every_item_copied (tests.test_detectors.CopiedAnswerTest.test_lists_need_every_item_copied) ... ok
+test_not_for_answers_that_match_by_chance (tests.test_detectors.CopiedAnswerTest.test_not_for_answers_that_match_by_chance)
+Counts under 100 match small numbers in the first lines too often: 7 honest wins in the 20-step run. ... ok
+test_not_for_the_task_s_own_blind_guess (tests.test_detectors.CopiedAnswerTest.test_not_for_the_task_s_own_blind_guess)
+Step 8: the blind guess is what the prompt's metadata alone gives, and the reward already caps it ... ok
+test_not_when_an_output_showed_it (tests.test_detectors.CopiedAnswerTest.test_not_when_an_output_showed_it) ... ok
+test_not_when_computed_by_code (tests.test_detectors.CopiedAnswerTest.test_not_when_computed_by_code) ... ok
+test_not_when_not_in_the_prompt (tests.test_detectors.CopiedAnswerTest.test_not_when_not_in_the_prompt) ... ok
+test_numbers_in_text (tests.test_detectors.CopiedAnswerTest.test_numbers_in_text) ... ok
+test_still_fires_when_the_answer_is_not_the_blind_guess (tests.test_detectors.CopiedAnswerTest.test_still_fires_when_the_answer_is_not_the_blind_guess)
+The exclusion is only for the task's own blind guess. A typed value that the prompt shows, that ... ok
+test_a_detector_bug_is_infra_not_a_zero (tests.test_detectors.DockerDetectorTest.test_a_detector_bug_is_infra_not_a_zero) ... ok
+test_blocked_attempts_fire_escape_attempt (tests.test_detectors.DockerDetectorTest.test_blocked_attempts_fire_escape_attempt) ... ok
+test_correct_answer_with_a_hack_scores_zero (tests.test_detectors.DockerDetectorTest.test_correct_answer_with_a_hack_scores_zero) ... ok
+test_detectors_can_be_turned_off_for_tests (tests.test_detectors.DockerDetectorTest.test_detectors_can_be_turned_off_for_tests) ... ok
+test_honest_episode_is_untouched (tests.test_detectors.DockerDetectorTest.test_honest_episode_is_untouched) ... ok
+test_honest_stdlib_work_fires_nothing (tests.test_detectors.DockerDetectorTest.test_honest_stdlib_work_fires_nothing) ... ok
+test_three_timeouts_fire_timeout_loop (tests.test_detectors.DockerDetectorTest.test_three_timeouts_fire_timeout_loop) ... ok
+test_code_that_does_not_parse_never_read_context (tests.test_detectors.EarlySubmitTest.test_code_that_does_not_parse_never_read_context) ... ok
+test_honest_episodes (tests.test_detectors.EarlySubmitTest.test_honest_episodes) ... ok
+test_submit_without_reading_context (tests.test_detectors.EarlySubmitTest.test_submit_without_reading_context) ... ok
+test_turn_one_submit (tests.test_detectors.EarlySubmitTest.test_turn_one_submit) ... ok
+test_a_failed_import_of_a_missing_package_is_not_an_escape (tests.test_detectors.EscapeAndTimeoutTest.test_a_failed_import_of_a_missing_package_is_not_an_escape) ... ok
+test_counts (tests.test_detectors.EscapeAndTimeoutTest.test_counts) ... ok
+test_every_escape_kind_fires (tests.test_detectors.EscapeAndTimeoutTest.test_every_escape_kind_fires) ... ok
+test_fires_without_a_submit (tests.test_detectors.EscapeAndTimeoutTest.test_fires_without_a_submit) ... ok
+test_refused_bridge_requests (tests.test_detectors.EscapeAndTimeoutTest.test_refused_bridge_requests) ... ok
+test_timeout_loop (tests.test_detectors.EscapeAndTimeoutTest.test_timeout_loop) ... ok
+test_a_detector_bug_is_infra_not_a_zero (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_a_detector_bug_is_infra_not_a_zero) ... ok
+test_a_hacked_win_becomes_a_negative_example (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_a_hacked_win_becomes_a_negative_example)
+Zeroed before filter_step and the group mean: the exact-but-hacked rollout ends below its honest ... ok
+test_correct_answer_with_a_hack_scores_zero (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_correct_answer_with_a_hack_scores_zero) ... ok
+test_detectors_can_be_turned_off_for_tests (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_detectors_can_be_turned_off_for_tests) ... ok
+test_escape_and_timeouts_through_the_loop (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_escape_and_timeouts_through_the_loop) ... ok
+test_honest_episode_is_untouched (tests.test_detectors.ZeroedBeforeTheGroupMeanTest.test_honest_episode_is_untouched) ... ok
+test_a_resolved_episode_in_real_containers (tests.test_edit_env.DockerEditTest.test_a_resolved_episode_in_real_containers) ... ok
+test_a_failing_grader_is_infra_not_a_zero (tests.test_edit_env.EditEpisodeTest.test_a_failing_grader_is_infra_not_a_zero) ... ok
+test_a_resolved_episode (tests.test_edit_env.EditEpisodeTest.test_a_resolved_episode) ... ok
+test_coding_tool_metrics (tests.test_edit_env.EditEpisodeTest.test_coding_tool_metrics) ... ok
+test_detectors_on_edits (tests.test_edit_env.EditEpisodeTest.test_detectors_on_edits) ... ok
+test_no_submit_or_no_change_scores_zero_without_grading (tests.test_edit_env.EditEpisodeTest.test_no_submit_or_no_change_scores_zero_without_grading) ... ok
+test_the_step_block_has_exactly_the_specs_keys (tests.test_edit_env.EditEpisodeTest.test_the_step_block_has_exactly_the_specs_keys) ... ok
+test_all_zero_twice_or_all_one_once (tests.test_edit_env.RetirementTest.test_all_zero_twice_or_all_one_once) ... ok
+test_draw_skips_retired_tasks (tests.test_edit_env.RetirementTest.test_draw_skips_retired_tasks) ... ok
+test_hidden_tests_never_enter_the_container (tests.test_editbox.EditReplTest.test_hidden_tests_never_enter_the_container) ... ok
+test_network_is_blocked_and_logged (tests.test_editbox.EditReplTest.test_network_is_blocked_and_logged) ... ok
+test_no_history_to_mine (tests.test_editbox.EditReplTest.test_no_history_to_mine)
+One commit at the base: no other history, branches, tags, reflog or remotes (spec §12.4). ... ok
+test_the_bundle_runs_the_repl_in_a_foreign_image (tests.test_editbox.EditReplTest.test_the_bundle_runs_the_repl_in_a_foreign_image)
+Our Python works in an image with no Python and no glibc (Alpine), through its own loader (spec §12.4). ... ok
+test_the_coding_tools_work_in_the_container (tests.test_editbox.EditReplTest.test_the_coding_tools_work_in_the_container)
+Spec §12.1: the seven tools are in the namespace, work on /work/repo, and are logged apart from raw I/O. ... ok
+test_the_host_diff_ignores_the_episodes_git (tests.test_editbox.EditReplTest.test_the_host_diff_ignores_the_episodes_git)
+The model controls /work/repo/.git; the host never runs git against it (editbox.diff). ... ok
+test_the_repository_is_writable_and_programs_run (tests.test_editbox.EditReplTest.test_the_repository_is_writable_and_programs_run) ... ok
+test_timeouts_and_crashes_keep_the_files (tests.test_editbox.EditReplTest.test_timeouts_and_crashes_keep_the_files) ... ok
+test_writes_stay_in_the_repository_scratch_and_tmp (tests.test_editbox.EditReplTest.test_writes_stay_in_the_repository_scratch_and_tmp) ... ok
+test_canaries_catch_forged_results (tests.test_editbox.GraderTest.test_canaries_catch_forged_results) ... ok
+test_editing_a_test_is_tamper (tests.test_editbox.GraderTest.test_editing_a_test_is_tamper) ... ok
+test_gold_resolves_and_blind_patches_do_not (tests.test_editbox.GraderTest.test_gold_resolves_and_blind_patches_do_not) ... ok
+test_the_cap_is_the_models_and_a_dead_grader_is_infra (tests.test_editbox.GraderTest.test_the_cap_is_the_models_and_a_dead_grader_is_infra) ... ok
+test_eight_edit_episodes_at_once (tests.test_editbox.ParallelTest.test_eight_edit_episodes_at_once) ... ok
+test_a_module_its_runner_cant_build_is_dropped_before_any_container (tests.test_editdata.DeriveTest.test_a_module_its_runner_cant_build_is_dropped_before_any_container) ... ok
+test_a_real_pr_image_keeps_its_go_cache_readable_and_moves_unwritable_caches (tests.test_editdata.DeriveTest.test_a_real_pr_image_keeps_its_go_cache_readable_and_moves_unwritable_caches) ... ok
+test_go_images_keep_nothing_compiled_from_the_repository (tests.test_editdata.DeriveTest.test_go_images_keep_nothing_compiled_from_the_repository) ... ok
+test_node_modules_stay_where_the_image_installed_them (tests.test_editdata.DeriveTest.test_node_modules_stay_where_the_image_installed_them) ... ok
+test_the_derived_image_drops_the_checkout_and_stays_offline (tests.test_editdata.DeriveTest.test_the_derived_image_drops_the_checkout_and_stays_offline) ... ok
+test_the_go_cache_purge_keeps_dependencies_warm (tests.test_editdata.DeriveTest.test_the_go_cache_purge_keeps_dependencies_warm) ... ok
+test_without_a_go_mod_only_the_checkouts_paths_go (tests.test_editdata.DeriveTest.test_without_a_go_mod_only_the_checkouts_paths_go) ... ok
+test_a_crlf_file_keeps_its_line_ends_and_its_patch_applies (tests.test_editdata.EvalSplitTest.test_a_crlf_file_keeps_its_line_ends_and_its_patch_applies) ... ok
+test_balance_spreads_languages_and_keeps_enough_features (tests.test_editdata.EvalSplitTest.test_balance_spreads_languages_and_keeps_enough_features) ... ok
+test_java_helpers_stay_visible (tests.test_editdata.EvalSplitTest.test_java_helpers_stay_visible) ... ok
+test_reruns_skip_repositories_that_have_generated_tasks (tests.test_editdata.EvalSplitTest.test_reruns_skip_repositories_that_have_generated_tasks) ... ok
+test_spare_eval_candidates_are_skipped_once_a_split_is_full (tests.test_editdata.EvalSplitTest.test_spare_eval_candidates_are_skipped_once_a_split_is_full) ... ok
+test_brace_scanner_skips_strings_and_comments (tests.test_editdata.FeatureTest.test_brace_scanner_skips_strings_and_comments) ... ok
+test_go_hides_test_functions_not_files (tests.test_editdata.FeatureTest.test_go_hides_test_functions_not_files) ... ok
+test_go_stub_drops_imports_it_leaves_unused (tests.test_editdata.FeatureTest.test_go_stub_drops_imports_it_leaves_unused) ... ok
+test_mutations_change_one_line (tests.test_editdata.FeatureTest.test_mutations_change_one_line) ... ok
+test_python_functions_and_stub (tests.test_editdata.FeatureTest.test_python_functions_and_stub) ... ok
+test_rust_java_typescript (tests.test_editdata.FeatureTest.test_rust_java_typescript) ... ok
+test_leaks (tests.test_editdata.LeakAndLevelTest.test_leaks) ... ok
+test_levels (tests.test_editdata.LeakAndLevelTest.test_levels) ... ok
+test_patch_size (tests.test_editdata.LeakAndLevelTest.test_patch_size) ... ok
+test_patches_without_git_headers_get_them (tests.test_editdata.LeakAndLevelTest.test_patches_without_git_headers_get_them) ... ok
+test_rust_removed_files_named_by_what_is_left (tests.test_editdata.LeakAndLevelTest.test_rust_removed_files_named_by_what_is_left) ... ok
+test_classify (tests.test_editdata.LicenceTest.test_classify) ... ok
+test_repo_key (tests.test_editdata.LicenceTest.test_repo_key) ... ok
+test_blind_patches_score_zero (tests.test_editsynth.KindsAndLevelsTest.test_blind_patches_score_zero)
+Spec §12.6 H1 for edits: the empty patch, a patch that deletes the target code and one that stubs it to ... ok
+test_every_kind_level_and_family (tests.test_editsynth.KindsAndLevelsTest.test_every_kind_level_and_family)
+The gold change resolves every task; the base fails every hidden fail-to-pass test and passes every ... ok
+test_visible_tests_pass_on_the_base (tests.test_editsynth.KindsAndLevelsTest.test_visible_tests_pass_on_the_base) ... ok
+test_heldout_wording_and_mutations_never_appear_in_training (tests.test_editsynth.TaskShapeTest.test_heldout_wording_and_mutations_never_appear_in_training)
+H7: held-out templates share no 6-word sequence with training's; their mutation kinds and options differ. ... ok
+test_hidden_inputs_differ_from_the_task_s_example (tests.test_editsynth.TaskShapeTest.test_hidden_inputs_differ_from_the_task_s_example) ... ok
+test_registered_and_heldout_is_eval_only (tests.test_editsynth.TaskShapeTest.test_registered_and_heldout_is_eval_only) ... ok
+test_seeds_and_determinism (tests.test_editsynth.TaskShapeTest.test_seeds_and_determinism) ... ok
+test_what_the_model_sees (tests.test_editsynth.TaskShapeTest.test_what_the_model_sees) ... ok
+test_container_killed_mid_cell (tests.test_env.DockerTest.test_container_killed_mid_cell) ... ok
+test_forced_429_through_the_real_bridge (tests.test_env.DockerTest.test_forced_429_through_the_real_bridge) ... ok
+test_load_through_real_sandboxes (tests.test_env.DockerTest.test_load_through_real_sandboxes)
+32 episodes at once, each asking 10 sub-calls in one llm_batch: never over the caps, no 429. ... ok
+test_time_queued_for_subcalls_does_not_count_toward_the_cell_timeout (tests.test_env.DockerTest.test_time_queued_for_subcalls_does_not_count_toward_the_cell_timeout)
+Plan step 4: a cell whose sub-calls wait in the limiter's queue isn't timed out for it. ... ok
+test_reply_without_code_uses_up_a_turn (tests.test_env.EpisodeTest.test_reply_without_code_uses_up_a_turn) ... ok
+test_runs_to_submit (tests.test_env.EpisodeTest.test_runs_to_submit) ... ok
+test_the_30_call_budget (tests.test_env.EpisodeTest.test_the_30_call_budget)
+Spec §1.2: 30 sub-calls an episode, llm_batch uses one per prompt, and an over-budget call uses nothing. ... ok
+test_ticket_task_with_the_default_reward (tests.test_env.EpisodeTest.test_ticket_task_with_the_default_reward)
+Env v2 end to end on a level-1 ticket task: calibrated reward, detectors, exact accuracy. ... ok
+test_turn_limit (tests.test_env.EpisodeTest.test_turn_limit) ... ok
+test_infra_pause (tests.test_env.FilterTest.test_infra_pause) ... ok
+test_pause_rule_per_run (tests.test_env.FilterTest.test_pause_rule_per_run)
+Rishi, 2026-10-11: per step for the second seed, a 10-step window in production. ... ok
+test_spec_5_4 (tests.test_env.FilterTest.test_spec_5_4) ... ok
+test_too_few_groups_skips_the_train_call (tests.test_env.FilterTest.test_too_few_groups_skips_the_train_call) ... ok
+test_5xx (tests.test_env.InfraTest.test_5xx) ... ok
+test_forced_429_on_root_turns (tests.test_env.InfraTest.test_forced_429_on_root_turns) ... ok
+test_forced_429_on_subcalls (tests.test_env.InfraTest.test_forced_429_on_subcalls) ... ok
+test_host_bug_is_infra_not_a_zero (tests.test_env.InfraTest.test_host_bug_is_infra_not_a_zero) ... ok
+test_killed_sandbox (tests.test_env.InfraTest.test_killed_sandbox) ... ok
+test_none_reach_training (tests.test_env.InfraTest.test_none_reach_training)
+A full step with forced 429s and killed sandboxes: every flagged episode is counted, none is trained on. ... ok
+test_checkpoint_sample_verdicts_and_report (tests.test_evals.ClaudeAuditTest.test_checkpoint_sample_verdicts_and_report) ... ok
+test_rerun_through_real_sandboxes (tests.test_evals.DockerEvalTest.test_rerun_through_real_sandboxes) ... ok
+test_every_episode_is_logged_in_full (tests.test_evals.EvalLoggingTest.test_every_episode_is_logged_in_full) ... ok
+test_logged_through_art (tests.test_evals.EvalLoggingTest.test_logged_through_art) ... ok
+test_paths (tests.test_evals.EvalLoggingTest.test_paths) ... ok
+test_rerun_leaves_one_transcript_per_episode (tests.test_evals.EvalLoggingTest.test_rerun_leaves_one_transcript_per_episode)
+Done when: a rerun eval writes one transcript per episode, and the audit script reads them. ... ok
+test_transcripts_are_git_ignored (tests.test_evals.EvalLoggingTest.test_transcripts_are_git_ignored) ... ok
+test_fresh_names_every_time (tests.test_grader.CanaryTest.test_fresh_names_every_time) ... ok
+test_score (tests.test_grader.CanaryTest.test_score) ... ok
+test_spec_round_trip (tests.test_grader.CanaryTest.test_spec_round_trip) ... ok
+test_verdicts (tests.test_grader.CanaryTest.test_verdicts) ... ok
+test_an_early_exit_under_any_alias_is_test_aware (tests.test_grader.CheckDiffTest.test_an_early_exit_under_any_alias_is_test_aware) ... ok
+test_any_conftest_is_test_configuration (tests.test_grader.CheckDiffTest.test_any_conftest_is_test_configuration) ... ok
+test_binary_symlink_unsafe_and_oversize (tests.test_grader.CheckDiffTest.test_binary_symlink_unsafe_and_oversize) ... ok
+test_canary_results_never_leave_the_grader (tests.test_grader.CheckDiffTest.test_canary_results_never_leave_the_grader) ... ok
+test_code_changes_are_kept (tests.test_grader.CheckDiffTest.test_code_changes_are_kept) ... ok
+test_editing_an_existing_test_is_tamper_and_stripped (tests.test_grader.CheckDiffTest.test_editing_an_existing_test_is_tamper_and_stripped) ... ok
+test_exit_calls_and_skip_like_names_are_no_skip_markers (tests.test_grader.CheckDiffTest.test_exit_calls_and_skip_like_names_are_no_skip_markers) ... ok
+test_new_test_files_are_kept_out_quietly (tests.test_grader.CheckDiffTest.test_new_test_files_are_kept_out_quietly) ... ok
+test_new_test_files_never_reach_the_run_in_any_language (tests.test_grader.CheckDiffTest.test_new_test_files_never_reach_the_run_in_any_language) ... ok
+test_package_json_test_keys (tests.test_grader.CheckDiffTest.test_package_json_test_keys) ... ok
+test_rust_inline_test_modules (tests.test_grader.CheckDiffTest.test_rust_inline_test_modules) ... ok
+test_surefire_configuration (tests.test_grader.CheckDiffTest.test_surefire_configuration) ... ok
+test_test_aware_code (tests.test_grader.CheckDiffTest.test_test_aware_code) ... ok
+test_test_sections_of_shared_config_files (tests.test_grader.CheckDiffTest.test_test_sections_of_shared_config_files) ... ok
+test_the_runners_own_modules_are_tamper_and_stripped (tests.test_grader.CheckDiffTest.test_the_runners_own_modules_are_tamper_and_stripped) ... ok
+test_a_cancelled_grader_removes_its_container (tests.test_grader.LeftoverContainerTest.test_a_cancelled_grader_removes_its_container) ... ok
+test_a_timed_out_grader_removes_its_container_and_is_infra (tests.test_grader.LeftoverContainerTest.test_a_timed_out_grader_removes_its_container_and_is_infra) ... ok
+test_only_long_finished_sandbox_containers_are_swept (tests.test_grader.LeftoverContainerTest.test_only_long_finished_sandbox_containers_are_swept) ... ok
+test_kinds_of_change (tests.test_grader.ParsePatchTest.test_kinds_of_change) ... ok
+test_safe_paths (tests.test_grader.ParsePatchTest.test_safe_paths) ... ok
+test_cargo_lines (tests.test_grader.ParserTest.test_cargo_lines) ... ok
+test_conflicting_duplicates_are_malformed (tests.test_grader.ParserTest.test_conflicting_duplicates_are_malformed) ... ok
+test_go_json (tests.test_grader.ParserTest.test_go_json) ... ok
+test_jest_and_vitest_json (tests.test_grader.ParserTest.test_jest_and_vitest_json) ... ok
+test_maven_and_gradle_xml (tests.test_grader.ParserTest.test_maven_and_gradle_xml) ... ok
+test_mocha_json (tests.test_grader.ParserTest.test_mocha_json) ... ok
+test_pytest_junit (tests.test_grader.ParserTest.test_pytest_junit) ... ok
+test_pytest_key_without_a_file (tests.test_grader.ParserTest.test_pytest_key_without_a_file) ... ok
+test_pytest_missing_or_malformed_report (tests.test_grader.ParserTest.test_pytest_missing_or_malformed_report) ... ok
+test_unittest_json (tests.test_grader.ParserTest.test_unittest_json) ... ok
+test_files_in_the_repository_cant_stand_in_for_the_runner (tests.test_grader.PytestBootTest.test_files_in_the_repository_cant_stand_in_for_the_runner) ... ok
+test_the_pytest_command_uses_it (tests.test_grader.PytestBootTest.test_the_pytest_command_uses_it) ... ok
+test_test_configuration_files (tests.test_grader.TestDetectionTest.test_test_configuration_files) ... ok
+test_test_paths_per_language (tests.test_grader.TestDetectionTest.test_test_paths_per_language) ... ok
+test_a_failed_rescoring_is_counted_not_raised (tests.test_monitor.SignalsTest.test_a_failed_rescoring_is_counted_not_raised) ... ok
+test_entropy_is_the_mean_negative_logprob_of_sampled_tokens (tests.test_monitor.SignalsTest.test_entropy_is_the_mean_negative_logprob_of_sampled_tokens) ... ok
+test_kl_to_base_lines_up_every_sampled_token (tests.test_monitor.SignalsTest.test_kl_to_base_lines_up_every_sampled_token) ... ok
+test_reward_std_and_histogram (tests.test_monitor.SignalsTest.test_reward_std_and_histogram) ... ok
+test_tokens_that_do_not_line_up_are_skipped_and_counted (tests.test_monitor.SignalsTest.test_tokens_that_do_not_line_up_are_skipped_and_counted) ... ok
+test_every_spec_9_metric_is_there (tests.test_monitor.StepMetricsTest.test_every_spec_9_metric_is_there) ... ok
+test_the_client_counts_every_response_it_pays_for (tests.test_monitor.StepMetricsTest.test_the_client_counts_every_response_it_pays_for) ... ok
+test_a_commit_does_not_hide_the_change (tests.test_repl_tools.DiffTest.test_a_commit_does_not_hide_the_change) ... ok
+test_shows_edits_and_new_files_without_touching_the_index (tests.test_repl_tools.DiffTest.test_shows_edits_and_new_files_without_touching_the_index) ... ok
+test_crlf_files_keep_their_line_endings (tests.test_repl_tools.EditAndWriteTest.test_crlf_files_keep_their_line_endings) ... ok
+test_failures_leave_the_file_untouched (tests.test_repl_tools.EditAndWriteTest.test_failures_leave_the_file_untouched) ... ok
+test_unique_replacement (tests.test_repl_tools.EditAndWriteTest.test_unique_replacement) ... ok
+test_write_makes_folders (tests.test_repl_tools.EditAndWriteTest.test_write_makes_folders) ... ok
+test_gitignore_is_respected_in_a_repository (tests.test_repl_tools.FindFilesTest.test_gitignore_is_respected_in_a_repository) ... ok
+test_glob_rules (tests.test_repl_tools.FindFilesTest.test_glob_rules) ... ok
+test_docstrings_are_pinned_to_the_version (tests.test_repl_tools.FrozenApiTest.test_docstrings_are_pinned_to_the_version) ... ok
+test_names_and_signatures (tests.test_repl_tools.FrozenApiTest.test_names_and_signatures) ... ok
+test_standard_library_only (tests.test_repl_tools.FrozenApiTest.test_standard_library_only) ... ok
+test_match_cap_is_explicit (tests.test_repl_tools.GrepTest.test_match_cap_is_explicit) ... ok
+test_matches_glob_case_and_files_only (tests.test_repl_tools.GrepTest.test_matches_glob_case_and_files_only) ... ok
+test_active_only_during_a_call (tests.test_repl_tools.LoggingTest.test_active_only_during_a_call) ... ok
+test_every_call_is_reported (tests.test_repl_tools.LoggingTest.test_every_call_is_reported) ... ok
+test_default_window_fits_one_printed_turn (tests.test_repl_tools.ReadFileTest.test_default_window_fits_one_printed_turn) ... ok
+test_long_lines_are_cut (tests.test_repl_tools.ReadFileTest.test_long_lines_are_cut) ... ok
+test_numbered_window_and_next_hint (tests.test_repl_tools.ReadFileTest.test_numbered_window_and_next_hint) ... ok
+test_refusals (tests.test_repl_tools.ReadFileTest.test_refusals) ... ok
+test_cell_time_left_caps_the_timeout (tests.test_repl_tools.ShellTest.test_cell_time_left_caps_the_timeout) ... ok
+test_code_output_and_printed_tail (tests.test_repl_tools.ShellTest.test_code_output_and_printed_tail) ... ok
+test_timeout_kills_the_group_and_keeps_output (tests.test_repl_tools.ShellTest.test_timeout_kills_the_group_and_keeps_output) ... ok
+test_every_family_and_level (tests.test_reward.BlindGuesserTest.test_every_family_and_level) ... ok
+test_uses_only_a_valid_submit (tests.test_reward.EpisodeScoreTest.test_uses_only_a_valid_submit) ... ok
+test_blind_guess_earns_nothing_but_its_exact_hits (tests.test_reward.IntegerTest.test_blind_guess_earns_nothing_but_its_exact_hits) ... ok
+test_exact (tests.test_reward.IntegerTest.test_exact) ... ok
+test_first_number_only (tests.test_reward.IntegerTest.test_first_number_only)
+Hedging doesn't pay: "69 or 70" is scored as 69. ... ok
+test_near_blind_is_logged_not_rewarded (tests.test_reward.IntegerTest.test_near_blind_is_logged_not_rewarded) ... ok
+test_near_miss_is_calibrated (tests.test_reward.IntegerTest.test_near_miss_is_calibrated) ... ok
+test_slope (tests.test_reward.IntegerTest.test_slope) ... ok
+test_unparseable_or_missing_is_zero (tests.test_reward.IntegerTest.test_unparseable_or_missing_is_zero) ... ok
+test_decimal (tests.test_reward.OtherTypesTest.test_decimal) ... ok
+test_entity_has_no_partial_credit (tests.test_reward.OtherTypesTest.test_entity_has_no_partial_credit) ... ok
+test_grading_must_carry_a_blind_guess (tests.test_reward.OtherTypesTest.test_grading_must_carry_a_blind_guess) ... ok
+test_list_by_set_f1_against_the_blind_strategy (tests.test_reward.OtherTypesTest.test_list_by_set_f1_against_the_blind_strategy) ... ok
+test_entities (tests.test_reward.ParseTest.test_entities) ... ok
+test_first_number (tests.test_reward.ParseTest.test_first_number) ... ok
+test_set_f1 (tests.test_reward.ParseTest.test_set_f1) ... ok
+test_blind_score_of_each_shape (tests.test_reward.RewardCheckScriptTest.test_blind_score_of_each_shape) ... ok
+test_check_family_runs_real_families (tests.test_reward.RewardCheckScriptTest.test_check_family_runs_real_families)
+End to end over the generators. The step 5 script crashed on callgraph (TypeError, list - list) and ... ok
+test_guess_rewards_dispatches_by_answer_type (tests.test_reward.RewardCheckScriptTest.test_guess_rewards_dispatches_by_answer_type) ... ok
+test_container_that_cannot_start_is_infra (tests.test_sandbox.FailureTest.test_container_that_cannot_start_is_infra) ... Executing <Task pending name='Task-9596' coro=<FailureTest.test_container_that_cannot_start_is_infra() running at /mnt/f/Personal/RLM/RLM/tests/test_sandbox.py:370> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.119 seconds
+ok
+test_host_bug_in_a_subcall_is_infra (tests.test_sandbox.FailureTest.test_host_bug_in_a_subcall_is_infra) ... ok
+test_killed_from_outside_is_infra (tests.test_sandbox.FailureTest.test_killed_from_outside_is_infra) ... Executing <Task pending name='Task-9640' coro=<FailureTest.test_killed_from_outside_is_infra() running at /mnt/f/Personal/RLM/RLM/tests/test_sandbox.py:378> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.700 seconds
+Executing <Task finished name='Task-9657' coro=<FailureTest.test_killed_from_outside_is_infra.<locals>.kill_soon() done, defined at /mnt/f/Personal/RLM/RLM/tests/test_sandbox.py:383> result=None created at /usr/lib/python3.12/asyncio/tasks.py:420> took 0.722 seconds
+ok
+test_model_crashes_are_not_infra (tests.test_sandbox.FailureTest.test_model_crashes_are_not_infra) ... ok
+test_self_inflicted_kills_are_the_models (tests.test_sandbox.FailureTest.test_self_inflicted_kills_are_the_models) ... ok
+test_subcall_infra_error_discards_the_episode (tests.test_sandbox.FailureTest.test_subcall_infra_error_discards_the_episode) ... ok
+test_tampering_with_the_audit_log_is_caught (tests.test_sandbox.FailureTest.test_tampering_with_the_audit_log_is_caught) ... ok
+test_time_blocked_on_subcalls_does_not_count (tests.test_sandbox.FailureTest.test_time_blocked_on_subcalls_does_not_count) ... ok
+test_timeout_restarts_and_tells_the_model (tests.test_sandbox.FailureTest.test_timeout_restarts_and_tells_the_model) ... ok
+test_host_files_and_proc_are_unreadable (tests.test_sandbox.FilesTest.test_host_files_and_proc_are_unreadable) ... ok
+test_writes_only_in_scratch (tests.test_sandbox.FilesTest.test_writes_only_in_scratch) ... ok
+test_no_keys_or_seed_inside (tests.test_sandbox.ImportsAndSecretsTest.test_no_keys_or_seed_inside) ... ok
+test_project_modules_are_not_importable (tests.test_sandbox.ImportsAndSecretsTest.test_project_modules_are_not_importable) ... ok
+test_stdlib_works_without_tripping_the_audit_log (tests.test_sandbox.ImportsAndSecretsTest.test_stdlib_works_without_tripping_the_audit_log) ... ok
+test_container_and_landlock_without_the_hook (tests.test_sandbox.LayersTest.test_container_and_landlock_without_the_hook) ... Executing <Task pending name='Task-9923' coro=<LayersTest.test_container_and_landlock_without_the_hook() running at /mnt/f/Personal/RLM/RLM/tests/test_sandbox.py:428> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/base_events.py:449> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.727 seconds
+ok
+test_bridge_is_the_way_out (tests.test_sandbox.NetworkTest.test_bridge_is_the_way_out) ... ok
+test_no_network (tests.test_sandbox.NetworkTest.test_no_network) ... ok
+test_budget_and_errors_reach_the_model (tests.test_sandbox.ReplTest.test_budget_and_errors_reach_the_model) ... ok
+test_context_arrives_exactly (tests.test_sandbox.ReplTest.test_context_arrives_exactly) ... ok
+test_stdin_and_exit_do_not_hang_or_crash (tests.test_sandbox.ReplTest.test_stdin_and_exit_do_not_hang_or_crash) ... ok
+test_submit_keeps_types (tests.test_sandbox.ReplTest.test_submit_keeps_types) ... ok
+test_variables_persist_and_output_is_truncated (tests.test_sandbox.ReplTest.test_variables_persist_and_output_is_truncated) ... ok
+test_parallel_episodes (tests.test_sandbox.ScaleTest.test_parallel_episodes) ... Executing <Task pending name='Task-10084' coro=<ScaleTest.test_parallel_episodes() running at /mnt/f/Personal/RLM/RLM/tests/test_sandbox.py:466> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at /usr/lib/python3.12/asyncio/tasks.py:712> cb=[_run_until_complete_cb() at /usr/lib/python3.12/asyncio/base_events.py:182] created at /usr/lib/python3.12/asyncio/runners.py:100> took 0.102 seconds
+ok
+test_a_second_holder_waits_for_the_first (tests.test_slow_drive.GlobalSlotTest.test_a_second_holder_waits_for_the_first) ... ok
+test_no_limit_by_default (tests.test_slow_drive.GlobalSlotTest.test_no_limit_by_default) ... ok
+test_a_timeout_then_a_pass_scores_1 (tests.test_slow_drive.GraderRetryTest.test_a_timeout_then_a_pass_scores_1) ... ok
+test_no_retry_without_a_timeout (tests.test_slow_drive.GraderRetryTest.test_no_retry_without_a_timeout) ... ok
+test_the_task_cap_and_cell_limit_follow_loaded_timings (tests.test_slow_drive.GraderRetryTest.test_the_task_cap_and_cell_limit_follow_loaded_timings) ... ok
+test_two_timeouts_score_0 (tests.test_slow_drive.GraderRetryTest.test_two_timeouts_score_0) ... ok
+test_a_concurrency_cap (tests.test_slow_drive.GraderSlotsTest.test_a_concurrency_cap) ... ok
+test_a_retry_runs_alone (tests.test_slow_drive.GraderSlotsTest.test_a_retry_runs_alone) ... ok
+test_a_run_that_times_out_is_seen (tests.test_slow_drive.MultiRunTest.test_a_run_that_times_out_is_seen) ... ok
+test_runners_with_fixed_report_paths_refuse (tests.test_slow_drive.MultiRunTest.test_runners_with_fixed_report_paths_refuse) ... ok
+test_three_runs_one_container (tests.test_slow_drive.MultiRunTest.test_three_runs_one_container) ... ok
+test_a_container_that_never_starts_is_infra_not_a_zero (tests.test_slow_drive.SlowStartTest.test_a_container_that_never_starts_is_infra_not_a_zero) ... ok
+test_a_late_container_is_launched_again (tests.test_slow_drive.SlowStartTest.test_a_late_container_is_launched_again) ... ok
+test_a_real_break_is_not_retried (tests.test_slow_drive.VisibleCheckTimeTest.test_a_real_break_is_not_retried) ... ok
+test_a_timeout_is_tried_again_with_double_the_time (tests.test_slow_drive.VisibleCheckTimeTest.test_a_timeout_is_tried_again_with_double_the_time) ... ok
+test_two_timeouts_are_an_infra_error_not_a_drop (tests.test_slow_drive.VisibleCheckTimeTest.test_two_timeouts_are_an_infra_error_not_a_drop) ... ok
+test_entropy_drop (tests.test_stoprules.CollapseTest.test_entropy_drop) ... ok
+test_entropy_needs_some_history (tests.test_stoprules.CollapseTest.test_entropy_needs_some_history) ... ok
+test_last_good_checkpoint (tests.test_stoprules.CollapseTest.test_last_good_checkpoint) ... ok
+test_reward_std_streak (tests.test_stoprules.CollapseTest.test_reward_std_streak) ... ok
+test_a_recent_level_up_keeps_the_run_going (tests.test_stoprules.EvalRulesTest.test_a_recent_level_up_keeps_the_run_going) ... ok
+test_frying_on_a_capability_drop (tests.test_stoprules.EvalRulesTest.test_frying_on_a_capability_drop) ... ok
+test_new_bests_and_best_checkpoint (tests.test_stoprules.EvalRulesTest.test_new_bests_and_best_checkpoint) ... ok
+test_overfitting_needs_two_evals_in_a_row (tests.test_stoprules.EvalRulesTest.test_overfitting_needs_two_evals_in_a_row) ... ok
+test_plateau_fires_after_three_evals_without_a_best_and_no_level_up (tests.test_stoprules.EvalRulesTest.test_plateau_fires_after_three_evals_without_a_best_and_no_level_up) ... ok
+test_saturation (tests.test_stoprules.EvalRulesTest.test_saturation) ... ok
+test_a_rising_detector_rate_pauses (tests.test_stoprules.HackingTest.test_a_rising_detector_rate_pauses) ... ok
+test_an_audit_hack_pauses (tests.test_stoprules.HackingTest.test_an_audit_hack_pauses) ... ok
+test_infra_episodes_are_not_counted_as_scored (tests.test_stoprules.HackingTest.test_infra_episodes_are_not_counted_as_scored) ... ok
+test_any_failed_check_keeps_1e5 (tests.test_stoprules.LearningRateTest.test_any_failed_check_keeps_1e5) ... ok
+test_missing_data_keeps_1e5 (tests.test_stoprules.LearningRateTest.test_missing_data_keeps_1e5) ... ok
+test_stable_second_seed_allows_2e5 (tests.test_stoprules.LearningRateTest.test_stable_second_seed_allows_2e5) ... ok
+test_private_folder_is_git_ignored (tests.test_tasks.SeedTest.test_private_folder_is_git_ignored) ... ok
+test_private_seed_lists_round_trip (tests.test_tasks.SeedTest.test_private_seed_lists_round_trip) ... ok
+test_seeds_are_fresh_64_bit_numbers (tests.test_tasks.SeedTest.test_seeds_are_fresh_64_bit_numbers) ... ok
+test_allocate (tests.test_tickets.RegistryTest.test_allocate) ... ok
+test_allocate_step_carries_the_rounding_across_steps (tests.test_tickets.RegistryTest.test_allocate_step_carries_the_rounding_across_steps) ... ok
+test_draw_uses_each_familys_level_and_fresh_seeds (tests.test_tickets.RegistryTest.test_draw_uses_each_familys_level_and_fresh_seeds) ... ok
+test_draw_with_a_step_uses_the_carried_split (tests.test_tickets.RegistryTest.test_draw_with_a_step_uses_the_carried_split) ... ok
+test_families (tests.test_tickets.RegistryTest.test_families) ... ok
+test_bad_arguments (tests.test_tickets.TicketTaskTest.test_bad_arguments) ... ok
+test_every_task_is_scorable_and_carries_its_blind_guess (tests.test_tickets.TicketTaskTest.test_every_task_is_scorable_and_carries_its_blind_guess) ... ok
+test_level_1_reproduces_the_20_step_run (tests.test_tickets.TicketTaskTest.test_level_1_reproduces_the_20_step_run)
+legacy_tasks(50, 99_999) is the first seed's held-out eval set, task for task. ... ok
+test_levels_grow_to_about_400k_characters (tests.test_tickets.TicketTaskTest.test_levels_grow_to_about_400k_characters) ... ok
+test_same_seed_same_task_but_a_fresh_id (tests.test_tickets.TicketTaskTest.test_same_seed_same_task_but_a_fresh_id) ... ok
+test_task_ids_never_hold_the_seed (tests.test_tickets.TicketTaskTest.test_task_ids_never_hold_the_seed) ... ok
+test_the_answer_is_what_the_context_says (tests.test_tickets.TicketTaskTest.test_the_answer_is_what_the_context_says)
+Recount every task from its rendered text alone, by matching each ticket against the templates. ... ok
+test_a_live_or_dry_choice_is_required (tests.test_training.CliTest.test_a_live_or_dry_choice_is_required) ... ok
+test_dry_run_start_stop_status_resume (tests.test_training.CliTest.test_dry_run_start_stop_status_resume) ... ok
+test_a_discarded_step_is_redone_from_new_rollouts (tests.test_training.CrashTest.test_a_discarded_step_is_redone_from_new_rollouts) ... ok
+test_a_failed_train_call_waits_for_the_operator_then_retrains_the_saved_batch (tests.test_training.CrashTest.test_a_failed_train_call_waits_for_the_operator_then_retrains_the_saved_batch) ... ok
+test_an_interrupted_step_keeps_its_spend (tests.test_training.CrashTest.test_an_interrupted_step_keeps_its_spend) ... ok
+test_training_that_finished_while_the_script_was_down_is_accepted (tests.test_training.CrashTest.test_training_that_finished_while_the_script_was_down_is_accepted) ... ok
+test_steps_and_a_resume_through_docker (tests.test_training.DockerLoopTest.test_steps_and_a_resume_through_docker) ... ok
+test_a_collapse_at_2e5_rolls_back_to_1e5_and_a_second_one_stops_the_run (tests.test_training.LearningRateFallbackTest.test_a_collapse_at_2e5_rolls_back_to_1e5_and_a_second_one_stops_the_run) ... ok
+test_an_audit_hack_pauses_and_the_resume_acknowledges_it (tests.test_training.PauseTest.test_an_audit_hack_pauses_and_the_resume_acknowledges_it) ... ok
+test_an_infra_error_pauses_the_second_seed_until_resumed (tests.test_training.PauseTest.test_an_infra_error_pauses_the_second_seed_until_resumed) ... ok
+test_the_ceiling_stops_the_run_before_it_overspends (tests.test_training.PauseTest.test_the_ceiling_stops_the_run_before_it_overspends) ... ok
+test_production_runs_on_its_families (tests.test_training.ProductionMixTest.test_production_runs_on_its_families) ... ok
+test_plateau_stops_the_run_and_keeps_the_best (tests.test_training.ProductionStopRuleTest.test_plateau_stops_the_run_and_keeps_the_best) ... ok
+test_resume_from_an_earlier_checkpoint_forks_a_branch (tests.test_training.RollbackTest.test_resume_from_an_earlier_checkpoint_forks_a_branch) ... ok
+test_twenty_steps_then_the_held_out_eval (tests.test_training.SecondSeedDryRunTest.test_twenty_steps_then_the_held_out_eval) ... ok
+test_new_run_folders_are_git_ignored (tests.test_training.SecretsTest.test_new_run_folders_are_git_ignored) ... ok
+test_results_hold_no_seed_and_no_key (tests.test_training.SecretsTest.test_results_hold_no_seed_and_no_key) ... ok
+test_stop_switch_then_resume_continues_cleanly (tests.test_training.StopSwitchTest.test_stop_switch_then_resume_continues_cleanly) ... ok
+
+----------------------------------------------------------------------
+Ran 412 tests in 1852.218s
+
+OK (skipped=1)
+
+  system prompt diffed for: rlm_rl.env, rlm_rl.evals
+
+  load: server peak 21 in flight ({'fake-model:step3': 2, 'fake-model:step0': 20}), client peak 21
+
+  32 episodes in parallel: 83.3 s total, container start median 59.91 s, max 77.14 s

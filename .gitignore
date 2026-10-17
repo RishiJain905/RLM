@@ -9,6 +9,9 @@ notebooks/.art/
 checkpoints/
 private/
 results/*/transcripts/
+# transcripts and audit samples hold gold answers and eval tasks: they stay on this PC at any depth (e.g. a run copied into results/<copy>/<run>/)
+results/**/transcripts/
+results/**/audit/
 results/*/audit/
 results/*/pending/
 results/*/capability/

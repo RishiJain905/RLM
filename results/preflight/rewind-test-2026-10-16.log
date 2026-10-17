@@ -1,0 +1,54 @@
+wandb: Downloading large artifact 'second-seed-v1:v20', 103.87MB. 2 files...
+wandb: \ 1 of 2 files downloaded...wandb:   2 of 2 files downloaded.  
+Done. 00:00:04.1 (25.1MB/s)
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /home/ytrjx/.netrc
+wandb: Currently logged in as: rishi-jain1 (models-ontario-tech-university) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Detected [anthropic, openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Weave is installed but not imported. Add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai
+wandb: Adding directory to artifact (/tmp/art_fork_checkpoints/rlm-production/second-seed-v1/0020)... Done. 0.5s
+[second-seed-v1] ceiling: inference ceilings set by the operator: train $16, eval $4
+Traceback (most recent call last):
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 201, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 192, in main
+    state = asyncio.run((run_dry if args.dry_run else run_live)(args, cfg))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 70, in run_live
+    return await go(run, args, cfg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 90, in go
+    return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, retrain_pending=args.retrain_pending,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/training.py", line 200, in resume
+    await self._rollback(target, reason="resumed by the operator from an earlier checkpoint", new_lr=lr)
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/training.py", line 758, in _rollback
+    moved = await self.backend.rewind(name, src["backend_step"], archive=archive)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/backend.py", line 74, in rewind
+    await self.delete_steps(name, later)
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/backend.py", line 62, in delete_steps
+    await self.backend._client.models.checkpoints.delete(model_id=self.models[name].id, steps=list(steps))
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/art/serverless/client.py", line 193, in delete
+    return await self._delete(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/openai/_base_client.py", line 2070, in delete
+    return await self.request(cast_to, opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/art/serverless/client.py", line 305, in request
+    return await super().request(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/openai/_base_client.py", line 1777, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'detail': 'Cannot delete the last checkpoint (step 20)'}

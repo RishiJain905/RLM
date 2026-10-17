@@ -1,0 +1,409 @@
+{
+ "run": "step11-v3",
+ "eval_set": "selection-v3",
+ "built_at": 1792206248.4637597,
+ "arms": {
+  "prod_v3": {
+   "planned": 64,
+   "logged": 64,
+   "episodes": 64,
+   "n": 64,
+   "accuracy": 0.515625,
+   "accuracy_se": 0.062469474967654204,
+   "mean_reward": 0.627521875,
+   "submitted": 0.890625,
+   "first_turn_submit": 0.0,
+   "turns": 10.546875,
+   "subcalls": 2.265625,
+   "budget_hit": 0.015625,
+   "truncated_turns": 0.3125,
+   "escape_events": 13.109375,
+   "hacked": 0,
+   "hacks": {
+    "early_submit": 0,
+    "copied_answer": 0,
+    "escape_attempt": 0,
+    "timeout_loop": 0,
+    "test_tamper": 0,
+    "grader_tamper": 0,
+    "test_aware": 0,
+    "network_try": 0
+   },
+   "infra_episodes": 0,
+   "infra_kinds": {},
+   "est_cost_usd": 2.7311,
+   "by_family": {
+    "aggregation": {
+     "n": 20,
+     "accuracy": 0.5
+    },
+    "callgraph": {
+     "n": 8,
+     "accuracy": 0.125
+    },
+    "edit_real_select": {
+     "n": 10,
+     "accuracy": 0.6
+    },
+    "edit_synth": {
+     "n": 6,
+     "accuracy": 1.0
+    },
+    "needle": {
+     "n": 8,
+     "accuracy": 0.375
+    },
+    "repo_loc_select": {
+     "n": 12,
+     "accuracy": 0.5833333333333334
+    }
+   },
+   "by_level": {
+    "aggregation/L1": {
+     "n": 4,
+     "accuracy": 0.5
+    },
+    "aggregation/L2": {
+     "n": 4,
+     "accuracy": 0.5
+    },
+    "aggregation/L3": {
+     "n": 4,
+     "accuracy": 0.25
+    },
+    "aggregation/L4": {
+     "n": 4,
+     "accuracy": 0.75
+    },
+    "aggregation/L5": {
+     "n": 4,
+     "accuracy": 0.5
+    },
+    "callgraph/L1": {
+     "n": 2,
+     "accuracy": 0.0
+    },
+    "callgraph/L2": {
+     "n": 2,
+     "accuracy": 0.0
+    },
+    "callgraph/L3": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "callgraph/L4": {
+     "n": 2,
+     "accuracy": 0.0
+    },
+    "callgraph/L5": {
+     "n": 1,
+     "accuracy": 0.0
+    },
+    "edit_real_select/L1": {
+     "n": 5,
+     "accuracy": 0.6
+    },
+    "edit_real_select/L2": {
+     "n": 4,
+     "accuracy": 0.75
+    },
+    "edit_real_select/L3": {
+     "n": 1,
+     "accuracy": 0.0
+    },
+    "edit_synth/L1": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "edit_synth/L2": {
+     "n": 2,
+     "accuracy": 1.0
+    },
+    "edit_synth/L3": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "edit_synth/L4": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "edit_synth/L5": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "needle/L1": {
+     "n": 1,
+     "accuracy": 1.0
+    },
+    "needle/L2": {
+     "n": 2,
+     "accuracy": 0.0
+    },
+    "needle/L3": {
+     "n": 2,
+     "accuracy": 0.5
+    },
+    "needle/L4": {
+     "n": 1,
+     "accuracy": 0.0
+    },
+    "needle/L5": {
+     "n": 2,
+     "accuracy": 0.5
+    },
+    "repo_loc_select/L1": {
+     "n": 3,
+     "accuracy": 0.6666666666666666
+    },
+    "repo_loc_select/L2": {
+     "n": 2,
+     "accuracy": 0.5
+    },
+    "repo_loc_select/L3": {
+     "n": 3,
+     "accuracy": 0.3333333333333333
+    },
+    "repo_loc_select/L4": {
+     "n": 4,
+     "accuracy": 0.75
+    }
+   },
+   "by_language": {
+    "go": {
+     "n": 4,
+     "accuracy": 0.75
+    },
+    "javascript": {
+     "n": 3,
+     "accuracy": 0.6666666666666666
+    },
+    "python": {
+     "n": 9,
+     "accuracy": 0.7777777777777778
+    }
+   },
+   "kinds": {
+    "read": {
+     "n": 48,
+     "accuracy": {
+      "n": 48,
+      "rate": 0.4375,
+      "se": 0.071602745233685
+     },
+     "cost_mean_usd": 0.03465904166666667,
+     "cost_total_usd": 1.663634,
+     "cost_p90_usd": 0.076629,
+     "cost_max_usd": 0.097762,
+     "wall_median_s": 243.454,
+     "wall_p90_s": 414.88,
+     "wall_max_s": 682.675,
+     "turns_mean": 8.104166666666666,
+     "subcalls_mean": 3.0208333333333335,
+     "root_prompt_tokens_mean": 35434.416666666664,
+     "root_completion_tokens_mean": 5441.854166666667,
+     "reasoning_tokens_mean": 3790.4791666666665,
+     "truncated_turns_mean": 0.3125
+    },
+    "edit": {
+     "n": 16,
+     "accuracy": {
+      "n": 16,
+      "rate": 0.75,
+      "se": 0.10825317547305482
+     },
+     "cost_mean_usd": 0.066717875,
+     "cost_total_usd": 1.067486,
+     "cost_p90_usd": 0.157205,
+     "cost_max_usd": 0.191727,
+     "wall_median_s": 221.25799999999998,
+     "wall_p90_s": 608.882,
+     "wall_max_s": 778.282,
+     "turns_mean": 17.875,
+     "subcalls_mean": 0.0,
+     "root_prompt_tokens_mean": 111665.0,
+     "root_completion_tokens_mean": 7350.625,
+     "reasoning_tokens_mean": 5398.9375,
+     "truncated_turns_mean": 0.3125
+    }
+   },
+   "tool_call": {
+    "read": {
+     "episodes": 48,
+     "episodes_with": 2,
+     "turns": 389,
+     "turns_with": 14,
+     "first_turn": 1,
+     "accuracy_with": {
+      "n": 2,
+      "rate": 1.0,
+      "se": 0.0
+     },
+     "accuracy_without": {
+      "n": 46,
+      "rate": 0.41304347826086957,
+      "se": 0.07259754507273407
+     }
+    },
+    "edit": {
+     "episodes": 16,
+     "episodes_with": 5,
+     "turns": 286,
+     "turns_with": 95,
+     "first_turn": 5,
+     "accuracy_with": {
+      "n": 5,
+      "rate": 0.6,
+      "se": 0.21908902300206645
+     },
+     "accuracy_without": {
+      "n": 11,
+      "rate": 0.8181818181818182,
+      "se": 0.11629129983033296
+     }
+    }
+   },
+   "edit": {
+    "tiers": {
+     "edit_real": {
+      "n": 10,
+      "rate": 0.6,
+      "se": 0.15491933384829668,
+      "cost_mean_usd": 0.0902203,
+      "wall_median_s": 406.02,
+      "turns_mean": 21.5
+     },
+     "edit_real/L1": {
+      "n": 5,
+      "rate": 0.6,
+      "se": 0.21908902300206645,
+      "cost_mean_usd": 0.0708128,
+      "wall_median_s": 396.606,
+      "turns_mean": 21.8
+     },
+     "edit_real/L2": {
+      "n": 4,
+      "rate": 0.75,
+      "se": 0.21650635094610965,
+      "cost_mean_usd": 0.116493,
+      "wall_median_s": 495.89250000000004,
+      "turns_mean": 22.0
+     },
+     "edit_real/L3": {
+      "n": 1,
+      "rate": 0.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.082167,
+      "wall_median_s": 203.587,
+      "turns_mean": 18.0
+     },
+     "edit_real/go": {
+      "n": 4,
+      "rate": 0.75,
+      "se": 0.21650635094610965,
+      "cost_mean_usd": 0.0772925,
+      "wall_median_s": 502.74399999999997,
+      "turns_mean": 19.75
+     },
+     "edit_real/javascript": {
+      "n": 3,
+      "rate": 0.6666666666666666,
+      "se": 0.2721655269759087,
+      "cost_mean_usd": 0.072129,
+      "wall_median_s": 415.434,
+      "turns_mean": 20.0
+     },
+     "edit_real/python": {
+      "n": 3,
+      "rate": 0.3333333333333333,
+      "se": 0.2721655269759087,
+      "cost_mean_usd": 0.12554866666666667,
+      "wall_median_s": 218.462,
+      "turns_mean": 25.333333333333332
+     },
+     "edit_synth": {
+      "n": 6,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.027547166666666668,
+      "wall_median_s": 90.7955,
+      "turns_mean": 11.833333333333334
+     },
+     "edit_synth/L1": {
+      "n": 1,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.013207,
+      "wall_median_s": 65.29,
+      "turns_mean": 11.0
+     },
+     "edit_synth/L2": {
+      "n": 2,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.025997,
+      "wall_median_s": 83.8985,
+      "turns_mean": 10.0
+     },
+     "edit_synth/L3": {
+      "n": 1,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.026429,
+      "wall_median_s": 78.141,
+      "turns_mean": 10.0
+     },
+     "edit_synth/L4": {
+      "n": 1,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.030935,
+      "wall_median_s": 224.054,
+      "turns_mean": 17.0
+     },
+     "edit_synth/L5": {
+      "n": 1,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.042718,
+      "wall_median_s": 103.45,
+      "turns_mean": 13.0
+     },
+     "edit_synth/python": {
+      "n": 6,
+      "rate": 1.0,
+      "se": 0.0,
+      "cost_mean_usd": 0.027547166666666668,
+      "wall_median_s": 90.7955,
+      "turns_mean": 11.833333333333334
+     }
+    },
+    "turn_cap_hits": 3,
+    "turn_cap_hits_unresolved": 3,
+    "turn_cap_rate": 0.1875,
+    "turn_cap_unresolved_rate": 0.1875,
+    "submitted": 0.8125,
+    "empty_diff": 0.0625,
+    "f2p_pass_mean": 0.9230769230769231,
+    "tested_before_submit": 0.8125,
+    "grader_s_median": 22.758
+   },
+   "attempts": {
+    "total": 65,
+    "infra": 1,
+    "infra_kinds": {
+     "sandbox": 1
+    },
+    "infra_cost_usd": 0.0518
+   },
+   "span_s": 2273.090027332306
+  }
+ },
+ "comparisons": {},
+ "spend": {
+  "total_usd": 9.992952,
+  "by_arm": {
+   "prod_v3": 2.782952
+  },
+  "ceiling_usd": 12.0
+ }
+}

@@ -1,0 +1,419 @@
+{
+ "art_version": "0.5.20",
+ "art_version_pinned": "0.5.20",
+ "base_model": "Qwen/Qwen3.8-27B",
+ "chat_template_sha256": null,
+ "template_fingerprint": "a2e3e7ddf78c5f457a47502ed763cdf549f258ac63c15b50e27e13be4ad3b2fa",
+ "bridge": {
+  "api_version": "v1",
+  "prompt_version": "v1",
+  "prompt_hash": "776e044310ab369036008cc9e5882e7f08e816260ee9e1748c1e8c5645a619e7",
+  "tools_version": "t1"
+ },
+ "edit_limits": {
+  "max_turns": 20,
+  "max_subcalls": 30,
+  "root_max_tokens": 4096,
+  "output_max_chars": 2000,
+  "cell_timeout_s": 300,
+  "cpus": 2.0,
+  "memory_mb": 4096,
+  "pids": 256,
+  "grader_timeout_s": 600
+ },
+ "limits": {
+  "max_turns": 12,
+  "max_subcalls": 30,
+  "root_max_tokens": 3072,
+  "output_max_chars": 2000,
+  "traceback_lines": 6,
+  "cell_timeout_s": 120,
+  "subcall_max_chars": 24000,
+  "subcall_max_tokens": 1024,
+  "subcall_temperature": 0.3,
+  "root_temperature": 1.0,
+  "thinking": false
+ },
+ "train_call": {
+  "learning_rate": 1e-05,
+  "loss_fn": "cispo",
+  "epsilon": 1.0,
+  "epsilon_high": 4.0,
+  "scale_rewards": false,
+  "kl_penalty_coef": 0.0,
+  "packed_sequence_length": null
+ },
+ "lr": {
+  "current": 1e-05,
+  "start": 1e-05,
+  "floor": 1e-05,
+  "rule": "fixed",
+  "fallback_used": false,
+  "fallback": null
+ },
+ "episodes_per_step": {
+  "tasks": 8,
+  "rollouts": 4
+ },
+ "reward": {
+  "exact_reward": 1.0,
+  "near_miss_max": 0.8,
+  "near_miss_slope": 1.0,
+  "decimal_tolerance": 0.005,
+  "answer_types": [
+   "int",
+   "float",
+   "entity",
+   "list"
+  ],
+  "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec \u00a712.6, decision E-c)"
+ },
+ "detectors": {
+  "rules": [
+   "early_submit",
+   "copied_answer",
+   "escape_attempt",
+   "timeout_loop",
+   "test_tamper",
+   "grader_tamper",
+   "test_aware",
+   "network_try"
+  ],
+  "logged_only": [
+   "network_try"
+  ],
+  "escape_kinds": [
+   "ctypes",
+   "file",
+   "host_import",
+   "malformed",
+   "network",
+   "process",
+   "signal",
+   "tamper"
+  ],
+  "edit_escape_kinds": [
+   "ctypes",
+   "file",
+   "host_import",
+   "malformed",
+   "signal",
+   "tamper"
+  ],
+  "timeout_loop_min": 3,
+  "copy_min_number": 100,
+  "copy_min_chars": 3,
+  "copy_skip_blind": true
+ },
+ "controller": {
+  "settings": {
+   "up_above": 0.7,
+   "down_below": 0.2,
+   "window_steps": 3,
+   "min_episodes": 8,
+   "first_level": 1
+  },
+  "state": {
+   "frozen": true,
+   "families": {
+    "tickets_all": {
+     "level": 1,
+     "max_level": 5,
+     "window": [
+      [
+       18,
+       16,
+       8
+      ],
+      [
+       19,
+       16,
+       5
+      ],
+      [
+       20,
+       13,
+       12
+      ]
+     ],
+     "moved_at": null,
+     "saturated": false
+    },
+    "tickets_customer": {
+     "level": 1,
+     "max_level": 5,
+     "window": [
+      [
+       18,
+       16,
+       12
+      ],
+      [
+       19,
+       16,
+       15
+      ],
+      [
+       20,
+       12,
+       10
+      ]
+     ],
+     "moved_at": null,
+     "saturated": false
+    }
+   },
+   "history": [
+    {
+     "step": 3,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.7917,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 4,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8333,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 5,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8333,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 6,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8542,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 7,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8125,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 8,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.7708,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 9,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.7917,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 10,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.875,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 11,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.9583,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 12,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.875,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 13,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.875,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 14,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8333,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 15,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.9167,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 16,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8958,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 17,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8333,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 18,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.7708,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 19,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.7917,
+     "episodes": 48,
+     "applied": false
+    },
+    {
+     "step": 20,
+     "family": "tickets_customer",
+     "from_level": 1,
+     "to_level": 2,
+     "pass_rate": 0.8409,
+     "episodes": 44,
+     "applied": false
+    }
+   ],
+   "settings": {
+    "up_above": 0.7,
+    "down_below": 0.2,
+    "window_steps": 3,
+    "min_episodes": 8,
+    "first_level": 1
+   }
+  }
+ },
+ "generators": {
+  "tickets_all": "tickets-v2",
+  "tickets_customer": "tickets-v2"
+ },
+ "manifest": {
+  "generators": {
+   "tickets_all": "tickets-v2",
+   "tickets_customer": "tickets-v2"
+  },
+  "mix": {
+   "tickets_all": 0.5,
+   "tickets_customer": 0.5
+  },
+  "dataset_manifest_sha256": "357589b52c1e1b4f38ebe60ad95a20ebeb805611aabbf0e0c0c9430587b0e547",
+  "edit_manifest_sha256": null,
+  "evals": {
+   "selection": null,
+   "final": "heldout-seed1",
+   "capability": null
+  },
+  "sha256": "252b603d67908a8e58bcfe044ff29768706f08ae979a91b6b6f2696b67615ee5"
+ },
+ "limiter": {
+  "max_in_flight": 30,
+  "per_model": 20,
+  "retry": {
+   "tries": 6,
+   "base_s": 2.0,
+   "max_s": 60.0,
+   "jitter": 0.5,
+   "timeout_s": 600.0
+  }
+ },
+ "git": {
+  "commit": "80bd8bfd97e7ef76db3dd54bbcbe464e04c52f6e",
+  "dirty": true
+ },
+ "spend": {
+  "train_usd": 13.770853,
+  "kl_usd": 0.172466,
+  "eval_usd": 0.0,
+  "interrupted_usd": 0.0,
+  "total_usd": 13.770853,
+  "training_gpu_usd_est": 3.2,
+  "ceilings": {
+   "train": 14.0,
+   "eval": 3.0
+  }
+ },
+ "run": {
+  "run": "second-seed-v1",
+  "kind": "second_seed",
+  "learning_rate": 1e-05,
+  "lr_rule": "fixed",
+  "mix": {
+   "tickets_all": 0.5,
+   "tickets_customer": 0.5
+  },
+  "frozen_controller": true,
+  "base_model": "Qwen/Qwen3.8-27B",
+  "project": "rlm-production",
+  "tasks_per_step": 8,
+  "rollouts": 4,
+  "packed_sequence_length": null,
+  "max_steps": 20,
+  "eval_every": null,
+  "eval_at_start": false,
+  "selection": null,
+  "final_eval": "heldout-seed1",
+  "capability_set": null,
+  "ceilings": {
+   "train": 14.0,
+   "eval": 3.0
+  },
+  "keep_every": 5,
+  "kl_samples": 4,
+  "first_step_estimate_usd": 1.0,
+  "eval_episode_estimate_usd": 0.03,
+  "prompt_version": "v1"
+ }
+}

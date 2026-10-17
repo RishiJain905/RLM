@@ -1,0 +1,47 @@
+{
+ "run": "step11-v3",
+ "updated_at": 1792206081.8227081,
+ "arms": {
+  "prod_v3": {
+   "planned": 64,
+   "done": 64,
+   "running": 0,
+   "infra": 1,
+   "skipped_budget": 0,
+   "started_at": 1792203801.7231758,
+   "waiting_budget": 0
+  }
+ },
+ "spent_usd": 9.992952,
+ "ceiling_usd": 12.0,
+ "reserved_usd": 0.0,
+ "requests": {
+  "prod_v3": {
+   "calls": {
+    "root": 688,
+    "subcall": 145
+   },
+   "attempts": 1108,
+   "retries": 275,
+   "rate_limited": 0,
+   "server_errors": 275,
+   "timeouts": 0,
+   "connection_errors": 0,
+   "rejected": 0,
+   "paced_s": 2913.825,
+   "failed": {},
+   "statuses": {
+    "500": 274,
+    "524": 1
+   }
+  }
+ },
+ "limiter_peaks": {
+  "total": 12,
+  "by_model": {
+   "wandb-artifact:///models-ontario-tech-university/rlm-production/step11-v3:step0": 12
+  },
+  "granted": 1108,
+  "waited_s": 3403.836013196087
+ }
+}

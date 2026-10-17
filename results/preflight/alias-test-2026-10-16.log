@@ -1,0 +1,43 @@
+[second-seed-v1] ceiling: inference ceilings set by the operator: train $16, eval $4
+[second-seed-v1] resume: resumed from checkpoint 16 (was stopped) on branch 1 at learning rate 1e-05
+[second-seed-v1] level: tickets_customer would move up from level 1 to 2 (pass rate 85% over 40 episodes)
+train:   0%|          | 0/10 [00:00<?, ?it/s][second-seed-v1] crashed: the script stopped: RuntimeError('Training job failed: ValueError: Optimizer checkpoint and loaded LoRA weights do not match')
+Traceback (most recent call last):
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 201, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 192, in main
+    state = asyncio.run((run_dry if args.dry_run else run_live)(args, cfg))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 70, in run_live
+    return await go(run, args, cfg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/scripts/train.py", line 90, in go
+    return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, retrain_pending=args.retrain_pending,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/training.py", line 220, in resume
+    return await self._loop()
+           ^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/training.py", line 377, in _loop
+    await self._step(c + 1)
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/training.py", line 456, in _step
+    backend_step, train_metrics = await self.backend.train(self._branch, train_groups, **cfg.train_args(lr))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/rlm_rl/backend.py", line 50, in train
+    result = await self.backend.train(self.models[name], groups, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/art/serverless/backend.py", line 414, in train
+    async for metrics in self._train_model(
+  File "/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/art/serverless/backend.py", line 532, in _train_model
+    raise RuntimeError(f"Training job failed: {error_message}")
+RuntimeError: Training job failed: ValueError: Optimizer checkpoint and loaded LoRA weights do not match
+train:   0%|          | 0/10 [00:01<?, ?it/s]

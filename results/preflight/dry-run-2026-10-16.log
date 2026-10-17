@@ -1,0 +1,49 @@
+[seed-preflight-1016] start: second_seed run started at learning rate 1e-05, ceilings train $14, eval $3
+[seed-preflight-1016] step 1 trained: pass 28.1%, trainable 7/8, entropy 0.600, KL 0.200, $0.019 (train $0.02)
+[seed-preflight-1016] step 2 trained: pass 21.9%, trainable 8/8, entropy 0.597, KL 0.203, $0.019 (train $0.04)
+[seed-preflight-1016] step 3 trained: pass 31.2%, trainable 7/8, entropy 0.594, KL 0.206, $0.019 (train $0.06)
+[seed-preflight-1016] step 4 trained: pass 25.0%, trainable 7/8, entropy 0.591, KL 0.209, $0.019 (train $0.08)
+[seed-preflight-1016] step 5 trained: pass 37.5%, trainable 8/8, entropy 0.588, KL 0.212, $0.019 (train $0.09)
+[seed-preflight-1016] step 6 trained: pass 40.6%, trainable 8/8, entropy 0.585, KL 0.215, $0.019 (train $0.11)
+[seed-preflight-1016] step 7 trained: pass 50.0%, trainable 6/8, entropy 0.582, KL 0.218, $0.019 (train $0.13)
+[seed-preflight-1016] step 8 trained: pass 50.0%, trainable 7/8, entropy 0.579, KL 0.221, $0.019 (train $0.15)
+[seed-preflight-1016] step 9 trained: pass 46.9%, trainable 7/8, entropy 0.576, KL 0.224, $0.019 (train $0.17)
+[seed-preflight-1016] step 10 trained: pass 43.8%, trainable 8/8, entropy 0.573, KL 0.227, $0.019 (train $0.19)
+[seed-preflight-1016] audit: Claude audit sample for checkpoint 10 is ready
+[seed-preflight-1016] step 11 trained: pass 50.0%, trainable 7/8, entropy 0.570, KL 0.230, $0.019 (train $0.21)
+[seed-preflight-1016] step 12 trained: pass 53.1%, trainable 8/8, entropy 0.567, KL 0.233, $0.019 (train $0.23)
+[seed-preflight-1016] step 13 trained: pass 62.5%, trainable 7/8, entropy 0.564, KL 0.236, $0.019 (train $0.25)
+[seed-preflight-1016] step 14 trained: pass 62.5%, trainable 6/8, entropy 0.561, KL 0.239, $0.019 (train $0.26)
+[seed-preflight-1016] step 15 trained: pass 65.6%, trainable 7/8, entropy 0.558, KL 0.242, $0.019 (train $0.28)
+[seed-preflight-1016] step 16 trained: pass 46.9%, trainable 8/8, entropy 0.555, KL 0.245, $0.019 (train $0.30)
+[seed-preflight-1016] step 17 trained: pass 78.1%, trainable 5/8, entropy 0.552, KL 0.248, $0.019 (train $0.32)
+[seed-preflight-1016] step 18 trained: pass 75.0%, trainable 6/8, entropy 0.549, KL 0.251, $0.019 (train $0.34)
+[seed-preflight-1016] level: tickets_all would move up from level 1 to 2 (pass rate 81% over 48 episodes)
+[seed-preflight-1016] level: tickets_customer would move up from level 1 to 2 (pass rate 75% over 48 episodes)
+[seed-preflight-1016] step 19 trained: pass 81.2%, trainable 6/8, entropy 0.546, KL 0.254, $0.019 (train $0.36)
+[seed-preflight-1016] level: tickets_all would move up from level 1 to 2 (pass rate 77% over 48 episodes)
+[seed-preflight-1016] level: tickets_customer would move up from level 1 to 2 (pass rate 77% over 48 episodes)
+[seed-preflight-1016] step 20 trained: pass 75.0%, trainable 6/8, entropy 0.543, KL 0.257, $0.019 (train $0.38)
+[seed-preflight-1016] eval: heldout-seed1 at checkpoint 20: accuracy 80.0% over 100 ($0.056)
+[seed-preflight-1016] audit: Claude audit sample for checkpoint 20 is ready
+[seed-preflight-1016] lr_decision: all checks passed, so production may start at 2e-05
+[seed-preflight-1016] finished: max_steps: reached 20 steps. Best checkpoint: 20 (80.0% on heldout-seed1).
+seed-preflight-1016 (second_seed): finished - max_steps: reached 20 steps
+latest checkpoint 20 on branch 0, learning rate 1e-05
+spend: train $0.38 of $14, eval $0.06 of $3, training GPU ~$3.20
+best: checkpoint 20, 80.0% on heldout-seed1
+  step  16  trained: pass 0.47 trainable 8/8 entropy 0.555 KL 0.245 $0.019
+  step  17  trained: pass 0.78 trainable 5/8 entropy 0.552 KL 0.248 $0.019
+  step  18  trained: pass 0.75 trainable 6/8 entropy 0.549 KL 0.251 $0.019
+  step  19  trained: pass 0.81 trainable 6/8 entropy 0.546 KL 0.254 $0.019
+  step  20  trained: pass 0.75 trainable 6/8 entropy 0.543 KL 0.257 $0.019
+  rule plateau: n/a - no selection-set eval yet
+  rule overfitting: n/a - needs two selection evals after training starts
+  rule frying: n/a - no capability check at checkpoint 0
+  rule saturation: ok - 0 of 2 families saturated, 0 at their top level
+  rule hacking: ok - detectors fired on 0.0% of episodes over the last 10 steps (0.0% the 10 before)
+  [10-16 11:59] level: tickets_customer would move up from level 1 to 2 (pass rate 77% over 48 episodes)
+  [10-16 12:00] eval: heldout-seed1 at checkpoint 20: accuracy 80.0% over 100 ($0.056)
+  [10-16 12:00] audit: Claude audit sample for checkpoint 20 is ready
+  [10-16 12:00] lr_decision: all checks passed, so production may start at 2e-05
+  [10-16 12:00] finished: max_steps: reached 20 steps. Best checkpoint: 20 (80.0% on heldout-seed1).

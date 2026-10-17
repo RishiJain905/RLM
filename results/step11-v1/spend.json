@@ -1,0 +1,51 @@
+{
+ "total_usd": 7.21,
+ "ceiling_usd": 12.0,
+ "by_arm": {
+  "direct": 1.093887,
+  "rlm": 2.402941,
+  "rlm_medium": 2.393024
+ },
+ "adjustments": {
+  "billing_reconciliation_usd": 1.320148
+ },
+ "adjustments_note": "W&B's billing page (Rishi, 2026-10-17): $193.81 left, from about $201.02 before step 11, so step 11 cost $7.21. The script measured $5.89; the rest is the diagnosis probes and failed tries (HTTP 500/524) that W&B billed. This replaces the earlier upper bounds ($2.15).",
+ "sessions": [
+  {
+   "started_at": 1792192042.1617367,
+   "arms": [
+    "rlm",
+    "direct"
+   ],
+   "skipped_budget": 0,
+   "finished": 127,
+   "infra": 4,
+   "spent_usd": 3.398987,
+   "updated_at": 1792194205.1633651
+  },
+  {
+   "started_at": 1792194508.8671565,
+   "arms": [
+    "rlm",
+    "rlm_medium"
+   ],
+   "skipped_budget": 34,
+   "finished": 31,
+   "infra": 0,
+   "spent_usd": 1.467309,
+   "updated_at": 1792196576.254058
+  },
+  {
+   "started_at": 1792196655.2639503,
+   "arms": [
+    "rlm_medium"
+   ],
+   "skipped_budget": 0,
+   "finished": 34,
+   "infra": 0,
+   "spent_usd": 1.023556,
+   "updated_at": 1792197028.8736477
+  }
+ ],
+ "updated_at": 1792197028.8736541
+}

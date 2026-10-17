@@ -1,0 +1,41 @@
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from WANDB_API_KEY.
+wandb: Currently logged in as: rishi-jain1 (models-ontario-tech-university) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.30.0
+wandb: Run data is saved locally in /mnt/f/Personal/RLM/RLM/wandb/run-20261016_144513-second-seed-v1
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Resuming run second-seed-v1
+wandb: ⭐️ View project at https://wandb.ai/models-ontario-tech-university/rlm-production
+wandb: 🚀 View run at https://wandb.ai/models-ontario-tech-university/rlm-production/runs/second-seed-v1
+wandb: Initializing weave.
+/mnt/f/Personal/RLM/RLM/.venv-linux/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:708: ArbitraryTypeWarning: <built-in function allocate_lock> is not a Python type (it may be an instance of an object), Pydantic will allow any object with no validation since we cannot even enforce that the input is an instance of the given type. To get rid of this error wrap the type with `pydantic.SkipValidation`.
+  warnings.warn(
+[36m[1mweave[0m: Logged in as Weights & Biases user: rishi-jain1.
+[36m[1mweave[0m: View Weave data at https://wandb.ai/models-ontario-tech-university/rlm-production/weave
+[second-seed-v1] ceiling: inference ceilings set by the operator: train $14, eval $4
+[second-seed-v1] resume: resumed from checkpoint 20 (was stopped) on branch 0 at learning rate 1e-05
+[second-seed-v1] eval: heldout-seed1 at checkpoint 20: accuracy 83.3% over 96 ($1.966)
+[second-seed-v1] audit: Claude audit sample for checkpoint 20 is ready
+[second-seed-v1] lr_decision: all checks passed, so production may start at 2e-05
+[second-seed-v1] finished: max_steps: reached 20 steps. Best checkpoint: 20 (83.3% on heldout-seed1).
+second-seed-v1 (second_seed): finished - max_steps: reached 20 steps
+latest checkpoint 20 on branch 0, learning rate 1e-05
+spend: train $13.77 of $14, eval $1.97 of $4, training GPU ~$3.20
+best: checkpoint 20, 83.3% on heldout-seed1
+  step  16  trained: pass 0.66 trainable 6/8 entropy 0.249 KL 0.003 $0.598
+  step  17  trained: pass 0.56 trainable 6/8 entropy 0.265 KL 0.002 $0.698
+  step  18  trained: pass 0.62 trainable 6/8 entropy 0.261 KL 0.008 $0.691
+  step  19  trained: pass 0.62 trainable 4/8 entropy 0.216 KL 0.006 $0.674
+  step  20  trained: pass 0.88 trainable 2/8 entropy 0.233 KL 0.003 $0.669
+  rule plateau: n/a - no selection-set eval yet
+  rule overfitting: n/a - needs two selection evals after training starts
+  rule frying: n/a - no capability check at checkpoint 0
+  rule saturation: ok - 0 of 2 families saturated, 0 at their top level
+  rule hacking: n/a - no scored episodes yet
+  [10-16 14:37] resume: resumed from checkpoint 20 (was stopped) on branch 0 at learning rate 1e-05
+  [10-16 14:45] eval: heldout-seed1 at checkpoint 20: accuracy 83.3% over 96 ($1.966)
+  [10-16 14:45] audit: Claude audit sample for checkpoint 20 is ready
+  [10-16 14:45] lr_decision: all checks passed, so production may start at 2e-05
+  [10-16 14:45] finished: max_steps: reached 20 steps. Best checkpoint: 20 (83.3% on heldout-seed1).
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33msecond-seed-v1[0m at: [34mhttps://wandb.ai/models-ontario-tech-university/rlm-production/runs/second-seed-v1[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20261016_144513-second-seed-v1/logs[0m

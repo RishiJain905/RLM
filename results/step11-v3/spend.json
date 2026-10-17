@@ -1,0 +1,25 @@
+{
+ "total_usd": 9.992952,
+ "ceiling_usd": 12.0,
+ "by_arm": {
+  "prod_v3": 2.782952
+ },
+ "adjustments": {
+  "step11-v1_billed_usd": 7.21
+ },
+ "adjustments_note": "Step 11's first run (step11-v1) as W&B billed it, so the $12 ceiling covers the whole step.",
+ "sessions": [
+  {
+   "started_at": 1792203801.7219484,
+   "arms": [
+    "prod_v3"
+   ],
+   "skipped_budget": 0,
+   "finished": 65,
+   "infra": 1,
+   "spent_usd": 2.782952,
+   "updated_at": 1792206081.8329985
+  }
+ ],
+ "updated_at": 1792206081.8330162
+}
