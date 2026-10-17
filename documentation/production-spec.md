@@ -433,13 +433,15 @@ When your change is ready, call submit() with a one-line summary. You have at mo
 
 The timeout and crash messages (§4) gain the cell limit as a value, and for edit episodes add one sentence: `Your files in /work/repo are unchanged.`
 
-The second seed (step 10) keeps prompt v1, so it repeats the setup steps 5 and 6 tested (decision E-g), and its checkpoints record v1 (§8). The baselines and production use v2.
+The second seed (step 10) keeps prompt v1, so it repeats the setup steps 5 and 6 tested (decision E-g), and its checkpoints record v1 (§8). The step 11 baselines ran v2.
+
+**Prompt v3 (Rishi, 2026-10-17, after step 11; production uses it).** Under v2 the base model wrote its code in Qwen3.8's native tool-call syntax (`<tool_call><function=python>…`) on 43% of its turns, which the REPL couldn't run (step-11-results.md §3). v3 keeps v2's system prompt and first messages and changes three things: code in a `<function=python>` tool call runs like a ```python block (`env.extract_code`); the "no code block" error adds "Tool-call tags don't run here: call llm, llm_batch, submit and the tools as Python functions inside the block."; and edit episodes get 30 turns (§12.3). v1 and v2 keep their texts and hashes, so earlier runs stay reproducible.
 
 ### 12.3 Episode limits
 
 | Limit | Read families (§4) | Edit families |
 |---|---|---|
-| Root turns | 12 | 20 |
+| Root turns | 12 | 30 (prompt v3, Rishi 2026-10-17; 20 under v2) |
 | Sub-calls | 30 | 30 |
 | Root output tokens per turn | 3,072 | 4,096 |
 | Sub-call prompt and output | 24,000 chars, 1,024 tokens | same |
@@ -555,9 +557,10 @@ A test command counts for `test_runs`, `tested_before_submit` and `edit_cycles` 
 
 ### 12.10 Evals
 
-- **`selection-v2`** (64 tasks): 48 read tasks (the read families in the new mix's proportions, plus the ticket tasks as the held-out generator family) and 16 edit tasks (6 `edit_synth` held-out seeds, 10 `edit_real` from repositories training never sees, across languages). It replaces `selection-v1` for production and baselines.
+- **`selection-v2`** (64 tasks): 48 read tasks (the read families in the new mix's proportions, plus the ticket tasks as the held-out generator family) and 16 edit tasks (6 `edit_synth` held-out seeds, 10 `edit_real` from repositories training never sees, across languages). It replaced `selection-v1`; the step 11 baselines ran on it.
+- **`selection-v3`** (64 tasks, production's selection set from 2026-10-17, Rishi): `selection-v2` without its 8 ticket tasks, which production never trains on and which the base model found too easy, and with 8 more held-out seeds of the trained read families at levels 3-5 in their place (aggregation 3, call graph 1, needle 1, repo localization 3 from the selection repositories). The read tasks now follow the mix exactly (20/8/8/12). The other 56 tasks are `selection-v2`'s, with the same seeds. The new tasks share training's generators and sources but not its seeds, so no task repeats one training sees, as for the rest of the set.
 - **`heldout-test-v2`**: `heldout-test-v1` plus 60 edit tasks (20 `edit_synth_heldout`, 40 `edit_real` from held-out repositories, at least 15 feature tasks).
-- **Step 11** runs the base model on `selection-v2`, with the 16 edit tasks twice, which also measures cost per edit episode and the base pass rate before production.
+- **Step 11** ran the base model on `selection-v2`, with the 16 edit tasks twice, which also measured cost per edit episode and the base pass rate before production, then once more in production's set-up (prompt v3, root thinking medium) on `selection-v3`.
 - **Step 13** (off W&B) adds SWE-bench Pro, DeepSWE v1.1 and the normal-coding-agent arm (code-editing-plan.md §12).
 
 ### 12.11 Budget (replaces plan step 10a)

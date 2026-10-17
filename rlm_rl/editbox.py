@@ -97,9 +97,15 @@ L_WRITABLE, L_UID, L_ALIAS, L_LANGUAGE = "rlm.edit.writable", "rlm.edit.uid", "r
 
 def edit_sandbox_limits(lim: bridge.Limits = bridge.EDIT_LIMITS) -> SandboxLimits:
     """Spec §12.3's container limits for the edit sandbox. Startup gets longer: real images are large, and they live on
-    the USB data drive, where creating a container took minutes under load (a slow start must not be an infra error)."""
+    the USB data drive, where creating a container took minutes under load (a slow start must not be an infra error).
+
+    The wall-clock cap (for a cell stuck on sub-calls) always sits a full default cap above the cell's own limit. It was
+    a fixed 1,800 s, under the raised limits of slow tasks (JavaScript 3,570 s, Go up to 2,760 s), so a cell that ran or
+    hung past 30 minutes was flagged infra instead of timing out as the model's own (step 11, 2026-10-17: a
+    `node` script the model left hanging)."""
     return SandboxLimits(cpus=lim.cpus, memory_mb=lim.memory_mb, pids=lim.pids, scratch_mb=256,
-                         cell_timeout_s=lim.cell_timeout_s, startup_timeout_s=600.0)
+                         cell_timeout_s=lim.cell_timeout_s, startup_timeout_s=600.0,
+                         cell_wall_cap_s=lim.cell_timeout_s + SandboxLimits.cell_wall_cap_s)
 
 
 TMP_MB = 1024  # /tmp in an edit container: test binaries, jest caches, pytest's tmp_path

@@ -13,11 +13,13 @@
 >
 > **W&B inference:** $5.89 measured by the script ($2.40 RLM arm, $1.09 direct reading, $2.39 medium thinking). I also counted up to $2.15 more against the ceiling, so $8.04 in all, inside the $12 ceiling. That extra is the diagnosis probes and failed tries W&B may have billed (§8). The billing page decides which it is (§9).
 >
-> **Status:** complete. Three things need Rishi's call before production (§11).
+> **Status:** complete. Rishi answered the three calls on 2026-10-17 (prompt v3, medium thinking, 30 edit turns) and chose to replace the ticket tasks (`selection-v3`). The base model was rerun in production's set-up: 51.6% (§13). Training with thinking still has to be wired before production (§13).
 >
 > Anything marked *(mine)* is my choice, not the plan's. Anything marked *(inferred)* hasn't been checked.
 
 ## Summary
+
+**Update 2026-10-17:** Rishi took all three calls (prompt v3, medium thinking, 30 edit turns) and replaced the ticket tasks (`selection-v3`). In that set-up the base model scores 51.6%, the step-0 number production starts from (§13). Step 11 counted $9.99 of its $12.
 
 **Medium thinking clears the bar: +17 points over thinking off (59.4% vs 42.2% over the 64 tasks, ± 6.8, paired by task).** Reading gains 15 points and editing 25. Production would think at `medium` under 11b's rule, at about 1.25× the cost per step. Part of the gain is that thinking mostly stops a format failure, described next.
 
@@ -211,6 +213,8 @@ All 80 RLM episodes started together, more than two production steps' worth, and
 
 The balance before step 11 was about $201.02 (step 10's $201.33 less its $0.31 follow-ups). If W&B bills only completed requests, the page should now show about **$195.1 left** ($5.89 here plus ~$0.06 of completed probes). If it bills failed tries in full, it could be as low as about **$193.0**. A reading between those also says how much a 5xx costs, which matters for production at 27% failed tries.
 
+**Answer (Rishi, 2026-10-17): $193.81 left**, so $7.21 billed: W&B billed about $1.32 of the failed tries and probes, about 60% of the upper bound. The ledger now holds the billed figure.
+
 ## 10. What I built and fixed (all $0, tested)
 
 | File | What |
@@ -227,6 +231,8 @@ The balance before step 11 was about $201.02 (step 10's $201.33 less its $0.31 f
 **Tests:** every module the changes touch passes in WSL on the final code: `test_baselines`, `test_client`, `test_env`, `test_evals`, `test_contract`, `test_dashboard`, `test_monitor`, `test_training` and `test_edit_env`, 147 tests (1 skipped, the uncached tokenizer) in 20 minutes. The rest of the suite wasn't rerun.
 
 ## 11. Decisions for Rishi before production
+
+*Answered by Rishi on 2026-10-17: A as recommended, B medium, C 30 turns. §13 has what was built and the rerun.*
 
 **A. The tool-call failure** (§3)
 - **Accept `<function=python>…</function>` as a code block and say so in the "no code block" error: recommended (mine).** It's a few lines in `env.extract_code` and one sentence in the error text, $0. Then rerun the RLM arm (~$2.40) for a clean step-0 number.
@@ -247,11 +253,66 @@ The balance before step 11 was about $201.02 (step 10's $201.33 less its $0.31 f
 
 They can't be compared directly. The second seed's 83.3% is on `heldout-seed1`: 100 episodes of the two ticket families at level 1, prompt v1, a 2,000-character output cap. Step 11's selection set holds only 8 ticket tasks across levels 1-5. On those the base model got `tickets_customer` 4 of 4 in every arm and `tickets_all` 1 of 4 (off) or 2 of 4 (medium). That is consistent with the second seed's reading that `tickets_customer` is easy and `tickets_all` is where the room is (step 10 §4). Whether the 13-point gap above the first seed's 70% is environment v2 still needs the ~$2 base eval on `heldout-seed1`, which waits on Rishi.
 
-## 13. Files
+## 13. Rishi's decisions and the rerun in production's set-up (2026-10-17)
+
+**Rishi's answers (02:07 UTC):**
+- **A, the tool-call failure:** fix it as recommended. Built as **prompt v3**.
+- **B, thinking:** production's root thinks at `medium`.
+- **C, edit turns:** 30.
+- **Server errors:** acceptable as long as retries recover and the run doesn't stop.
+- **Billing:** $193.81 left, so step 11's first run cost **$7.21 on W&B**. The script measured $5.89, so W&B billed about $1.32 for failed tries and the probes. My $2.15 upper bound held. Production's own estimates will run about 20% under the bill while 500s stay this common.
+- **Commit and push:** done (`b7d8814` on the PC's branch).
+- **The ticket tasks:** replace both with held-out tasks related to the training data that can't leak. Built as **`selection-v3`**.
+
+**What changed** ($0, tested):
+
+| Change | Where | What it does |
+|---|---|---|
+| Prompt v3, now the default | `bridge.py`, `env.py` | Code in a `<function=python>` tool call runs like a ```python block. The "no code block" error adds "Tool-call tags don't run here: call llm, llm_batch, submit and the tools as Python functions inside the block." Edit episodes get 30 turns. v2's system prompt and first messages are unchanged. v1 and v2 keep their texts and hashes, so step 10 and step 11's first run stay reproducible |
+| `selection-v3`, production's selection set | `evals.py`, `config.py` | `selection-v2`'s 56 other tasks, unchanged (same seeds and task ids), plus 8 held-out tasks from the trained read families at levels 3-5: aggregation L3, L4, L5; call graph L4; needle L5; repo localization L3, L4, L4. The read tasks now follow the mix exactly (20/8/8/12) |
+| A sandbox bug, found by the rerun | `editbox.py` | An edit cell's wall-clock cap was a fixed 1,800 s, under the raised cell limits of slow tasks (JavaScript 3,570 s, Go up to 2,760 s). A cell that ran or hung past 30 minutes became an infra error instead of the model's own timeout. In production that would have been a dropped episode counted toward the 1% infra pause. The cap is now the cell limit plus 1,800 s |
+| `prod_v3` arm, the page across runs | `baselines.py`, `baseline_dashboard.py` | The base model in production's set-up. The step 11 page shows both runs |
+
+Tests: 198 across every module these touch, in WSL. Three that pinned v2's defaults (20 edit turns, `selection-v2`) were updated to v3's and pass, and new tests cover the tool-call parser, v3's limits and the wall cap.
+
+**No leak in `selection-v3`.** Its new tasks come from the same generators and sources as training, on fresh 64-bit seeds kept in `private/`. So they're the same kind of task as training, but no context, question or answer repeats one a training step draws, which is how the rest of the selection set works. Repo localization reads only the three selection repositories, which training never sees. The final claim still rests on step 13's held-out test, which uses held-out sources.
+
+**The rerun: the base model in production's set-up** (`prod_v3`: prompt v3, root thinking medium, 30 edit turns, on `selection-v3`, 64 episodes, run `step11-v3`):
+
+| | Production set-up (v3) | Medium thinking (v2), §6 | Thinking off (v2) |
+|---|---|---|---|
+| All 64 | **51.6% ± 6.2** | 59.4% | 42.5% |
+| Read (48) | 43.8% | 56.3% | 41.7% |
+| Edit (16) | 75.0% | 68.8% | 43.8% (32 eps) |
+| Paired, on the 56 tasks both sets share | 53.6% | 57.1% (−3.6 ± 6.2) | 39.3% (+14.3 ± 6.1) |
+| The 8 new tasks | 3 of 8 | | |
+| Turns with no runnable code | 72 of 675 (11%) | 143 of 644 (22%) | 340 of 997 (34%) |
+
+- **The production set-up's step-0 number is 51.6% on `selection-v3`.** Production's own checkpoint-0 eval will measure it again.
+- **The fix works mechanically, but it adds nothing on top of medium thinking** (−3.6 ± 6.2 on the shared tasks, noise). 67 tool-call turns ran their code, and turns without runnable code halved. Medium thinking had already avoided most of the failure on read tasks, where the arms differ most (45% vs 53% on the 40 shared read tasks, ± 7.5).
+- **The 8 new tasks are hard (3 of 8),** so unlike `tickets_customer` they can move the checkpoint pick.
+- **30 edit turns:** 3 of 16 edit episodes ended unresolved at the cap (19%, under the 20% line), against 25% at 20 turns. Resolved held at 75% (`edit_real` 6 of 10, level 1 3 of 5; `edit_synth` 6 of 6). Edit episodes cost more: `edit_real` $0.090 an episode, against $0.051 at 20 turns.
+- **Cost:** read $0.035 and edit $0.067 an episode, so a production step is ~$1.52 (~$1.28 at level-1 costs). That buys **~100-120 steps for $157**, and a selection eval costs $2.73. Add ~20% if failed tries keep being billed at step 11's rate.
+- **Infra:** 0 rate-limit errors, 25% HTTP 500 (274 of 1,108 tries), one 524, all recovered. One episode was lost to the sandbox bug above and rerun. The model had started a `node` script that never exited, and the bug turned that into an infra error at 30 minutes.
+- **Time:** 64 episodes in 38 minutes, including the hung JavaScript episode (35 minutes before the cap fired) and its rerun. Most edit episodes ran 2-13 minutes.
+
+**Spend:** step11-v3 measured $2.78, so step 11 counts **$9.99** against its $12 ceiling ($7.21 billed + $2.78 measured). If W&B bills this run's failed tries at the first run's rate, the billing page should read about $190.4.
+
+**Left before production (step 12):**
+1. **Train with root thinking at `medium`** (Rishi's decision B). Not built yet:
+   - the training loop's client and pinned config need the setting;
+   - the KL monitor re-scores whole conversations with thinking off, so it would skip every thinking turn as misaligned. It needs to re-score each turn with its thinking included, which costs about 5× today's ~$0.01 a step.
+
+   ART 0.5.20 handles thinking turns itself, as far as I can tell from its code: a turn whose prompt drops the earlier thinking becomes its own training sequence, so the tokens trained are the tokens sampled. Then a fake-model dry run with thinking on.
+2. **Optional:** 3.4% of medium-thinking turns hit the token cap, most of them read turns spent entirely on thinking (§6). A 4,096-token read turn would fix most of that for a little cost.
+3. **The `test_aware` false positive** on scratch scripts that call `process.exit` (§4) is still open. It is a red-team detector, so I left it for Rishi.
+
+## 14. Files
 
 | Path | What |
 |---|---|
 | `results/step11-v1/transcripts/val/{rlm,direct,rlm_medium}/step0000.jsonl` | Every try, infra ones included (git-ignored) |
-| `results/step11-v1/summary.json`, `spend.json`, `progress.json`, `run.log` | The summary, the spend ledger (with the hand-added upper bounds), the last session's request counts, the console log |
+| `results/step11-v1/summary.json`, `spend.json`, `progress.json`, `run.log` | The summary, the spend ledger (set to W&B's billed $7.21), the last session's request counts, the console log |
 | `results/dashboard-step11/page.html`, `results/dashboard-step10/page.html` | The two pages as published (git-ignored) |
 | `results/dry/step11-dry1/` | The $0 dry run |
+| `results/step11-v3/` | The rerun in production's set-up (`prod_v3` on `selection-v3`); its spend ledger carries the first run's billed $7.21 |

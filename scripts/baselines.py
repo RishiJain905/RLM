@@ -6,9 +6,11 @@ Run inside WSL2 (Ubuntu) from the repo root, with Docker Desktop running:
     .venv-linux/bin/python scripts/baselines.py run step11-v1 --arms rlm,direct --live --ceiling 12
     .venv-linux/bin/python scripts/baselines.py run step11-v1 --arms rlm_medium --live --ceiling 12
     .venv-linux/bin/python scripts/baselines.py status step11-v1
+    .venv-linux/bin/python scripts/baselines.py run step11-v3 --arms prod_v3 --eval-set selection-v3 --live --ceiling 12
 
 Arms: `rlm` (base model as an RLM, prompt v2, thinking off; edit tasks twice), `direct` (the context read directly, read
-tasks only) and `rlm_medium` (decision 11b: root thinking at medium). Arms given together run in one process, sharing the
+tasks only), `rlm_medium` (decision 11b: root thinking at medium) and `prod_v3` (production's set-up: prompt v3, thinking
+medium; run it on selection-v3). Arms given together run in one process, sharing the
 limiter and the sub-call spacing. `--ceiling` is a hard stop over every arm and every run of this command: an episode
 that could take spend over it never starts, and `run` refuses to start when its projection is already over it.
 
@@ -47,8 +49,8 @@ def arm_list(text: str) -> list[str]:
     return names
 
 
-def selection_tasks():
-    tasks, samples = evals.eval_set(baselines.EVAL_SET)
+def selection_tasks(name: str = baselines.EVAL_SET):
+    tasks, samples = evals.eval_set(name)
     assert samples == 1
     return tasks
 
@@ -96,7 +98,7 @@ async def run_dry(args, arms: list[str]) -> dict:
             dry.server.latency = (args.latency * 0.5, args.latency * 1.5)
         direct = DirectOracle(dry.oracle)
         dry.server.answer_for = direct.answer_for
-        tasks = direct.record(dry.oracle.eval_set(baselines.EVAL_SET)[0])
+        tasks = direct.record(dry.oracle.eval_set(args.eval_set)[0])
         await dry.backend.open(args.run)
         base = dry.backend.inference_name(args.run, 0)
         kwargs = {}
@@ -112,7 +114,7 @@ async def run_dry(args, arms: list[str]) -> dict:
         from rlm_rl.client import Pacer
 
         run = baselines.BaselineRun(args.run, results, openai_client=dry.backend.openai_client(), base_model=base,
-                                    ceiling=args.ceiling, pacer=Pacer(), **kwargs)
+                                    ceiling=args.ceiling, pacer=Pacer(), eval_set=args.eval_set, **kwargs)
         return await go(run, tasks, arms, args)
 
 
@@ -122,13 +124,13 @@ async def run_live(args, arms: list[str]) -> dict:
     load_dotenv(ROOT / ".env")  # provides WANDB_API_KEY; never printed
     from rlm_rl.backend import ArtBackend
 
-    tasks = selection_tasks()
+    tasks = selection_tasks(args.eval_set)
     backend = ArtBackend(project=config.PROJECT, base_model=config.BASE_MODEL)
     try:
         await backend.open(args.run)  # a model of its own, so its step 0 is the base model (backend.py)
         base = backend.inference_name(args.run, 0)
         run = baselines.BaselineRun(args.run, results_dir(args), openai_client=backend.openai_client(),
-                                    base_model=base, ceiling=args.ceiling)
+                                    base_model=base, ceiling=args.ceiling, eval_set=args.eval_set)
         return await go(run, tasks, arms, args)
     finally:
         await backend.close()
@@ -187,6 +189,7 @@ def main() -> int:
     p.add_argument("--ceiling", type=float, required=True, help="hard inference ceiling over every arm, $")
     p.add_argument("--allow-partial", action="store_true", help="start even if the projection is over the ceiling")
     p.add_argument("--retry-infra", type=int, default=1, help="extra passes over infra episodes at the end")
+    p.add_argument("--eval-set", default=baselines.EVAL_SET, help="selection-v2 (step11-v1) or selection-v3 (prod_v3)")
     p.add_argument("--results", help="results folder (default results/, or results/dry/ for a dry run)")
     p.add_argument("--seed", type=int, default=0, help="dry run only: the fake policy's seed")
     p.add_argument("--latency", type=float, default=0.0, help="dry run only: mean seconds per fake request")
@@ -198,6 +201,7 @@ def main() -> int:
         p.add_argument("--results")
         p.add_argument("--dry-run", action="store_true", help="a run under results/dry/")
         p.add_argument("--json", action="store_true")
+        p.add_argument("--eval-set", default=baselines.EVAL_SET)
     args = parser.parse_args()
     arms = arm_list(args.arms)
 
@@ -206,7 +210,7 @@ def main() -> int:
             from rlm_rl import tasks as rtasks
 
             rtasks.PRIVATE_DIR = DRY_RESULTS / "private"
-        tasks = selection_tasks()
+        tasks = selection_tasks(args.eval_set)
         run_dir = results_dir(args) / args.run
         if args.command == "project":
             spent = float(baselines.read_spend(run_dir).get("total_usd") or 0.0)
@@ -215,7 +219,7 @@ def main() -> int:
             if not args.json:
                 print_projection(spent, float(baselines.read_spend(run_dir).get("ceiling_usd") or 0.0), proj)
             return 0
-        summary = baselines.write_summary(run_dir, tasks)
+        summary = baselines.write_summary(run_dir, tasks, eval_set=args.eval_set)
         print(json.dumps(summary, indent=1, default=str) if args.json else "", end="")
         if not args.json:
             print_summary(summary)

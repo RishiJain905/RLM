@@ -27,7 +27,8 @@ TEMPLATE = Path(__file__).with_name("baselines_page.html")
 SCHEMA = 1
 
 ARM_LABELS = {"rlm": "Base model as an RLM", "direct": "Base model reading directly",
-              "rlm_medium": "Base model as an RLM, root thinking medium"}
+              "rlm_medium": "Base model as an RLM, root thinking medium",
+              "prod_v3": "Production's set-up: prompt v3, thinking medium"}
 GATES = {"turn_cap_unresolved": 0.20, "edit_real_l1": 0.15, "medium_gain": 0.12}
 # Production's mix (spec §12.7) and plan figures, for the cost projection (code-editing-plan.md §10.2).
 PRODUCTION_MIX = {"aggregation": 0.25, "callgraph": 0.10, "needle": 0.10, "repo_loc": 0.15, "edit_synth": 0.15,
@@ -199,38 +200,60 @@ def _matched_cost(run_dir: Path, arm: str, other: str) -> tuple[float, float] | 
     return sum(a[k] for k in common), sum(b[k] for k in common)
 
 
-def page_data(run_dir: Path, *, pot: dict | None = None, dry_run: bool = False, now: float | None = None) -> dict:
+ARM_ORDER = ("rlm", "direct", "rlm_medium", "prod_v3")
+
+
+def page_data(run_dirs: Path | list[Path], *, pot: dict | None = None, dry_run: bool = False,
+              now: float | None = None) -> dict:
+    """The page's data from one or more baseline runs (step 11: step11-v1's three arms, then step11-v3's prod_v3).
+    Arm names are unique across runs; spend comes from the last run, whose ledger carries the earlier ones."""
     now = now or time.time()
-    run_dir = Path(run_dir)
-    summary = _load(run_dir / "summary.json", {})
-    progress = _load(run_dir / "progress.json", {})
-    spend = _load(run_dir / "spend.json", {})
-    arm_names = [a for a in ("rlm", "direct", "rlm_medium") if a in (summary.get("arms") or {})]
-    arms = {}
-    for a in arm_names:
-        arms[a] = _arm(a, summary["arms"][a], (progress.get("arms") or {}).get(a, {}),
-                       (progress.get("requests") or {}).get(a, {}))
-    family_costs = {a: _family_costs(run_dir, a) for a in arm_names}
-    proj_input = {a: dict(arms[a]) for a in arms}
-    if "rlm" in proj_input:
-        proj_input["rlm"]["_family_costs"] = family_costs.get("rlm", {})
-    if "rlm_medium" in proj_input:
-        matched = _matched_cost(run_dir, "rlm_medium", "rlm")
+    run_dirs = [Path(d) for d in (run_dirs if isinstance(run_dirs, (list, tuple)) else [run_dirs])]
+    arms, where, comparisons, family_costs = {}, {}, {}, {}
+    updated, eval_sets = None, []
+    for run_dir in run_dirs:
+        summary = _load(run_dir / "summary.json", {})
+        progress = _load(run_dir / "progress.json", {})
+        eval_sets.append(summary.get("eval_set"))
+        for a in ARM_ORDER:
+            if a in (summary.get("arms") or {}) and a not in arms:
+                arms[a] = _arm(a, summary["arms"][a], (progress.get("arms") or {}).get(a, {}),
+                               (progress.get("requests") or {}).get(a, {}))
+                arms[a]["eval_set"] = scrub(summary.get("eval_set"), 30)
+                where[a] = run_dir
+                family_costs[a] = _family_costs(run_dir, a)
+        for k, c in (summary.get("comparisons") or {}).items():
+            if _name_ok(k) and isinstance(c, dict):
+                comparisons[k] = {f: _num(c.get(f)) for f in ("tasks", "a", "b", "diff", "se", "b_only", "a_only")}
+        t = _num(progress.get("updated_at")) or _num(summary.get("built_at"))
+        updated = max(updated or 0, t or 0) or None
+    arms = {a: arms[a] for a in ARM_ORDER if a in arms}
+    running = any((arms[a]["progress"].get("running") or 0) > 0 for a in arms)
+    # production's cost per step from the arm that runs production's set-up, or the first RLM arm before it existed
+    base = "prod_v3" if "prod_v3" in arms else "rlm"
+    proj_input = {}
+    if base in arms:
+        proj_input["rlm"] = dict(arms[base], _family_costs=family_costs.get(base, {}))
+    if base == "rlm" and "rlm_medium" in arms and "rlm_medium" in where:
+        proj_input["rlm_medium"] = dict(arms["rlm_medium"])
+        matched = _matched_cost(where["rlm_medium"], "rlm_medium", "rlm")
         if matched:
             proj_input["rlm_medium"]["est_cost_usd"], proj_input["rlm_medium"]["_matched_rlm_usd"] = matched
-    comparisons = {}
-    for k, c in (summary.get("comparisons") or {}).items():
-        if _name_ok(k) and isinstance(c, dict):
-            comparisons[k] = {f: _num(c.get(f)) for f in ("tasks", "a", "b", "diff", "se", "b_only", "a_only")}
-    running = any((arms[a]["progress"].get("running") or 0) > 0 for a in arms)
-    updated = _num(progress.get("updated_at")) or _num(summary.get("built_at"))
+    last = run_dirs[-1]
+    spend = _load(last / "spend.json", {})
+    progress = _load(last / "progress.json", {})
     stale = running and updated is not None and now - updated > dashboard.STALE_AFTER_S
     status = "stalled" if stale else "running" if running else ("finished" if arms and all(
         (arms[a]["progress"].get("done") or 0) >= (arms[a]["planned"] or 0) for a in arms) else "paused")
+    episodes = []
+    for a, d in where.items():
+        episodes += episode_rows(d, [a])
+    episodes.sort(key=lambda x: -(x["finished_at"] or 0))
     return {
         "schema": SCHEMA, "kind": "baselines", "built_at": now, "dry_run": bool(dry_run),
-        "run": {"name": scrub(run_dir.name, 60), "eval_set": scrub(summary.get("eval_set"), 30), "status": status,
-                "updated_at": updated},
+        "run": {"name": scrub(" + ".join(d.name for d in run_dirs), 80),
+                "eval_set": scrub(" / ".join(dict.fromkeys(e for e in eval_sets if e)), 40), "status": status,
+                "updated_at": updated, "production_arm": base},
         "spend": {"total_usd": _num(spend.get("total_usd")), "ceiling_usd": _num(spend.get("ceiling_usd")),
                   "by_arm": {k: _num(v) for k, v in (spend.get("by_arm") or {}).items() if _name_ok(k)},
                   "reserved_usd": _num(progress.get("reserved_usd"))},
@@ -241,7 +264,7 @@ def page_data(run_dir: Path, *, pot: dict | None = None, dry_run: bool = False, 
         "production": projection(proj_input),
         "family_costs": {a: {f: _num(v) for f, v in fc.items() if _name_ok(f)} for a, fc in family_costs.items()},
         "plan_edit_usd": dict(PLAN_EDIT_USD),
-        "episodes": episode_rows(run_dir, arm_names),
+        "episodes": episodes,
     }
 
 
@@ -249,11 +272,17 @@ def render(data: dict) -> str:
     return dashboard.render(data, TEMPLATE.read_text(encoding="utf-8"))
 
 
-def build(run_dir: Path, out: Path, *, seed_roots: list[Path], pot: dict | None = None, dry_run: bool = False) -> dict:
+def build(run_dirs: Path | list[Path], out: Path, *, seed_roots: list[Path], pot: dict | None = None,
+          dry_run: bool = False) -> dict:
     """Build the page and scan it (dashboard.check); the page is written only if the scan passes."""
-    page = render(page_data(run_dir, pot=pot, dry_run=dry_run))
-    items, _ = dashboard.eval_items(run_dir)
-    task_ids, repos = dashboard.eval_names(run_dir)
+    run_dirs = [Path(d) for d in (run_dirs if isinstance(run_dirs, (list, tuple)) else [run_dirs])]
+    page = render(page_data(run_dirs, pot=pot, dry_run=dry_run))
+    items, task_ids, repos = set(), set(), set()
+    for d in run_dirs:
+        items |= dashboard.eval_items(d)[0]
+        ids, rs = dashboard.eval_names(d)
+        task_ids |= ids
+        repos |= rs
     result = dashboard.check(page, seeds=dashboard.private_seeds(seed_roots), items=items, task_ids=task_ids,
                              repos=repos)
     if result["ok"]:

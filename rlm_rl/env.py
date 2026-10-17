@@ -43,10 +43,24 @@ MIN_GROUPS = 2  # spec §5.4 step 6
 _CODE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
 
 
-def extract_code(text: str | None) -> str | None:
-    """The first fenced code block in a reply, or None."""
+# Qwen3.8's own tool-call syntax around Python, as the base model wrote it on 43% of its turns under prompt v2 (step 11
+# results §3): "<tool_call>", "<function=python>", the code, "</function>", "</tool_call>", sometimes with a parameter
+# tag around the code, sometimes cut off before the closing tags.
+_TOOL_CALL_CODE_RE = re.compile(r"<function=python>[ \t]*\n?(?:<parameter=\w+>[ \t]*\n?)?(.*?)"
+                                r"(?:</parameter>\s*)?(?:</function>|</tool_call>|\Z)", re.DOTALL)
+
+
+def extract_code(text: str | None, tool_calls: bool = False) -> str | None:
+    """The first fenced code block in a reply, or None. With `tool_calls` (prompt v3), a reply without one may carry
+    its code in a `<function=python>` tool call instead."""
     match = _CODE_RE.search(text or "")
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    if tool_calls:
+        found = _TOOL_CALL_CODE_RE.search(text or "")
+        if found and found.group(1).strip():
+            return found.group(1)
+    return None
 
 
 @dataclass
@@ -271,8 +285,9 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 reply = choice.message.content or ""
                 ep.choices.append(choice)
                 ep.messages.append({"role": "assistant", "content": reply})
-                code = extract_code(reply)
-                result = CellResult("", 0, bridge.NO_CODE_BLOCK_ERROR) if code is None else await box.run_cell(code)
+                code = extract_code(reply, tool_calls=prompt_version in bridge.TOOL_CALL_CODE_VERSIONS)
+                result = (CellResult("", 0, bridge.no_code_error(prompt_version)) if code is None
+                          else await box.run_cell(code))
                 _cap_output(result, lim.output_max_chars)
                 extra = choice.model_extra or {}
                 turn = Turn(reply, choice.finish_reason, len(extra.get("token_ids", ())),

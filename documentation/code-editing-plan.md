@@ -361,7 +361,7 @@ Nothing has been trained on v1 yet, so changing it now costs nothing. The second
 | Container | 1 CPU, 512 MB | 2 CPUs, 4 GB | Real test suites |
 | Grader timeout | none | 600 s | Hidden tests |
 
-- **Step 11 checks the caps.** If more than ~20% of the base model's edit episodes hit the turn cap with a test failing, turns go to 30 before production.
+- **Step 11 checks the caps.** If more than ~20% of the base model's edit episodes hit the turn cap with a test failing, turns go to 30 before production. *Done (Rishi, 2026-10-17): 56% did, so prompt v3 gives edit episodes 30 turns (step-11-results.md §13).*
 - **Training sequence length.** An edit transcript should run ~15-30K tokens, up to ~95K at every cap *(inferred)*. E1 checks what W&B's trainer accepts for Qwen3.8-27B, and the step 6 rule (set `packed_sequence_length` from measured lengths) applies.
 
 ---

@@ -79,6 +79,15 @@ SELECTION_V2_READ = {
     **{(family, level): 1 for family in ("tickets_all", "tickets_customer") for level in (1, 2, 3, 5)},
 }
 SELECTION_V2_SYNTH = [("fix", 1), ("callers", 2), ("feature", 3), ("fix", 4), ("callers", 5), ("feature", 2)]
+# selection-v3 (Rishi, 2026-10-17, after step 11): selection-v2 without its 8 ticket tasks, which production never trains
+# on and which the base model found too easy (tickets_customer 100% in every arm), and with 8 more held-out seeds of
+# the trained read families in their place, at levels 3-5, where the set was thinnest. With them the read tasks follow
+# the mix (20/8/8/12 of 48). selection-v2's other 56 tasks are kept as they were (same seeds), so step 11's numbers on
+# them carry over; the 8 new ones have seeds of their own. repo_loc_select reads only the selection repositories,
+# which training never sees.
+SELECTION_V3_EXTRA = {("aggregation", 3): 1, ("aggregation", 4): 1, ("aggregation", 5): 1, ("callgraph", 4): 1,
+                      ("needle", 5): 1, ("repo_loc_select", 3): 1, ("repo_loc_select", 4): 2}
+SELECTION_V3_DROPPED = ("tickets_all", "tickets_customer")
 # heldout-test-v2: heldout-test-v1 plus 60 edit tasks, 20 edit_synth_heldout (every kind at every level, plus five
 # more) and the 40 edit_real tasks of the test split (held-out repositories, at least 15 of them feature tasks).
 HELDOUT_V2_SYNTH = [(kind, level) for level in range(1, 6) for kind in ("fix", "callers", "feature")] + \
@@ -115,6 +124,12 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         read = task_sets.fixed_set(name, SELECTION_V2_READ)
         synth = _synth_set(f"{name}-edit_synth", "edit_synth", SELECTION_V2_SYNTH)
         return read + synth + editreal.eval_tasks("select", "edit_real_select"), 1
+    if name == "selection-v3":
+        v2, _ = eval_set("selection-v2")  # the same 56 kept tasks, same seeds and task ids
+        kept = [t for t in v2 if t.family not in SELECTION_V3_DROPPED]
+        read = [t for t in kept if not bridge.is_edit(t.family)]
+        extra = task_sets.fixed_set(f"{name}-extra", SELECTION_V3_EXTRA)
+        return read + extra + [t for t in kept if bridge.is_edit(t.family)], 1
     if name == "heldout-test-v2":
         from .tasks import editreal
 

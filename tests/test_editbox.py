@@ -299,3 +299,15 @@ class ParallelTest(EditCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EditLimitsTest(unittest.TestCase):
+    def test_the_wall_cap_never_undercuts_a_raised_cell_limit(self):
+        """Step 11: a JavaScript task's 3,570 s cell limit sat over the fixed 1,800 s wall cap, so a hung `node` script
+        became an infra error at 30 minutes instead of the model's own timeout."""
+        import dataclasses
+
+        for cell in (300, 1650, 2130, 3570):
+            lim = editbox.edit_sandbox_limits(dataclasses.replace(bridge.EDIT_LIMITS, cell_timeout_s=cell))
+            self.assertEqual(lim.cell_timeout_s, cell)
+            self.assertGreaterEqual(lim.cell_wall_cap_s - lim.cell_timeout_s, sandbox.SandboxLimits.cell_wall_cap_s)

@@ -199,14 +199,14 @@ def cmd_baselines(args) -> int:
 
     results = results_dir(args)
     out = Path(args.out_dir) / "page.html"
-    r = baseline_dashboard.build(results / args.run, out, seed_roots=seed_roots(results), pot=pot_arg(args),
-                                 dry_run=is_dry(args, results))
+    r = baseline_dashboard.build([results / run for run in args.runs], out, seed_roots=seed_roots(results),
+                                 pot=pot_arg(args), dry_run=is_dry(args, results))
     c = r.get("checked") or {}
     if r["ok"]:
-        print(f"BUILT run={args.run} page={r['page']} size={r['bytes'] // 1024}KB check=passed (seeds {c.get('seeds')}, "
+        print(f"BUILT run={'+'.join(args.runs)} page={r['page']} size={r['bytes'] // 1024}KB check=passed (seeds {c.get('seeds')}, "
               f"eval tasks {c.get('eval_tasks')}, edit task ids {c.get('task_ids')}, repos {c.get('repos')})")
         return 0
-    print(f"BLOCKED run={args.run} check=FAILED {json.dumps(r['findings'])} (nothing was written)")
+    print(f"BLOCKED run={'+'.join(args.runs)} check=FAILED {json.dumps(r['findings'])} (nothing was written)")
     return 3
 
 
@@ -323,7 +323,7 @@ def main() -> int:
     p.add_argument("--pot-left", type=float, help="W&B inference left, $ (from W&B's billing page)")
     p.add_argument("--out-dir", default=str(OUT_DIR))
     p = sub.add_parser("baselines", help="build and check plan step 11's baselines page")
-    p.add_argument("run")
+    p.add_argument("runs", nargs="+", help="baseline runs, earliest first (step11-v1 step11-v3)")
     common(p)
     p.set_defaults(out_dir=str(RESULTS / "dashboard-step11"))
     p = sub.add_parser("check", help="scan a built page for keys, seeds, eval items and edit eval task ids")

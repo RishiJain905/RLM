@@ -107,7 +107,7 @@ footer p { margin: 0; max-width: 92ch; }
 
 <header class="top" id="top">
   <div class="wrap">
-    <div class="idrow"><span class="eyebrow">RLM · plan step 11 · base Qwen3.8-27B on selection-v2 · no training</span></div>
+    <div class="idrow"><span class="eyebrow">RLM · plan step 11 · base Qwen3.8-27B on the selection set · no training</span></div>
     <div class="idrow">
       <h1 id="run-name">Step 11 baselines</h1>
       <span id="dry" class="badge dry" hidden>Dry run: fake model, no W&amp;B, $0</span>
@@ -124,7 +124,7 @@ footer p { margin: 0; max-width: 92ch; }
 <div class="wrap">
   <main id="main">
     <section class="panel" id="overview">
-      <div class="phead"><div class="eyebrow">Overview</div><h2>Three arms on the same 64 tasks</h2><p>Every arm evaluates the untrained base model on the selection set: 48 read tasks and 16 edit tasks. The RLM arm runs the edit tasks twice, so it also measures what an edit episode costs before production. Infra episodes (rate limits, sandboxes, graders) are flagged and run again, never scored as failures.</p></div>
+      <div class="phead"><div class="eyebrow">Overview</div><h2>The untrained model on the 64-task selection set</h2><p>Every arm evaluates the untrained base model on the selection set: 48 read tasks and 16 edit tasks. The first three arms ran prompt v2 on selection-v2; the RLM arm ran the edit tasks twice, which also measured what an edit episode costs. The production set-up arm then ran Rishi's choices (prompt v3: tool-call code runs and edits get 30 turns; root thinking medium) on selection-v3, where 8 held-out tasks from the trained families replace the ticket tasks. Infra episodes (rate limits, sandboxes, graders) are flagged and run again, never scored as failures.</p></div>
       <div class="tiles" id="tiles"></div>
     </section>
 
@@ -177,8 +177,8 @@ footer p { margin: 0; max-width: 92ch; }
 (function () {
   "use strict";
   var D = JSON.parse(document.getElementById("dash-data").textContent || "null") || {};
-  var ARMS = ["rlm", "direct", "rlm_medium"].filter(function (a) { return D.arms && D.arms[a]; });
-  var SHORT = { rlm: "RLM", direct: "Direct reading", rlm_medium: "RLM, thinking medium" };
+  var ARMS = ["rlm", "direct", "rlm_medium", "prod_v3"].filter(function (a) { return D.arms && D.arms[a]; });
+  var SHORT = { rlm: "RLM", direct: "Direct reading", rlm_medium: "RLM, thinking medium", prod_v3: "Production set-up (v3, medium)" };
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function pct(x, d) { return x == null ? "–" : (100 * x).toFixed(d == null ? 0 : d) + "%"; }
@@ -221,7 +221,8 @@ footer p { margin: 0; max-width: 92ch; }
   }).join("") || '<div class="empty">No episode has finished yet.</div>';
 
   // gates
-  var gates = [], G = D.gates || {}, rlm = D.arms.rlm, med = D.arms.rlm_medium, C = D.comparisons || {};
+  var gates = [], G = D.gates || {}, rlm = D.arms.prod_v3 || D.arms.rlm, med = D.arms.rlm_medium, C = D.comparisons || {};
+  var capTurns = D.arms.prod_v3 ? 30 : 20, capArm = D.arms.prod_v3 ? "production set-up" : "RLM arm";
   function gate(name, note, state, text, labels) { gates.push({ name: name, note: note, state: state, text: text, labels: labels || {} }); }
   function stateLabel(g) {
     var s = g.state, L = g.labels;
@@ -229,12 +230,12 @@ footer p { margin: 0; max-width: 92ch; }
   }
   if (rlm && rlm.edit) {
     var r = rlm.edit.turn_cap_unresolved_rate;
-    gate("Edit turn cap", "over 20%: edit turns go to 30", r == null ? "wait" : r > G.turn_cap_unresolved ? "act" : "pass",
-      "<b>" + pct(r) + "</b> of the RLM arm's edit episodes hit the 20-turn cap unresolved (" + (rlm.edit.turn_cap_hits_unresolved || 0) + " of " + ((rlm.kinds.edit || {}).n || 0) + ")",
-      { pass: "turns stay at 20", act: "edit turns go to 30" });
+    gate("Edit turn cap", D.arms.prod_v3 ? "over 20% at 30 turns: look again before production" : "over 20%: edit turns go to 30", r == null ? "wait" : r > G.turn_cap_unresolved ? "act" : "pass",
+      "<b>" + pct(r) + "</b> of the " + capArm + "'s edit episodes hit the " + capTurns + "-turn cap unresolved (" + (rlm.edit.turn_cap_hits_unresolved || 0) + " of " + ((rlm.kinds.edit || {}).n || 0) + ")",
+      D.arms.prod_v3 ? { pass: "30 turns are enough", act: "still over 20%" } : { pass: "turns stay at 20", act: "edit turns go to 30" });
     var l1 = (rlm.edit.tiers || {})["edit_real/L1"];
     gate("Edit real, level 1", "under 15%: edit real starts at a lower share for 20 steps", !l1 || !l1.n ? "wait" : l1.rate < G.edit_real_l1 ? "act" : "pass",
-      l1 && l1.n ? "<b>" + pct(l1.rate) + "</b> resolved over " + l1.n + " episodes (5 tasks, run twice)" : "no level 1 episode finished yet",
+      l1 && l1.n ? "<b>" + pct(l1.rate) + "</b> resolved over " + l1.n + " episodes (" + capArm + ")" : "no level 1 episode finished yet",
       { pass: "share stays at 25%", act: "lower share for 20 steps" });
   } else {
     gate("Edit turn cap", "over 20%: edit turns go to 30", "wait", "no edit episode finished yet");
@@ -260,7 +261,7 @@ footer p { margin: 0; max-width: 92ch; }
       if (!t.episodes) return;
       parts.push(k + ": <b>" + (t.episodes_with || 0) + " of " + t.episodes + "</b> episodes (" + pct((t.turns_with || 0) / (t.turns || 1)) + " of turns), " + pct((t.accuracy_with || {}).rate) + " correct with it, " + pct((t.accuracy_without || {}).rate) + " without");
     });
-    if (a === "direct" || !parts.length) return;
+    if (a === "direct" || !parts.length) return;  // prod_v3 runs tool-call code, so its tags no longer cost a turn
     gates.push({ name: "Tool-call syntax, " + SHORT[a], note: "turns answered as a native tool call, which the REPL can't run", state: "info", text: parts.join("; ") });
   });
   var dr = C.rlm_vs_direct_read;

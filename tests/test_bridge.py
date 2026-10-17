@@ -1,6 +1,7 @@
 """Bridge API v1: the pinned prompt text, and the host side of the wire protocol (spec §1-2)."""
 
 import asyncio
+import dataclasses
 import json
 import socket
 import sys
@@ -61,7 +62,7 @@ You have at most 12 turns and 30 sub-calls in total. Look at the structure of `c
 
 class PromptTextTest(unittest.TestCase):
     def test_system_prompt_matches_spec(self):
-        self.assertEqual(bridge.PROMPT_VERSION, "v2")
+        self.assertEqual(bridge.PROMPT_VERSION, "v3")
         self.assertEqual(bridge.SYSTEM_PROMPT, SPEC_SYSTEM_PROMPT_V2)
         self.assertEqual(bridge.SYSTEM_PROMPT_V1, SPEC_SYSTEM_PROMPT)
         self.assertEqual(bridge.system_prompt("v1"), SPEC_SYSTEM_PROMPT)
@@ -81,13 +82,16 @@ class PromptTextTest(unittest.TestCase):
 
     def test_limits_per_family(self):
         """Spec §12.3."""
-        read, edit = bridge.limits("aggregation"), bridge.limits("edit_real")
+        read, edit = bridge.limits("aggregation", "v2"), bridge.limits("edit_real", "v2")
         self.assertEqual((read.max_turns, read.max_subcalls, read.root_max_tokens, read.cell_timeout_s, read.cpus,
                           read.memory_mb, read.pids, read.grader_timeout_s), (12, 30, 3072, 120, 1.0, 512, 64, None))
         self.assertEqual((edit.max_turns, edit.max_subcalls, edit.root_max_tokens, edit.cell_timeout_s, edit.cpus,
                           edit.memory_mb, edit.pids, edit.grader_timeout_s), (20, 30, 4096, 300, 2.0, 4096, 256, 600))
         for family in ("edit_synth", "edit_synth_heldout", "edit_real_select", "edit_real_test"):
-            self.assertIs(bridge.limits(family), bridge.EDIT_LIMITS)
+            self.assertIs(bridge.limits(family, "v2"), bridge.EDIT_LIMITS)
+            # prompt v3 (Rishi, 2026-10-17): 30 edit turns, nothing else changes
+            self.assertEqual(bridge.limits(family, "v3"), dataclasses.replace(bridge.EDIT_LIMITS, max_turns=30))
+        self.assertIs(bridge.limits("aggregation", "v3"), bridge.READ_LIMITS)
         self.assertEqual(read.output_max_chars, edit.output_max_chars)
 
     def test_cell_messages_quote_the_limit(self):
@@ -112,8 +116,11 @@ class PromptTextTest(unittest.TestCase):
         import hashlib
 
         self.assertEqual(len(bridge.PROMPT_HASH), 64)
-        self.assertEqual(bridge.PROMPT_HASH, bridge.PROMPT_HASHES["v2"])
-        self.assertNotEqual(bridge.PROMPT_HASHES["v1"], bridge.PROMPT_HASHES["v2"])
+        self.assertEqual(bridge.PROMPT_HASH, bridge.PROMPT_HASHES["v3"])
+        self.assertEqual(len(set(bridge.PROMPT_HASHES.values())), 3)
+        # the runs that used v1 and v2 recorded these; adding v3 must not change them
+        self.assertEqual(bridge.PROMPT_HASHES["v1"][:12], "776e044310ab")
+        self.assertEqual(bridge.PROMPT_HASHES["v2"][:12], "d2c3373c3349")
         for version, texts in bridge.PROMPTS.items():
             for key in texts:
                 changed = dict(texts, **{key: texts[key] + " "})

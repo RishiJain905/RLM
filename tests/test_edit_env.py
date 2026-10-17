@@ -70,11 +70,13 @@ class EditEpisodeTest(EditEnvCase):
         ep = await self.episode(LOOK, gold + "\n" + TESTS, "print(llm('Review this change:\\ndiff --git a/x b/x\\n@@ -1 +1 @@\\n-a\\n+b'))", SUBMIT)
         self.assertIsNone(ep.infra_error, ep.infra_error)
         self.assertEqual((ep.reward, ep.correct, ep.submitted), (1.0, True, True))
-        self.assertEqual(ep.limits, bridge.EDIT_LIMITS.as_dict())
+        self.assertEqual(ep.limits, bridge.limits(self.task.family).as_dict())  # prompt v3: 30 turns
+        self.assertEqual(ep.limits["max_turns"], bridge.EDIT_MAX_TURNS_V3)
         self.assertEqual(ep.language, "python")
         self.assertEqual(ep.messages[1]["content"], bridge.edit_first_message(
-            self.task.question, language="python", n_files=self.task.edit["n_files"], test_hint=editsynth.TEST_HINT))
-        self.assertIn("(19 turns left, 30 sub-calls left)", ep.messages[3]["content"])
+            self.task.question, language="python", n_files=self.task.edit["n_files"], test_hint=editsynth.TEST_HINT,
+            limits=bridge.limits(self.task.family)))
+        self.assertIn("(29 turns left, 30 sub-calls left)", ep.messages[3]["content"])  # prompt v3: 30 turns
         roots = [b for b in self.server.bodies if b.get("logprobs")]
         self.assertEqual({b["max_tokens"] for b in roots}, {bridge.EDIT_LIMITS.root_max_tokens})
         c = ep.reward_components
@@ -113,9 +115,9 @@ class EditEpisodeTest(EditEnvCase):
         self.assertEqual(block["tool_calls"]["write_file"], len(gold) / 2)
 
     async def test_no_submit_or_no_change_scores_zero_without_grading(self):
-        ep = await self.episode(LOOK, LOOK)  # never submits: runs to the 20-turn cap
-        self.assertEqual((len(ep.turns), ep.reward, ep.grade["graded"]), (20, 0.0, False))
-        self.assertEqual(ep.reward_components["repeated_cells"], 19.0)
+        ep = await self.episode(LOOK, LOOK)  # never submits: runs to the 30-turn cap (prompt v3)
+        self.assertEqual((len(ep.turns), ep.reward, ep.grade["graded"]), (30, 0.0, False))
+        self.assertEqual(ep.reward_components["repeated_cells"], 29.0)
         self.assertEqual(ep.reward_components["submitted"], 0.0)
         ep = await self.episode(LOOK, SUBMIT)
         self.assertEqual((ep.reward, ep.reward_components["empty_diff"], ep.grade["graded"]), (0.0, 1.0, False))

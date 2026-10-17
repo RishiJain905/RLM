@@ -44,7 +44,7 @@ TICKET_MIX = {"tickets_all": 0.5, "tickets_customer": 0.5}  # the second seed's 
 
 # Production's eval sets and data (plan step 7, spec v2 §12.10). The capability path is relative to the data root
 # (rlm_rl/data.py).
-PRODUCTION_SELECTION = "selection-v2"
+PRODUCTION_SELECTION = "selection-v3"  # selection-v2 with its ticket tasks replaced (Rishi, 2026-10-17; evals.py)
 CAPABILITY_SET = "data:derived/capability/capability-v1.jsonl"
 DATASET_MANIFEST = REPO / "manifests" / "dataset-manifest.json"
 EDIT_MANIFEST = "edit/manifest.json"  # the edit task data's manifest, on the data drive (scripts/build_edit_data.py)
@@ -81,7 +81,7 @@ class RunConfig:
     kl_samples: int = 4  # rollouts re-scored under the base model each step (spec §5.3)
     first_step_estimate_usd: float = 1.0  # used by the budget check until a step has been measured
     eval_episode_estimate_usd: float = 0.03  # before any step has been measured (research §7.2: ~$0.016 at level 1)
-    prompt_version: str = bridge.PROMPT_VERSION  # spec §12.2: v2; the second seed replicates the 20-step run on v1
+    prompt_version: str = bridge.PROMPT_VERSION  # v3 (step 11 fixes on spec §12.2's v2); the second seed ran v1
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -218,7 +218,7 @@ def pinned(cfg: RunConfig, *, lr: dict, controller_state: dict, spend: dict, tem
         "bridge": {"api_version": bridge.API_VERSION, "prompt_version": cfg.prompt_version,
                    "prompt_hash": bridge.PROMPT_HASHES[cfg.prompt_version],
                    "tools_version": repl_tools.TOOLS_VERSION},  # the edit REPL's coding tools (spec §12.1)
-        "edit_limits": bridge.EDIT_LIMITS.as_dict(),
+        "edit_limits": bridge.limits("edit_real", cfg.prompt_version).as_dict(),  # v3: 30 turns
         "limits": {"max_turns": bridge.MAX_TURNS, "max_subcalls": bridge.MAX_SUBCALLS,
                    "root_max_tokens": bridge.ROOT_MAX_TOKENS,
                    "output_max_chars": bridge.limits("read", cfg.prompt_version).output_max_chars,

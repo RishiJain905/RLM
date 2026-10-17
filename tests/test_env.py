@@ -88,6 +88,34 @@ class EpisodeTest(EnvCase):
         self.assertIn(bridge.NO_CODE_BLOCK_ERROR, ep.messages[3]["content"])
         self.assertEqual((ep.turns[0].code, ep.turns[0].cell, ep.correct), (None, None, True))
 
+    async def test_tool_call_code_runs_under_prompt_v3_only(self):
+        """Step 11: the base model wrote its code in tool-call tags on 43% of its v2 turns. v3 runs that code, and its
+        "no code block" error says the tags don't run; v2 is unchanged."""
+        tool_call = "Count them.\n<tool_call>\n<function=python>\nsubmit(len(context.splitlines()))\n</function>\n</tool_call>"
+        for version, turns, ran in (("v3", 1, True), ("v2", 2, False)):
+            replies = iter([tool_call, "```python\nsubmit(len(context.splitlines()))\n```"])
+            self.server.policy = lambda messages: next(replies)
+            ep = await self.episode(prompt_version=version, detect=None)  # a turn-1 submit would trip early_submit
+            self.assertEqual((len(ep.turns), ep.turns[0].code is not None, ep.answer), (turns, ran, 5), version)
+        self.assertNotIn(bridge.NO_CODE_BLOCK_ERROR_V3, ep.messages[3]["content"])  # v2's error text stays as it was
+        replies = iter(["<tool_call>\nfunction\n</function>\n</tool_call>", "```python\nsubmit(5)\n```"])
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode(prompt_version="v3")
+        self.assertIn(bridge.NO_CODE_BLOCK_ERROR_V3, ep.messages[3]["content"])
+        self.assertEqual(ep.prompt_version, "v3")
+
+    def test_extract_code_shapes(self):
+        call = "<tool_call>\n<function=python>\n{}</function>\n</tool_call>"
+        self.assertEqual(env.extract_code(call.format("print(1)\n"), tool_calls=True), "print(1)\n")
+        self.assertIsNone(env.extract_code(call.format("print(1)\n")))  # off by default (prompts v1, v2)
+        self.assertEqual(env.extract_code("<function=python>\n<parameter=code>\nx = 2\n</parameter>\n</function>",
+                                          tool_calls=True), "x = 2\n")
+        self.assertEqual(env.extract_code("<tool_call>\n<function=python>\nprint(3)\n", tool_calls=True), "print(3)\n")
+        self.assertIsNone(env.extract_code("<tool_call>\nfunction\n</function>\n</tool_call>", tool_calls=True))
+        self.assertIsNone(env.extract_code("<tool_call>\n<function=python>\n   \n</function>", tool_calls=True))
+        # a fenced block wins over a tool call in the same reply
+        self.assertEqual(env.extract_code("```python\na = 1\n```\n<function=python>\nb = 2\n", tool_calls=True), "a = 1\n")
+
     async def test_output_cap_follows_the_prompt_version(self):
         """Prompt v2 shows 8,000 characters of a cell's output; v1 keeps the second seed's 2,000 (step 10 results)."""
         # the cell prints 5,001 characters: 5,000 z's and a newline

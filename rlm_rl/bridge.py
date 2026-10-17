@@ -5,9 +5,12 @@ It pins what the model can call in the REPL, the prompt text and its hash, the e
 limits per family (spec §12.3), the sub-call rules and the wire protocol, and it serves one
 episode's sub-calls over a Unix socket.
 
-Prompt v2 (spec §12.2) is the prompt for every family: one system prompt, with each task's
-limits in its first message. Prompt v1 (spec §2) is kept only for the second seed, which
-replicates the 20-step run on it (decision E-g); every run records which version it used.
+Prompt v3 is the prompt for every family from production on: prompt v2 (spec §12.2, one system prompt
+with each task's limits in its first message) plus Rishi's fixes after the step 11 baselines (2026-10-17):
+code the model writes in its native tool-call syntax (`<function=python>...`) runs like a ```python
+block, the "no code block" error says tool-call tags don't run here, and edit episodes get 30 turns
+instead of 20. Prompt v2 is kept for the step 11 baselines, and prompt v1 (spec §2) for the second
+seed, which replicates the 20-step run on it (decision E-g); every run records which version it used.
 
 The REPL side of the protocol lives in repl_worker.py, which runs inside the sandbox and
 can't import this module. tests/test_contract.py checks that the two agree.
@@ -25,8 +28,11 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 API_VERSION = "v1"
-PROMPT_VERSION = "v2"
-PROMPT_VERSIONS = ("v1", "v2")
+PROMPT_VERSION = "v3"
+PROMPT_VERSIONS = ("v1", "v2", "v3")
+# Versions that run code written in Qwen3.8's tool-call syntax (env.extract_code): in step 11 the base model wrote
+# `<tool_call>` tags on 43% of its turns under prompt v2, whose system prompt lists the coding tools.
+TOOL_CALL_CODE_VERSIONS = ("v3",)
 
 # What the model sees in the REPL (spec §1.1), and the only requests the socket accepts (§1.4).
 # `submit` never crosses the bridge: its value comes back with the cell result.
@@ -74,6 +80,9 @@ READ_LIMITS = Limits(max_turns=MAX_TURNS, max_subcalls=MAX_SUBCALLS, root_max_to
                      pids=64, grader_timeout_s=None)
 EDIT_LIMITS = Limits(max_turns=20, max_subcalls=30, root_max_tokens=4096, output_max_chars=OUTPUT_MAX_CHARS,
                      cell_timeout_s=300, cpus=2.0, memory_mb=4096, pids=256, grader_timeout_s=600)
+# Prompt v3's edit turns (Rishi, 2026-10-17): 56% of the base model's edit episodes ended unresolved at 20 turns in
+# step 11, over code-editing-plan.md §9's 20% threshold.
+EDIT_MAX_TURNS_V3 = 30
 
 
 def is_edit(family: str) -> bool:
@@ -81,9 +90,14 @@ def is_edit(family: str) -> bool:
 
 
 def limits(family: str, version: str = PROMPT_VERSION) -> Limits:
-    """The limits an episode of this family runs under (spec §12.3), with prompt v1's output cap for a v1 episode."""
+    """The limits an episode of this family runs under (spec §12.3): prompt v1's output cap for a v1 episode, and
+    prompt v3's 30 edit turns."""
     lim = EDIT_LIMITS if is_edit(family) else READ_LIMITS
-    return dataclasses.replace(lim, output_max_chars=OUTPUT_MAX_CHARS_V1) if version == "v1" else lim
+    if version == "v1":
+        return dataclasses.replace(lim, output_max_chars=OUTPUT_MAX_CHARS_V1)
+    if version == "v3" and is_edit(family):
+        return dataclasses.replace(lim, max_turns=EDIT_MAX_TURNS_V3)
+    return lim
 
 # Sub-calls (spec §1.2).
 SUBCALL_MAX_CHARS = 24_000
@@ -144,6 +158,10 @@ OBS_ERROR = "Error:\n{error}"
 OBS_COUNTERS = "({turns_left} turns left, {subcalls_left} sub-calls left)"
 OBS_LAST_TURN = "Your next turn is the last one: it must call submit() with your best answer."
 NO_CODE_BLOCK_ERROR = "No ```python code block found. Reply with exactly one ```python block."
+# Prompt v3 (step 11): under v2 the base model often answered in tool-call tags, then repeated them after the error.
+NO_CODE_BLOCK_ERROR_V3 = ("No ```python code block found. Reply with exactly one ```python block. Tool-call tags "
+                          "don't run here: call llm, llm_batch, submit and the tools as Python functions inside "
+                          "the block.")
 
 # What the model is told after a timeout or crash (spec §4, §12.2): v2 quotes the cell limit as a value, and edit
 # episodes add one sentence.
@@ -196,6 +214,11 @@ PROMPTS = {
     "v2": {"system": SYSTEM_PROMPT, "first_user": FIRST_USER_TEMPLATE + "\n\n" + EDIT_FIRST_USER_TEMPLATE,
            "observation": "\n".join(_OBSERVATION + [CELL_TIMEOUT_TEMPLATE, CELL_CRASH_TEMPLATE, EDIT_FILES_UNCHANGED,
                                                     CELL_NOT_RUN])},
+    # v2's text with v3's "no code block" error; "code" and "edit_max_turns" put v3's other two changes in its hash
+    "v3": {"system": SYSTEM_PROMPT, "first_user": FIRST_USER_TEMPLATE + "\n\n" + EDIT_FIRST_USER_TEMPLATE,
+           "observation": "\n".join([NO_CODE_BLOCK_ERROR_V3 if t == NO_CODE_BLOCK_ERROR else t for t in _OBSERVATION]
+                                    + [CELL_TIMEOUT_TEMPLATE, CELL_CRASH_TEMPLATE, EDIT_FILES_UNCHANGED, CELL_NOT_RUN]),
+           "code": "```python blocks, and <function=python> tool-call blocks", "edit_max_turns": str(EDIT_MAX_TURNS_V3)},
 }
 PROMPT_HASHES = {v: hashlib.sha256(json.dumps(texts, sort_keys=True).encode()).hexdigest() for v, texts in PROMPTS.items()}
 PROMPT_TEXTS = PROMPTS[PROMPT_VERSION]
@@ -262,6 +285,12 @@ def cell_messages(version: str = PROMPT_VERSION, limits: Limits = READ_LIMITS, e
     tail = EDIT_FILES_UNCHANGED if edit else ""
     return CellMessages(CELL_TIMEOUT_TEMPLATE.format(cell_timeout_s=limits.cell_timeout_s) + tail,
                         CELL_CRASH_TEMPLATE.format() + tail)
+
+
+def no_code_error(version: str = PROMPT_VERSION) -> str:
+    """What a turn without code gets back (v3 adds that tool-call tags don't run)."""
+    _check_version(version)
+    return NO_CODE_BLOCK_ERROR_V3 if version == "v3" else NO_CODE_BLOCK_ERROR
 
 
 def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int,

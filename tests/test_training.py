@@ -172,7 +172,7 @@ class ProductionMixTest(LoopCase):
         self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
         drawn = {family for row in st["steps"] for family in row["families"] if row["families"][family]["episodes"]}
         self.assertTrue(drawn and drawn <= set(cfg.mix), drawn)
-        selection = [e for e in st["evals"] if e["name"] == "selection-v2"]
+        selection = [e for e in st["evals"] if e["name"] == config.PRODUCTION_SELECTION]
         self.assertEqual([e["checkpoint"] for e in selection], [0])
         from rlm_rl.tasks import editreal  # 48 read + 6 edit_synth + the index's selection split (10 when full)
         self.assertEqual(selection[0]["summary"]["n"], 48 + 6 + len(editreal.records("select")))

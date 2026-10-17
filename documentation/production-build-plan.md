@@ -589,7 +589,7 @@ Rolling back and the learning-rate fallback both fork an earlier checkpoint thro
 
 ## Step 11. Baselines
 
-**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-17):** done, $5.89 measured (up to $8.04 counting failed tries W&B may bill). Results in [step-11-results.md](step-11-results.md): base RLM 42.5%, direct reading 59.1% (read tasks), medium thinking 59.4% (+17 points over off). Prompt v2 makes the base model answer in tool-call syntax on many turns, and three decisions (that fix, thinking, edit turns) come before step 12 (results §11). The baseline script is `scripts/baselines.py`.
+**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-17):** done, $5.89 measured (up to $8.04 counting failed tries W&B may bill). Results in [step-11-results.md](step-11-results.md): base RLM 42.5%, direct reading 59.1% (read tasks), medium thinking 59.4% (+17 points over off). Prompt v2 made the base model answer in tool-call syntax on many turns. **Rishi's decisions (2026-10-17):** prompt v3 runs that code and says the tags don't run; production's root thinks at `medium`; edit turns go to 30; the selection set becomes `selection-v3` (the ticket tasks replaced). The base model was rerun in that set-up (results §14). The baseline script is `scripts/baselines.py`.
 
 ### What we run
 
@@ -647,7 +647,8 @@ GRPO at 32 episodes per step (8 tasks × 4 rollouts), with every family starting
   - editing 40% (`edit_real` 25%, `edit_synth` 15%).
 - **Cost:** with 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). Step 11 re-checks this. **Step 11 measured ~$0.95 a step with thinking off and ~$1.19 at medium, so ~130-165 steps for $157** *(inferred: training lengthens episodes; a working range is ~$1-1.5 a step)*; step-11-results.md §7.
 - **Evals:** the selection set and capability check run every 10 steps, at ~$3.50 each.
-- **Thinking:** off, unless 11b's arm earns `medium` for the root.
+- **Thinking:** root at `medium` (11b's arm earned it: +17 points; Rishi, 2026-10-17). Sub-calls stay off. Training on thinking tokens needs the loop wired for it first (below).
+- **Prompt v3 and `selection-v3`** (Rishi, 2026-10-17, step-11-results.md §14): tool-call code runs, edit episodes get 30 turns, and the selection set's ticket tasks are replaced.
 
 The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5> --live`, with the same dashboard loop as step 10.
 
@@ -660,6 +661,7 @@ The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5
 **How long it takes on the PC.** Edit episodes and their graders run in Docker on the D: data drive, a USB hard disk. Measured under load, a step averages ~30-35 minutes: ~20-25 when its `edit_real` tasks are Python or JavaScript, about an hour when one is Go (edit-build-results.md §5a). 75 steps is ~40 hours. Add about an hour for each of the ~7-8 selection evals, and the run takes ~2-2.5 days of the PC running without a break *(inferred)*. A slow drive costs time, never reward: every limit was set from measurements, and an infra error is never scored as a 0.
 
 **Before it starts** (all $0, on the PC):
+0. **Training with root thinking at `medium`:** the loop's client, the pinned config, and the KL monitor, which re-scores whole conversations with thinking off and would skip every thinking turn as misaligned (step-11-results.md §14). Then a fake-model dry run with thinking on.
 1. **What 12b chooses,** built and tested.
 2. **The training run clears leftover containers at start.** The data build does this since 2026-10-15, but a training run doesn't yet, so a crashed run's containers would pile up. It's a few lines and a test.
 3. **Optional drive settings**, yours to make (edit-build-results.md §5a):

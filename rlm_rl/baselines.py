@@ -8,6 +8,10 @@ Three arms, each an eval of checkpoint 0, logged like any other eval (evals.py) 
   selection-v2 context fits in the 262K-token window). Without it, no claim that the RLM setup helps holds.
 - `rlm_medium` (decision 11b): as `rlm`, with root thinking at `medium`; sub-calls stay off. Production thinks at
   `medium` only if it beats `rlm` by about 12 points (plan step 11).
+- `prod_v3`: the base model in production's set-up as Rishi chose it after the first three arms (2026-10-17): prompt v3
+  (tool-call code runs, 30 edit turns) and root thinking at `medium`, on selection-v3. It is the clean step-0 number.
+
+The first three arms ran prompt v2 on selection-v2 (run step11-v1); `prod_v3` runs on selection-v3 (run step11-v3).
 
 Sub-calls go to the base model, as in training (decision 11a). Arms run in one process share one limiter and one pacer
 (client.py), so the caps and the sub-call spacing hold across them.
@@ -43,7 +47,7 @@ from .evals import episode_key, summarize
 from .sandbox import Sandbox
 from .transcripts import TranscriptLog, episode_record, transcript_path
 
-EVAL_SET = "selection-v2"
+EVAL_SET = "selection-v2"  # the first three arms; prod_v3 runs on selection-v3 (scripts/baselines.py --eval-set)
 STEP = 0  # every arm evaluates checkpoint 0, the base model
 EDIT_SAMPLES = {"rlm": 2, "rlm_medium": 1}  # plan step 11: the rlm arm runs the 16 edit tasks twice
 
@@ -58,10 +62,12 @@ MAX_DIRECT_AT_ONCE = 6  # ~130K-token prompts; the limiter's cap on the base mod
 # code-editing-plan.md §10 guessed ~$0.06-0.15 an edit episode; thinking at medium ~1.6x, step 2 §6)*.
 RESERVE_MARGIN = 1.5
 DEFAULT_RESERVE_USD = {("rlm", "read"): 0.08, ("rlm", "edit"): 0.40, ("direct", "read"): 0.08,
-                       ("rlm_medium", "read"): 0.15, ("rlm_medium", "edit"): 0.60}
+                       ("rlm_medium", "read"): 0.15, ("rlm_medium", "edit"): 0.60,
+                       ("prod_v3", "read"): 0.10, ("prod_v3", "edit"): 0.20}  # from rlm_medium's measured costs
 # What the projection before a run assumes for an episode not yet measured: the plan's estimates.
 DEFAULT_PROJECT_USD = {("rlm", "read"): 0.04, ("rlm", "edit"): 0.11, ("direct", "read"): 0.03,
-                       ("rlm_medium", "read"): 0.065, ("rlm_medium", "edit"): 0.18}
+                       ("rlm_medium", "read"): 0.065, ("rlm_medium", "edit"): 0.18,
+                       ("prod_v3", "read"): 0.04, ("prod_v3", "edit"): 0.06}  # step 11: medium $0.036 / $0.042
 
 SPEND_EVERY_S = 5.0
 TOOL_CALL_MARK = "<tool_call>"  # Qwen3.8's native tool-call tag, which the REPL can't run (step 11 results)
@@ -74,12 +80,14 @@ class Arm:
     root_thinking: str | None = None  # client.ROOT_THINKING_EFFORTS, or None for off
     edit_samples: int = 1  # samples per edit task; read tasks run once
     read_only: bool = False
+    prompt_version: str = "v2"  # step 11's first arms ran v2; bridge.PROMPT_VERSION is v3 since
 
 
 ARMS = {
     "rlm": Arm("rlm", "rlm", None, EDIT_SAMPLES["rlm"]),
     "direct": Arm("direct", "direct", None, 0, read_only=True),
     "rlm_medium": Arm("rlm_medium", "rlm", "medium", EDIT_SAMPLES["rlm_medium"]),
+    "prod_v3": Arm("prod_v3", "rlm", "medium", 1, prompt_version="v3"),
 }
 
 
@@ -336,8 +344,9 @@ class BaselineRun:
                  sandbox_factory: Callable[..., Any] = Sandbox, sandbox_kwargs: dict | None = None,
                  pacer: Any = None, retry: rclient.RetryPolicy | None = None, log: Callable[[str], None] = print,
                  max_read: int = MAX_READ_AT_ONCE, max_edit: int = MAX_EDIT_AT_ONCE,
-                 max_direct: int = MAX_DIRECT_AT_ONCE):
+                 max_direct: int = MAX_DIRECT_AT_ONCE, eval_set: str = EVAL_SET):
         self.name = run
+        self.eval_set = eval_set
         self.run_dir = Path(results) / run
         self.base_model = base_model
         self.ceiling = ceiling
@@ -412,7 +421,7 @@ class BaselineRun:
                 else:
                     ep = await run_episode(job.task, client=client, root_model=self.base_model,
                                            run_id=f"{self.name}-{arm.name}", sandbox_factory=self.sandbox_factory,
-                                           prompt_version=bridge.PROMPT_VERSION, **self.sandbox_kwargs)
+                                           prompt_version=arm.prompt_version, **self.sandbox_kwargs)
             finally:
                 prog["running"] -= 1
                 self.budget.release(amount)
@@ -481,7 +490,7 @@ class BaselineRun:
             self._save_spend()
 
     def summary(self, tasks: list[Task], arm_names: list[str] | None = None) -> dict:
-        return write_summary(self.run_dir, tasks, arm_names, ceiling=self.ceiling)
+        return write_summary(self.run_dir, tasks, arm_names, ceiling=self.ceiling, eval_set=self.eval_set)
 
 
 def _interleave(batches: list[tuple]) -> list[tuple]:
@@ -618,7 +627,7 @@ def paired(records_a: list[dict], records_b: list[dict]) -> dict:
 
 
 def write_summary(run_dir: Path, tasks: list[Task], arm_names: list[str] | None = None, *,
-                  ceiling: float | None = None) -> dict:
+                  ceiling: float | None = None, eval_set: str = EVAL_SET) -> dict:
     """results/<run>/summary.json: every arm that has a log (or the arms named), and the comparisons between them."""
     arm_names = [n for n in ARMS if arm_log(run_dir, n).path.exists() or n in (arm_names or ())]
     planned = {name: plan_jobs(tasks, ARMS[name]) for name in arm_names}
@@ -642,7 +651,7 @@ def write_summary(run_dir: Path, tasks: list[Task], arm_names: list[str] | None 
             comparisons[f"medium_vs_rlm_{kind}"] = paired([r for r in recs["rlm"] if pick(r)],
                                                           [r for r in recs["rlm_medium"] if pick(r)])
     spend = read_spend(run_dir)
-    summary = {"run": run_dir.name, "eval_set": EVAL_SET, "built_at": time.time(), "arms": arms,
+    summary = {"run": run_dir.name, "eval_set": eval_set, "built_at": time.time(), "arms": arms,
                "comparisons": comparisons, "spend": {"total_usd": spend.get("total_usd"), "by_arm": spend.get("by_arm"),
                                                      "ceiling_usd": ceiling or spend.get("ceiling_usd")}}
     write_json(run_dir / "summary.json", summary)

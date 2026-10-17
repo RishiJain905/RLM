@@ -381,8 +381,8 @@ class MixAndLicenceTest(unittest.TestCase):
     @needs_edit_index
     def test_production_config(self):
         cfg = config.production("p", 2e-5)
-        self.assertEqual(cfg.selection, "selection-v2")
-        self.assertEqual(cfg.prompt_version, "v2")
+        self.assertEqual(cfg.selection, "selection-v3")
+        self.assertEqual(cfg.prompt_version, "v3")
         self.assertEqual(cfg.ceilings, {"train": 157.0, "eval": 30.0})
         self.assertEqual(cfg.capability_set, config.CAPABILITY_SET)
         self.assertEqual(cfg.mix, tasks.production_mix())
