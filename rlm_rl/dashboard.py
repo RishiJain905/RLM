@@ -61,6 +61,12 @@ STALE_AFTER_S = 300.0      # a running loop rewrites its state every 15 s (train
 
 # The edit families (spec §12). Their gold is the gold patch and the hidden tests, which never reach the page.
 EDIT_FAMILIES = ("edit_real", "edit_synth", "edit_synth_heldout")
+
+
+def is_edit_family(family: Any) -> bool:
+    """Any edit family, the eval-only splits included (edit_real_select, edit_real_test): bridge.EDIT_PREFIX. The
+    page check keys and names eval tasks with this, since EDIT_FAMILIES alone missed edit_real's eval splits."""
+    return str(family or "").startswith("edit_")
 # Languages a by_language table may name (spec §12.9). Any other key, which could be a repository or a
 # task id, is pooled into "other" so its episodes still count but its name never reaches the page.
 LANGUAGES = ("python", "javascript", "typescript", "go", "rust", "java", "kotlin", "scala", "c", "cpp", "csharp",
@@ -575,7 +581,7 @@ def eval_items(run_dir: Path) -> tuple[set[tuple[str, str]], set[str]]:
     unkeyed = 0
     for path in Path(run_dir).glob("transcripts/val/**/*.jsonl"):
         for rec in _read_jsonl(path):
-            if rec.get("family") in EDIT_FAMILIES:
+            if is_edit_family(rec.get("family")):
                 q = scrub(rec.get("question") or "")[:150]
                 key = (q, "") if len(q) >= 20 else None
             else:
@@ -595,7 +601,7 @@ def eval_names(run_dir: Path) -> tuple[set[str], set[str]]:
     repos: set[str] = set()
     for path in Path(run_dir).glob("transcripts/val/**/*.jsonl"):
         for rec in _read_jsonl(path):
-            if rec.get("family") in EDIT_FAMILIES:
+            if is_edit_family(rec.get("family")):
                 if isinstance(rec.get("task_id"), str):
                     ids.add(rec["task_id"])
                 if isinstance(rec.get("repo"), str):

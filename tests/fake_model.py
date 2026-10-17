@@ -190,14 +190,18 @@ class FakeModelServer:
             prompt_text = messages[-1]["content"]
             text = self.answer_for(model, prompt_text) if self.answer_for else self.answer(prompt_text)
         completion = fake_ids(text) + [rclient.IM_END_ID]
-        prompt = render(messages, self.thinking)
+        # the server's own setting, or a request that asks for thinking (plan step 11's medium-thinking arm)
+        thinking = self.thinking or bool((body.get("chat_template_kwargs") or {}).get("enable_thinking"))
+        prompt = render(messages, thinking)
         choice = {"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}
+        if thinking:
+            choice["message"]["reasoning"] = "fake thinking about the next step"
         out = {"id": f"chatcmpl-{time.monotonic_ns()}", "object": "chat.completion", "created": int(time.time()),
                "model": body["model"], "choices": [choice],
                "usage": {"prompt_tokens": len(prompt), "completion_tokens": len(completion),
                          "total_tokens": len(prompt) + len(completion),
                          "prompt_tokens_details": {"cached_tokens": 0},
-                         "completion_tokens_details": {"reasoning_tokens": 8 if self.thinking else 0}}}
+                         "completion_tokens_details": {"reasoning_tokens": 8 if thinking else 0}}}
         if body.get("logprobs"):
             lp = self.completion_logprob(model)
             choice["logprobs"] = {"content": [{"token": f"token_id:{i}", "logprob": lp, "bytes": None,

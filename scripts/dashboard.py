@@ -95,7 +95,7 @@ def deep_items(state: dict) -> tuple[set[tuple[str, str]], list[str], list[str],
             tasks, _ = evals.eval_set(name)
             keys = []
             for t in tasks:
-                if t.family in dashboard.EDIT_FAMILIES:  # keyed by the task text, as eval_items does
+                if dashboard.is_edit_family(t.family):  # keyed by the task text, as eval_items does
                     q = dashboard.scrub(t.question)[:150]
                     keys.append((q, "") if len(q) >= 20 else None)
                     task_ids.add(t.task_id)
@@ -192,6 +192,24 @@ def cmd_waiting(args) -> int:
     return 0 if r["ok"] else 3
 
 
+def cmd_baselines(args) -> int:
+    """Plan step 11's page (rlm_rl/baseline_dashboard.py): its own output folder, so it never touches the training
+    dashboard's page or publisher.json."""
+    from rlm_rl import baseline_dashboard  # noqa: WPS433
+
+    results = results_dir(args)
+    out = Path(args.out_dir) / "page.html"
+    r = baseline_dashboard.build(results / args.run, out, seed_roots=seed_roots(results), pot=pot_arg(args),
+                                 dry_run=is_dry(args, results))
+    c = r.get("checked") or {}
+    if r["ok"]:
+        print(f"BUILT run={args.run} page={r['page']} size={r['bytes'] // 1024}KB check=passed (seeds {c.get('seeds')}, "
+              f"eval tasks {c.get('eval_tasks')}, edit task ids {c.get('task_ids')}, repos {c.get('repos')})")
+        return 0
+    print(f"BLOCKED run={args.run} check=FAILED {json.dumps(r['findings'])} (nothing was written)")
+    return 3
+
+
 def cmd_check(args) -> int:
     page = Path(args.page).read_text(encoding="utf-8")
     results = results_dir(args)
@@ -202,7 +220,10 @@ def cmd_check(args) -> int:
         task_ids, repos = dashboard.eval_names(results / args.run)
         notes += sorted(unkeyed)
         if args.deep:
-            extra, prompts, more, more_ids, more_repos = deep_items(dashboard.read_state(results / f"{args.run}.json"))
+            # a baseline run (plan step 11) has no training state: its eval set is named instead
+            state = ({"config": {"selection": args.eval_set}} if args.eval_set
+                     else dashboard.read_state(results / f"{args.run}.json"))
+            extra, prompts, more, more_ids, more_repos = deep_items(state)
             items |= extra
             task_ids |= more_ids
             repos |= more_repos
@@ -301,14 +322,20 @@ def main() -> int:
     p.add_argument("--lr", type=float, help="production's learning rate")
     p.add_argument("--pot-left", type=float, help="W&B inference left, $ (from W&B's billing page)")
     p.add_argument("--out-dir", default=str(OUT_DIR))
+    p = sub.add_parser("baselines", help="build and check plan step 11's baselines page")
+    p.add_argument("run")
+    common(p)
+    p.set_defaults(out_dir=str(RESULTS / "dashboard-step11"))
     p = sub.add_parser("check", help="scan a built page for keys, seeds, eval items and edit eval task ids")
     p.add_argument("page")
     p.add_argument("--run", help="also check against this run's eval transcripts")
     p.add_argument("--deep", action="store_true", help="also build the eval sets from their seeds and check every question")
+    p.add_argument("--eval-set", help="with --deep, for a run without training state (the step 11 baselines): its eval set")
     p.add_argument("--results")
     p.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    return {"build": cmd_build, "wait": cmd_wait, "waiting": cmd_waiting, "check": cmd_check}[args.command](args)
+    return {"build": cmd_build, "wait": cmd_wait, "waiting": cmd_waiting, "check": cmd_check,
+            "baselines": cmd_baselines}[args.command](args)
 
 
 if __name__ == "__main__":

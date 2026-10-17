@@ -1,0 +1,301 @@
+<title>Baseline Run Results</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column of numbered report sections under a verdict strip; tables scroll inside their own frames. Same faces and blues as the live dashboard, so the two read as one project. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --wash: #eaeef4; --ink: #121a26; --ink-2: #4b5667; --muted: #7c8797;
+  --line: #dfe4eb; --accent: #2a6fcf; --accent-wash: #e3edfb;
+  --good: #146c2e; --good-wash: #e2f3e6; --warn: #8a5a00; --warn-wash: #fbf0d6; --bad: #a92c2c; --bad-wash: #fbe4e2;
+  --bar: #2a6fcf; --bar-2: #c2cbd8; --bar-bad: #c23b3b;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --s-1: 0.8rem; --s0: 0.95rem; --s1: 1.1rem; --s2: 1.45rem; --s3: 2.1rem;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1016; --panel: #131922; --wash: #1a212c; --ink: #e7ecf3; --ink-2: #a9b3c1; --muted: #78838f;
+    --line: #242c38; --accent: #5b9cf0; --accent-wash: #16263d;
+    --good: #5fcf7d; --good-wash: #13281a; --warn: #f0c060; --warn-wash: #2c2312; --bad: #f08a80; --bad-wash: #321816;
+    --bar: #5b9cf0; --bar-2: #3a4555; --bar-bad: #ec6b62;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1016; --panel: #131922; --wash: #1a212c; --ink: #e7ecf3; --ink-2: #a9b3c1; --muted: #78838f;
+  --line: #242c38; --accent: #5b9cf0; --accent-wash: #16263d;
+  --good: #5fcf7d; --good-wash: #13281a; --warn: #f0c060; --warn-wash: #2c2312; --bad: #f08a80; --bad-wash: #321816;
+  --bar: #5b9cf0; --bar-2: #3a4555; --bar-bad: #ec6b62;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--s0); line-height: 1.55; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: grid; gap: 28px; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--s-1); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 4px 0 0; font-family: var(--font-display); font-weight: 800; font-size: var(--s3); line-height: 1.1; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0; font-family: var(--font-display); font-weight: 750; font-stretch: 106%; font-size: var(--s2); text-wrap: balance; display: flex; gap: 10px; align-items: baseline; }
+h2 .no { font-family: var(--font-data); font-size: var(--s-1); color: var(--muted); font-weight: 600; }
+h3 { margin: 0; font-size: var(--s1); font-weight: 650; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: var(--s1); color: var(--ink-2); max-width: 70ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--s-1); color: var(--ink-2); }
+.meta b { color: var(--ink); font-weight: 600; }
+header { display: grid; gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 4px; align-content: start; }
+.tile .lab { font-size: var(--s-1); color: var(--ink-2); font-weight: 600; }
+.tile .val { font-family: var(--font-display); font-size: var(--s3); font-weight: 750; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.tile .val.bad { color: var(--bad); }
+.tile .val.good { color: var(--good); }
+.tile .ctx { font-size: var(--s-1); color: var(--ink-2); }
+section { display: grid; gap: 14px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.callout { border-radius: var(--r); padding: 14px 16px; display: grid; gap: 8px; }
+.callout.bad { background: var(--bad-wash); }
+.callout.warn { background: var(--warn-wash); }
+.callout.info { background: var(--accent-wash); }
+.callout h3 { font-size: var(--s0); }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: var(--s-1); }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.74rem; letter-spacing: 0.02em; white-space: nowrap; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.steps td, table.steps th { padding: 5px 7px; }
+table.steps tr.hl td { background: var(--warn-wash); }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 650; white-space: nowrap; }
+.pill.good { background: var(--good-wash); color: var(--good); }
+.pill.warn { background: var(--warn-wash); color: var(--warn); }
+.pill.bad { background: var(--bad-wash); color: var(--bad); }
+.pill.wait { background: var(--wash); color: var(--ink-2); }
+code, pre { font-family: var(--font-data); font-size: 0.82em; }
+code { background: var(--wash); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--wash); border-radius: var(--r); padding: 10px 12px; overflow-x: auto; white-space: pre; }
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: minmax(0, 15em) 1fr 4.5em; gap: 10px; align-items: center; font-size: var(--s-1); }
+.bar .track { height: 12px; background: var(--wash); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--bar-2); border-radius: 3px; }
+.bar .fill.src { background: var(--bar); }
+.bar .fill.bad { background: var(--bar-bad); }
+.bar .v { font-family: var(--font-data); text-align: right; font-variant-numeric: tabular-nums; }
+.note { font-size: var(--s-1); color: var(--muted); }
+footer { font-size: var(--s-1); color: var(--ink-2); display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 560px) {
+  .bar { grid-template-columns: 1fr 4em; }
+  .bar .name { grid-column: 1 / -1; }
+  .panel { padding: 14px; }
+}
+</style>
+
+<style>
+blockquote { margin: 0; padding: 12px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); display: grid; gap: 8px; font-size: var(--s-1); color: var(--ink-2); }
+blockquote p { max-width: none; }
+blockquote ul { max-width: none; }
+section h2 { margin-top: 6px; }
+.summary p { max-width: 72ch; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+td code, th code { white-space: nowrap; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">RLM production plan · step 11 · 2026-10-16/17</div>
+    <h1>Step 11 results: baselines</h1>
+    <p class="lede">The untrained base Qwen3.8-27B on production's 64-task selection set, three ways: as an RLM with thinking off, reading the context directly, and as an RLM with root thinking at medium. Watched live on the <a href="https://claude.ai/artifact/KLzyWe43mQoHtV4Mn35r3q">step 11 dashboard</a>.</p>
+    <div class="meta"><span>Run <b>step11-v1</b></span><span>W&amp;B serverless, sub-calls on the base model</span><span>Source: <code>documentation/step-11-results.md</code></span></div>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="lab">Base model as an RLM</div><div class="val">42.5%</div><div class="ctx">80 episodes, ± 5.5. Thinking off</div></div>
+    <div class="tile"><div class="lab">Reading directly</div><div class="val">59.1%</div><div class="ctx">44 of 48 read tasks, ± 7.4</div></div>
+    <div class="tile"><div class="lab">RLM, thinking medium</div><div class="val good">59.4%</div><div class="ctx">64 episodes; +17.2 ± 6.8 over off</div></div>
+    <div class="tile"><div class="lab">W&amp;B inference</div><div class="val">$5.89</div><div class="ctx">Measured; up to $8.04 with failed tries. Ceiling $12</div></div>
+  </div>
+
+  <div class="callout warn">
+    <h3>Three calls for Rishi before production</h3>
+    <p>A: fix the tool-call failure (accept <code>&lt;function=python&gt;</code> code, $0, then rerun the RLM arm for ~$2.40). B: thinking for the production root (medium by 11b's rule, +17 points). C: edit turns 20 → 30 (the rule says yes; decide after A). Details in §11.</p>
+  </div>
+
+<blockquote><p><b>Step 11 of production-build-plan.md</b> (research §8.2, spec §12.10). Run on 2026-10-16 and 17 UTC on Rishi's PC, end to end from a Claude thread while Rishi was away: episodes in WSL and Docker, the dashboard and this write-up from Windows.</p><p><b>Decisions applied:</b></p><ul><li><b>11a</b> (Rishi, 2026-10-16): sub-calls use the base model, as in training. Every arm here does.</li><li><b>11b</b> (Rishi, 2026-10-16): one extra arm, the base model as an RLM with root thinking at <code>medium</code>. Sub-calls stay off.</li><li>The set-up the coordinator passed on: prompt v2, the 8,000-character REPL output cap, the step 10 limiter (at most 12 requests in flight to the base model, starts at least 0.25 s apart, 8 tries from 4 s), and a $12 hard ceiling on W&amp;B inference. The ~$2 base eval on the second seed's held-out tasks was not run; it waits on Rishi's answer in the project chat.</li></ul><p><b>This write-up as a page:</b> <a href="https://claude.ai/artifact/TfAMvuzFTTKCJqrk5nm25P">Baseline Run Results</a>.</p><p><b>Dashboards:</b> step 11 has its own page, <a href="https://claude.ai/artifact/KLzyWe43mQoHtV4Mn35r3q">Step 11 Baselines</a>. Step 10's page was frozen first as <a href="https://claude.ai/artifact/Cto75Tz4h4A4KXjthBAXhy">Step 10 Dashboard</a>. The original live link (<a href="https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3">Jrm5PZd6VQNJT7cpkM9ou3</a>) was not touched. Both new pages are private until shared from their Share menu.</p><p><b>W&amp;B inference:</b> $5.89 measured by the script ($2.40 RLM arm, $1.09 direct reading, $2.39 medium thinking). I also counted up to $2.15 more against the ceiling, so $8.04 in all, inside the $12 ceiling. That extra is the diagnosis probes and failed tries W&amp;B may have billed (§8). The billing page decides which it is (§9).</p><p><b>Status:</b> complete. Three things need Rishi's call before production (§11).</p><p>Anything marked <i>(mine)</i> is my choice, not the plan's. Anything marked <i>(inferred)</i> hasn't been checked.</p></blockquote>
+<section class="summary"><h2>Summary</h2>
+<p><b>Medium thinking clears the bar: +17 points over thinking off (59.4% vs 42.2% over the 64 tasks, ± 6.8, paired by task).</b> Reading gains 15 points and editing 25. Production would think at <code>medium</code> under 11b's rule, at about 1.25× the cost per step. Part of the gain is that thinking mostly stops a format failure, described next.</p>
+<p><b>The base model often answers in its native tool-call syntax instead of a <code>```python</code> block, and those turns do nothing</b> (§3). With thinking off this hit 18 of 48 read episodes and 17 of 32 edit episodes, mostly on the very first turn. Episodes that did it were right 17-24% of the time, against 57-67% for those that didn't. It is a prompt v2 effect: the system prompt now lists the coding tools, and Qwen3.8 is trained to call listed tools with <code>&lt;tool_call&gt;</code> tags. The second seed's prompt v1 almost never triggered it. Half of these turns carry runnable Python inside the tags.</p>
+<p><b>Reading directly beat the base RLM on this set</b> (59% vs 43% over the 44 read tasks both finished; 54% for medium thinking). The gap is all at levels 1-2, where the text is 35-100K characters and simply fits. At levels 3-5 the RLM is ahead, 55% vs 45%, on small numbers. Every selection-set context fits the model's window, so this set can't show the RLM's real advantage; the final eval's 1M-character tasks can.</p>
+<p><b>Edit episodes cost far less than planned, so the $157 buys more steps.</b> An edit episode costs $0.035 (synth $0.024, real $0.042), against the plan's guesses of $0.06 and $0.15. At production's mix a step costs about $0.95 with thinking off and about $1.19 at medium. That is ~165 or ~130 steps for $157, against the plan's 75 <i>(inferred: training usually lengthens episodes)</i>. Steps also look shorter than feared, about 15-20 minutes rather than 30-35 <i>(inferred)</i>.</p>
+<p><b>Rate limiting is fixed, but W&amp;B now fails about 27% of tries with HTTP 500</b> (§8). There were 0 rate-limit (429) responses in 2,645 tries, so the step 10 limiter works. There were 712 HTTP 500s ("Failed to generate completions"); retries recovered every RLM episode (0 of 144 lost). Direct reading lost its 4 largest contexts to 500s and 120-second proxy timeouts (524).</p>
+<div class="panel scroll"><table><thead><tr><th>Done-when check (plan step 11)</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+<tr><td>Both baselines logged with full transcripts, and the thinking arm</td><td><b>Done</b></td><td>80 RLM, 44 of 48 direct and 64 medium-thinking episodes, every try in <code>results/step11-v1/transcripts/val/</code></td></tr>
+<tr><td>Cost per edit episode measured; production's step count re-estimated</td><td><b>Done: cheaper</b></td><td>$0.035 an edit episode (plan $0.06-0.15). ~$0.95 a step, ~165 steps for $157 (plan ~$2.10, ~75)</td></tr>
+<tr><td>Over ~20% of edit episodes at the 20-turn cap unresolved → 30 turns</td><td><b>Over: 56%</b> (thinking off), <b>25%</b> (medium)</td><td>18 of 32, mostly tool-call loops; 5 of 15 (33%) among episodes without them (§4)</td></tr>
+<tr><td>Base under ~15% on <code>edit_real</code> level 1 → lower <code>edit_real</code> share for 20 steps</td><td><b>Pass: 40%</b> (off), <b>80%</b> (medium)</td><td>4 of 10 off (5 before a detector false positive), 4 of 5 medium</td></tr>
+<tr><td>11b settled: medium only at about +12 points</td><td><b>+17.2 ± 6.8</b></td><td>64 tasks paired by task; read +14.6 ± 8.4, edit +25.0 ± 10.2 (§6)</td></tr>
+</tbody></table></div>
+</section>
+<section><h2><span class="no">01</span>What ran</h2>
+<div class="panel scroll"><table><thead><tr><th>Arm</th><th>What</th><th>Episodes</th><th>Accuracy</th><th>Cost</th></tr></thead><tbody>
+<tr><td><code>rlm</code></td><td>Base Qwen3.8-27B as an RLM, environment v2, prompt v2, thinking off. The 16 edit tasks run twice</td><td>80 (48 read + 32 edit)</td><td><b>42.5% ± 5.5</b></td><td class="n">$2.40</td></tr>
+<tr><td><code>direct</code></td><td>The base model reading the whole context in one call, thinking off, read tasks only</td><td>44 of 48 (4 lost, §8)</td><td><b>59.1% ± 7.4</b></td><td class="n">$1.09</td></tr>
+<tr><td><code>rlm_medium</code></td><td>As <code>rlm</code>, with root thinking at <code>medium</code>; edit tasks once</td><td>64 (48 read + 16 edit)</td><td><b>59.4% ± 6.1</b></td><td class="n">$2.39</td></tr>
+</tbody></table></div>
+<p>The task set is <code>selection-v2</code>, production's selection set (spec §12.10). It has 48 read tasks: aggregation 17, call graph 7, needle 7, repo localization 9, tickets 8, across levels 1-5. It also has 16 edit tasks: 10 <code>edit_real</code> from held-out repositories (Go 4, JavaScript 3, Python 3; 5 at level 1) and 6 generated <code>edit_synth</code> tasks (Python, levels 1-5). The contexts run from 34K to 423K characters.</p>
+<p><b>Direct reading</b> <i>(mine)</i>: one system and user message carrying the question, the whole context between <code>&lt;context&gt;</code> tags, the question again, and "end your reply with <code>FINAL ANSWER: …</code>". The model gets 6,144 output tokens at temperature 1.0, as the RLM's root does, and may reason in writing first. The answer after the last <code>FINAL ANSWER:</code> is scored by the same scorer as a submitted value. No detectors run, since there is no REPL. 10 of the 44 direct episodes wrote past 6,144 tokens without an answer, which counts as wrong.</p>
+<p><b>Timeline (UTC).</b></p>
+<div class="panel scroll"><table><thead><tr><th>Time</th><th>What happened</th></tr></thead><tbody>
+<tr><td>22:41</td><td>Rishi's go-ahead; I read the plan and wrote the script</td></tr>
+<tr><td>22:53</td><td>$0 dry run of all three arms, 192 episodes, clean</td></tr>
+<tr><td>23:01</td><td>Step 10's page frozen as its own artifact</td></tr>
+<tr><td>23:07</td><td>Session 1 live: <code>rlm</code> and <code>direct</code> together</td></tr>
+<tr><td>23:21</td><td>90% of both arms done. The tool-call failure and W&amp;B's 500s found (§3, §8)</td></tr>
+<tr><td>23:43</td><td>Session 1 stopped by hand: the 4 largest direct contexts kept failing (§8), and the last RLM episode, a Go edit task, was mid-cell</td></tr>
+<tr><td>23:48</td><td>Session 2: the last <code>rlm</code> episode and <code>rlm_medium</code>. The spend gate refused 34 of the medium arm's episodes at once (§10); fixed</td></tr>
+<tr><td>00:24</td><td>Session 3: the 34 medium episodes. Done 00:30</td></tr>
+</tbody></table></div>
+</section>
+<section><h2><span class="no">02</span>Results</h2>
+<p><b>By family</b> (correct of scored):</p>
+<div class="panel scroll"><table><thead><tr><th>Family</th><th>RLM, off</th><th>Direct</th><th>RLM, medium</th></tr></thead><tbody>
+<tr><td>aggregation</td><td class="n">8 / 17</td><td class="n">5 / 15</td><td class="n">10 / 17</td></tr>
+<tr><td>callgraph</td><td class="n">1 / 7</td><td class="n">6 / 7</td><td class="n">3 / 7</td></tr>
+<tr><td>needle</td><td class="n">2 / 7</td><td class="n">4 / 7</td><td class="n">3 / 7</td></tr>
+<tr><td>repo_loc_select</td><td class="n">4 / 9</td><td class="n">7 / 9</td><td class="n">5 / 9</td></tr>
+<tr><td>tickets_all</td><td class="n">1 / 4</td><td class="n">1 / 3</td><td class="n">2 / 4</td></tr>
+<tr><td>tickets_customer</td><td class="n">4 / 4</td><td class="n">3 / 3</td><td class="n">4 / 4</td></tr>
+<tr><td><b>Read, all</b></td><td><b>20 / 48 (42%)</b></td><td><b>26 / 44 (59%)</b></td><td><b>27 / 48 (56%)</b></td></tr>
+<tr><td>edit_synth</td><td class="n">8 / 12</td><td></td><td class="n">5 / 6</td></tr>
+<tr><td>edit_real_select</td><td class="n">6 / 20</td><td></td><td class="n">6 / 10</td></tr>
+<tr><td><b>Edit, all</b></td><td><b>14 / 32 (44%)</b></td><td></td><td><b>11 / 16 (69%)</b></td></tr>
+</tbody></table></div>
+<p><b>Read tasks by level:</b></p>
+<div class="panel scroll"><table><thead><tr><th>Level</th><th>RLM, off</th><th>Direct</th><th>RLM, medium</th></tr></thead><tbody>
+<tr><td>1 (~35-50K chars)</td><td class="n">5 / 12</td><td class="n">10 / 12</td><td class="n">7 / 12</td></tr>
+<tr><td>2 (~65-100K)</td><td class="n">3 / 12</td><td class="n">7 / 12</td><td class="n">6 / 12</td></tr>
+<tr><td>3 (~115-170K)</td><td class="n">5 / 10</td><td class="n">4 / 10</td><td class="n">5 / 10</td></tr>
+<tr><td>4 (~240-280K)</td><td class="n">4 / 7</td><td class="n">3 / 6</td><td class="n">4 / 7</td></tr>
+<tr><td>5 (~350-425K)</td><td class="n">3 / 7</td><td class="n">2 / 4</td><td class="n">5 / 7</td></tr>
+</tbody></table></div>
+<p>The ticket tasks are the held-out generator family production never trains on. The base model gets <code>tickets_customer</code> right every time in every arm, and <code>tickets_all</code> 1-2 times in 4.</p>
+</section>
+<section><h2><span class="no">03</span>The tool-call failure</h2>
+<p>Prompt v2's system prompt lists seven coding tools as Python signatures (spec §12.1). Qwen3.8 is trained to call tools that a system prompt lists, in its own XML syntax. So on many turns the base model writes <code>&lt;tool_call&gt;</code> tags instead of a <code>```python</code> block. Sometimes it writes <code>&lt;tool_call&gt;&lt;function=python&gt;</code> around perfectly good code. Sometimes it writes the tags around nothing, then repeats the empty tags turn after turn. Either way the REPL finds no <code>```python</code> block, returns the "No <code>```python</code> code block found" error and burns the turn.</p>
+<div class="panel scroll"><table><thead><tr><th></th><th>RLM, off: read</th><th>RLM, off: edit</th><th>RLM, medium: read</th><th>RLM, medium: edit</th></tr></thead><tbody>
+<tr><td>Episodes with tool-call syntax</td><td>18 of 48</td><td>17 of 32</td><td>6 of 48</td><td>12 of 16</td></tr>
+<tr><td>Turns with it</td><td>181 of 438 (41%)</td><td>245 of 559 (44%)</td><td>27 of 378 (7%)</td><td>147 of 266 (55%)</td></tr>
+<tr><td>It started on the first turn</td><td>15 of 18</td><td>15 of 17</td><td>4 of 6</td><td>10 of 12</td></tr>
+<tr><td>Correct, with it</td><td>3 of 18 (17%)</td><td>4 of 17 (24%)</td><td>2 of 6 (33%)</td><td>8 of 12 (67%)</td></tr>
+<tr><td>Correct, without it</td><td>17 of 30 (57%)</td><td>10 of 15 (67%)</td><td>25 of 42 (60%)</td><td>3 of 4 (75%)</td></tr>
+</tbody></table></div>
+<ul><li><b>The tool-call failure is most of the gap between the RLM and direct reading.</b> Without it the RLM arm's read accuracy (57%) is about direct reading's (59%).</li><li><b>It is new with prompt v2.</b> The second seed ran prompt v1, which lists no tools: 31 of its 4,916 training turns (0.6%) had the tags, against 426 of this run's 997 (43%).</li><li><b>Of the first tool-call turn in each episode,</b> 16 of 35 held runnable Python inside <code>&lt;function=python&gt;</code>, 4 held a <code>```python</code> block (which ran), and 15 held no code at all.</li><li><b>Thinking mostly prevents it on read tasks</b> (6 of 48 episodes), but not on edit tasks (12 of 16), where it recovers: most of those episodes still finished.</li></ul>
+<p><b>What it means for production</b> <i>(mine)</i>. Training would see an untrained model wasting a third to half of its turns on syntax the environment can't run. GRPO would likely train it away, since those episodes score lower, but the first steps' gains would then be format learning, and they would flatter the trained model against this base number. It is cheap to fix before production (§11, decision A).</p>
+</section>
+<section><h2><span class="no">04</span>Editing (plan step 11's two edit gates)</h2>
+<div class="panel scroll"><table><thead><tr><th></th><th>RLM, off (32)</th><th>RLM, medium (16)</th></tr></thead><tbody>
+<tr><td>Resolved: <code>edit_real</code></td><td class="n">6 / 20 (30%)</td><td class="n">6 / 10 (60%)</td></tr>
+<tr><td>… level 1</td><td><b>4 / 10 (40%)</b>; 5 / 10 before a detector false positive</td><td><b>4 / 5 (80%)</b></td></tr>
+<tr><td>… by language</td><td>Go 4/8, JavaScript 2/6, Python 0/6</td><td>Go 3/4, JavaScript 1/3, Python 2/3</td></tr>
+<tr><td>Resolved: <code>edit_synth</code></td><td class="n">8 / 12 (67%)</td><td class="n">5 / 6 (83%)</td></tr>
+<tr><td>Hit the 20-turn cap</td><td class="n">19 (59%)</td><td class="n">8 (50%)</td></tr>
+<tr><td><b>At the cap and unresolved</b></td><td><b>18 (56%)</b></td><td><b>4 (25%)</b></td></tr>
+<tr><td>… among episodes without tool-call syntax</td><td>5 of 15 (33%)</td><td>1 of 4</td></tr>
+<tr><td>Submitted</td><td class="n">16 (50%)</td><td class="n">13 (81%)</td></tr>
+<tr><td>Ran the tests before submitting</td><td class="n">44%</td><td class="n">56%</td></tr>
+<tr><td>Sub-calls an episode</td><td class="n">0.1</td><td class="n">0</td></tr>
+<tr><td>Turns an episode</td><td class="n">17.5</td><td class="n">16.6</td></tr>
+</tbody></table></div>
+<ul><li><b>The turn-cap gate is over 20%, so by the plan's rule edit turns go to 30.</b> The cause is mostly the tool-call loops, though: fixing those (decision A) should bring most of these episodes in under 20. Even without loops, 5 of 15 hit the cap, which is still over 20%. Edit episodes cost $0.035, so 10 more turns would cost little <i>(inferred)</i>.</li><li><b>The <code>edit_real</code> level 1 gate passes</b> at 40% (thinking off) and 80% (medium), so <code>edit_real</code> keeps its 25% share from the start.</li><li><b>The base model never uses sub-calls on edit tasks</b> (2 sub-calls in 48 edit episodes). The RLM habit for editing, surveying with <code>llm_batch</code> and reviewing a change with <code>llm</code>, would have to come entirely from training.</li><li><b>A detector false positive zeroed one resolved JavaScript episode.</b> The <code>test_aware</code> check fired on a scratch <code>reproduce.js</code> the model left in the repository, which ends with <code>setTimeout(() =&gt; process.exit(0), 3000)</code>. That isn't test-detection code. Three <code>escape_attempt</code> hits (two blocked file writes, one blocked process) all landed on wrong answers, so they changed nothing.</li></ul>
+</section>
+<section><h2><span class="no">05</span>Direct reading against the RLM</h2>
+<div class="panel scroll"><table><thead><tr><th>Read tasks both finished (44)</th><th>Direct</th><th>RLM, off</th><th>RLM, medium</th></tr></thead><tbody>
+<tr><td>All</td><td class="n">59.1%</td><td class="n">43.2% (−15.9 ± 9.7)</td><td class="n">54.5% (−4.5 ± 9.7)</td></tr>
+<tr><td>Levels 1-2 (24)</td><td class="n">70.8%</td><td class="n">33.3%</td><td class="n">54.2%</td></tr>
+<tr><td>Levels 3-5 (20)</td><td class="n">45.0%</td><td class="n">55.0% (+10 ± 14)</td><td class="n">55.0% (+10 ± 14)</td></tr>
+</tbody></table></div>
+<ul><li><b>Every selection-set context fits the served window,</b> up to 178K prompt tokens in this run. The plan's direct-reading baseline assumed degradation within the window; at these sizes there is little. Call graph (6 of 7 direct, 1 of 7 RLM) and repo localization (7 of 9 vs 4 of 9) are where reading the whole text wins most.</li><li><b>The RLM pulls ahead only at levels 3-5,</b> and the sample there is too small to call (± 14).</li><li><b>What this means for the claim that the RLM setup helps:</b> for the untrained model at these sizes, it doesn't yet. The claim rests on training, and on the final eval's 1M-character tasks, which don't fit any window. The 4 lost direct episodes were the largest contexts (260-423K characters), exactly where direct reading should fall behind (§8). Step 13, off W&amp;B, can run them without the proxy timeout.</li></ul>
+</section>
+<section><h2><span class="no">06</span>11b: medium thinking</h2>
+<div class="panel scroll"><table><thead><tr><th></th><th>Thinking off</th><th>Medium</th><th>Difference (paired by task)</th></tr></thead><tbody>
+<tr><td>All 64 tasks</td><td class="n">42.2%</td><td class="n">59.4%</td><td><b>+17.2 ± 6.8</b></td></tr>
+<tr><td>Read (48)</td><td class="n">41.7%</td><td class="n">56.3%</td><td class="n">+14.6 ± 8.4</td></tr>
+<tr><td>Edit (16)</td><td class="n">43.8%</td><td class="n">68.8%</td><td class="n">+25.0 ± 10.2</td></tr>
+<tr><td>Thinking tokens a read episode</td><td class="n">0</td><td class="n">3,600</td><td></td></tr>
+<tr><td>Root output tokens a read episode</td><td class="n">2,170</td><td class="n">5,272</td><td class="n">2.4×</td></tr>
+<tr><td>Cost a read / edit episode</td><td class="n">$0.026 / $0.035</td><td class="n">$0.036 / $0.042</td><td class="n">1.35× / 1.2×</td></tr>
+<tr><td>Production step at spec §12.7's mix</td><td class="n">~$0.95</td><td class="n">~$1.19</td><td class="n">1.25×</td></tr>
+</tbody></table></div>
+<ul><li><b>By the plan's rule production thinks at <code>medium</code>:</b> +17 points is above the ~12-point bar, at about 2.5 standard errors.</li><li><b>How much is the format failure?</b> On episodes without tool-call syntax the two arms are closer on reading (60% medium vs 57% off). So a fair share of medium's read gain is that thinking stops the bad first turn. Editing gains with or without it.</li><li><b>Thinking sometimes eats the whole turn.</b> 22 of 644 medium turns (3.4%) hit the 3,072- or 4,096-token cap, 17 of them spent entirely on thinking with no reply, in 13 episodes (6 still correct). Thinking off had none. Production at <code>medium</code> would see the same, so a larger read-turn cap is worth considering <i>(mine)</i>. Medium cost 1.25× a step, less than step 2's 1.6× guess.</li><li><b>Production would train on the thinking tokens too</b> <i>(inferred from step 2 §6: logprobs cover them and the token-id rebuild works)</i>. That is untested in a train call, so a fake-model dry run with thinking on comes before production if Rishi picks medium.</li></ul>
+</section>
+<section><h2><span class="no">07</span>Cost and time</h2>
+<p><b>Per episode (measured, thinking off):</b> read $0.026 (aggregation $0.033, call graph $0.024, needle $0.008, repo localization $0.027, tickets $0.030). Edit synth $0.024 and edit real $0.042, against the plan's guesses of $0.06 and $0.15. Edit episodes are cheap because their turns are short (1,760 output tokens an episode, against the plan's ~11K). Prompts are uncached: 74K root prompt tokens an edit episode, $0.03 of the $0.04.</p>
+<p><b>Production re-estimated</b> (spec §12.7's mix, 32 episodes a step, the RLM arm's cost per family):</p>
+<div class="panel scroll"><table><thead><tr><th></th><th>Thinking off</th><th>Medium</th></tr></thead><tbody>
+<tr><td>A step, families at the selection set's levels</td><td class="n">$0.95</td><td class="n">$1.19</td></tr>
+<tr><td>A step, at level 1 costs</td><td class="n">$0.70</td><td class="n">$0.98</td></tr>
+<tr><td>Steps for the $157 ceiling</td><td>~165 (~225 at level 1 costs)</td><td class="n">~130 (~160)</td></tr>
+<tr><td>A selection-set eval (64 tasks)</td><td class="n">$1.83</td><td class="n">$2.39</td></tr>
+<tr><td>Plan (code-editing-plan.md §10.2)</td><td>~$2.10 a step, ~75 steps, ~$3.50 an eval</td><td></td></tr>
+</tbody></table></div>
+<p><i>(inferred)</i> Training changes behaviour: in step 10 sub-calls rose ~20% over 20 steps, and longer transcripts cost more. A trained model that tests its edits will also run longer. A working range is ~$1-1.5 a step, so ~100-150 steps, well over the plan's 75. Two stop rules (plateau, saturation) will likely end the run before the money does. The $30 eval budget covers 12-16 selection evals.</p>
+<p><b>Time (re-measured with the step 10 limiter).</b></p>
+<div class="panel scroll"><table><thead><tr><th></th><th>Median</th><th>p90</th><th>Max</th></tr></thead><tbody>
+<tr><td>RLM read episode</td><td class="n">231 s</td><td class="n">316 s</td><td class="n">728 s</td></tr>
+<tr><td>Medium read episode</td><td class="n">208 s</td><td class="n">334 s</td><td class="n">407 s</td></tr>
+<tr><td><code>edit_synth</code> episode</td><td class="n">75 s</td><td></td><td class="n">164 s</td></tr>
+<tr><td><code>edit_real</code> episode (Go: 334-608 s)</td><td class="n">238 s</td><td class="n">435 s</td><td class="n">608 s</td></tr>
+<tr><td>Go grader</td><td class="n">3 min</td><td></td><td></td></tr>
+<tr><td>Root call, retries included</td><td class="n">4.6 s</td><td class="n">17 s</td><td class="n">360 s</td></tr>
+</tbody></table></div>
+<p>All 80 RLM episodes started together, more than two production steps' worth, and 90% were done in 14 minutes. A production step is its slowest episode plus grading and training, so about 15-20 minutes <i>(inferred)</i>, against the plan's 30-35. The base model rarely ran the slow Go test suites (Go tests here took 1-2 minutes, not the 15-30 measured under the data build's load). A trained model that tests every change will be slower. <b>~130-165 steps at 15-20 minutes is 35-55 hours of the PC running.</b></p>
+</section>
+<section><h2><span class="no">08</span>Infra: rate limits and W&amp;B's errors</h2>
+<div class="panel scroll"><table><thead><tr><th></th><th>Tries</th><th>429 (rate limited)</th><th>5xx</th><th>Episodes lost</th></tr></thead><tbody>
+<tr><td>Session 1: <code>rlm</code></td><td class="n">1,459</td><td class="n">0</td><td class="n">363</td><td class="n">0</td></tr>
+<tr><td>Session 1: <code>direct</code></td><td class="n">86</td><td class="n">0</td><td class="n">42</td><td class="n">4</td></tr>
+<tr><td>Session 2: <code>rlm</code>, <code>rlm_medium</code></td><td class="n">679</td><td class="n">0</td><td>195 (all HTTP 500)</td><td class="n">0</td></tr>
+<tr><td>Session 3: <code>rlm_medium</code></td><td class="n">421</td><td class="n">0</td><td>112 (all HTTP 500)</td><td class="n">0</td></tr>
+<tr><td><b>All</b></td><td><b>2,645</b></td><td><b>0</b></td><td><b>712 (27%)</b></td><td><b>4 of 192</b></td></tr>
+</tbody></table></div>
+<ul><li><b>The step 10 limiter fixed rate limiting:</b> 0 429s in 2,645 tries (step 10 had 3,103). The cost is pacing time: a medium-arm session spent 17 minutes in total, summed over episodes, waiting for start times.</li><li><b>W&amp;B failed 27% of tries with HTTP 500, "Failed to generate completions".</b> Step 10 saw almost none (0-1 a step). The client counted statuses only from session 2 on; there, every failure was a 500. Retries (8 tries from 4 s) recovered every RLM episode. <i>(inferred)</i> It may be load on W&amp;B's side tonight, or our 12-in-flight cap; production's per-step infra numbers will show it.</li><li><b>Requests that run longer than 120 seconds fail with Cloudflare's 524.</b> I measured this with a probe: the largest context (126K prompt tokens) answered in 52 s with a 16-token answer, but timed out at 120 s with a 4,900-token answer. Direct reading of the largest contexts needs that long, so 4 direct episodes (260-423K characters) failed 8 tries each. Streaming would avoid the timeout, but W&amp;B's gateway can't parse a streamed reply through ART's client (it returned a 500 "Failed to parse response"). RLM turns finish well inside 120 s.</li><li><b>The largest successful prompt was 177,892 tokens,</b> so the served window is over 128K.</li><li><b>Billing of failed tries is unknown.</b> A 524'd request may have finished on W&amp;B's side and been billed. I counted an upper bound against the ceiling: $1.92 for the 32 failed direct tries on the 4 largest contexts, priced as full requests, and $0.23 for the probes. The billing page settles it (§9).</li></ul>
+</section>
+<section><h2><span class="no">09</span>The billing check (for Rishi)</h2>
+<p>The balance before step 11 was about $201.02 (step 10's $201.33 less its $0.31 follow-ups). If W&amp;B bills only completed requests, the page should now show about <b>$195.1 left</b> ($5.89 here plus ~$0.06 of completed probes). If it bills failed tries in full, it could be as low as about <b>$193.0</b>. A reading between those also says how much a 5xx costs, which matters for production at 27% failed tries.</p>
+</section>
+<section><h2><span class="no">10</span>What I built and fixed (all $0, tested)</h2>
+<div class="panel scroll"><table><thead><tr><th>File</th><th>What</th></tr></thead><tbody>
+<tr><td><code>rlm_rl/baselines.py</code>, <code>scripts/baselines.py</code></td><td>The baseline runner train.py lacked: arms <code>rlm</code>, <code>direct</code>, <code>rlm_medium</code>, run together through one limiter. Resumable (finished episodes skip, infra episodes rerun). A hard spend ceiling over all arms and sessions, with <code>project</code> to price what's left before spending. <code>--dry-run</code> on the fake model server</td></tr>
+<tr><td><code>rlm_rl/client.py</code></td><td>Root thinking for one arm (<code>root_thinking="medium"</code>; <code>xhigh</code> refused), checked from the rendered prompt. A plain <code>answer()</code> call for direct reading. Thinking tokens counted. Failed tries counted by HTTP status</td></tr>
+<tr><td><code>rlm_rl/env.py</code></td><td>Each turn records its thinking tokens and text</td></tr>
+<tr><td><code>rlm_rl/baseline_dashboard.py</code>, <code>rlm_rl/baselines_page.html</code>, <code>scripts/dashboard.py baselines</code></td><td>The step 11 page, in its own folder (<code>results/dashboard-step11/</code>), scanned by the same check before every publish</td></tr>
+<tr><td><code>rlm_rl/dashboard.py</code>, <code>scripts/dashboard.py check --deep --eval-set</code></td><td><b>A gap in the page scan, fixed:</b> it recognised edit tasks by the training family names only, so <code>edit_real_select</code> and <code>edit_real_test</code> tasks were never checked for their task ids or repositories. Production's page runs the selection set every 10 steps, so this mattered there too. The scan now covers them (16 task ids and 3 repositories here; the deep check 76 and 9)</td></tr>
+<tr><td><code>tests/test_baselines.py</code> (18 tests), <code>tests/fake_model.py</code></td><td>Direct parsing and scoring, thinking requests and checks, the ceiling (including waiting instead of dropping), resume, infra retries, status counts. The fake server honours per-request thinking</td></tr>
+</tbody></table></div>
+<p><b>A bug the live run found:</b> the spend gate refused episodes whose cautious default reservation didn't fit while others were in flight. At the start of the medium arm it dropped 34 of 64 that way. Now an episode waits for in-flight ones (whose measured costs replace the defaults) and is refused only if it can't fit with nothing in flight. A test covers it, and session 3 ran the 34.</p>
+<p><b>Tests:</b> every module the changes touch passes in WSL on the final code: <code>test_baselines</code>, <code>test_client</code>, <code>test_env</code>, <code>test_evals</code>, <code>test_contract</code>, <code>test_dashboard</code>, <code>test_monitor</code>, <code>test_training</code> and <code>test_edit_env</code>, 147 tests (1 skipped, the uncached tokenizer) in 20 minutes. The rest of the suite wasn't rerun.</p>
+</section>
+<section><h2><span class="no">11</span>Decisions for Rishi before production</h2>
+<p><b>A. The tool-call failure</b> (§3)</p>
+<ul><li><b>Accept <code>&lt;function=python&gt;…&lt;/function&gt;</code> as a code block and say so in the "no code block" error: recommended (mine).</b> It's a few lines in <code>env.extract_code</code> and one sentence in the error text, $0. Then rerun the RLM arm (~$2.40) for a clean step-0 number.</li><li><b>Fix the prompt instead (prompt v3):</b> tell the model that tools are Python functions called inside the block and never with tool-call tags. That changes the frozen prompt text, so the second seed's and this run's numbers stop being comparable.</li><li><b>Leave it:</b> GRPO probably trains it away, but its first gains would be format learning.</li></ul>
+<p><b>B. Thinking for the production root (11b's result)</b></p>
+<ul><li><b><code>medium</code>: recommended by 11b's rule</b> (+17 points, ~1.25× a step, ~130 steps for $157). It needs a fake-model dry run that trains on thinking tokens first.</li><li><b>Off:</b> cheaper, ~165 steps. After fix A the gap may shrink, since part of medium's gain is avoiding the format failure. That would take one rerun of both arms (~$4.80) to know.</li></ul>
+<p><b>C. Edit turns: 20 → 30?</b> The plan's rule says yes (56% unresolved at the cap). After fix A it would likely fall under 20%, so I'd decide after the rerun <i>(mine)</i>. At $0.035 an edit episode, 30 turns is affordable either way.</p>
+<p><b>Also before production</b> (no decision needed unless Rishi objects):</p>
+<ul><li>Fix the <code>test_aware</code> false positive on scratch scripts that call <code>process.exit</code>.</li><li>The base eval on the second seed's held-out tasks (~$2) is still open in the project chat.</li></ul>
+</section>
+<section><h2><span class="no">12</span>How the base results compare with the second seed's 83.3%</h2>
+<p>They can't be compared directly. The second seed's 83.3% is on <code>heldout-seed1</code>: 100 episodes of the two ticket families at level 1, prompt v1, a 2,000-character output cap. Step 11's selection set holds only 8 ticket tasks across levels 1-5. On those the base model got <code>tickets_customer</code> 4 of 4 in every arm and <code>tickets_all</code> 1 of 4 (off) or 2 of 4 (medium). That is consistent with the second seed's reading that <code>tickets_customer</code> is easy and <code>tickets_all</code> is where the room is (step 10 §4). Whether the 13-point gap above the first seed's 70% is environment v2 still needs the ~$2 base eval on <code>heldout-seed1</code>, which waits on Rishi.</p>
+</section>
+<section><h2><span class="no">13</span>Files</h2>
+<div class="panel scroll"><table><thead><tr><th>Path</th><th>What</th></tr></thead><tbody>
+<tr><td><code>results/step11-v1/transcripts/val/{rlm,direct,rlm_medium}/step0000.jsonl</code></td><td>Every try, infra ones included (git-ignored)</td></tr>
+<tr><td><code>results/step11-v1/summary.json</code>, <code>spend.json</code>, <code>progress.json</code>, <code>run.log</code></td><td>The summary, the spend ledger (with the hand-added upper bounds), the last session's request counts, the console log</td></tr>
+<tr><td><code>results/dashboard-step11/page.html</code>, <code>results/dashboard-step10/page.html</code></td><td>The two pages as published (git-ignored)</td></tr>
+<tr><td><code>results/dry/step11-dry1/</code></td><td>The $0 dry run</td></tr>
+</tbody></table></div>
+</section>
+  <footer><p>Never in this page: task text, seeds, task ids or the selection set's repositories. Numbers only; the transcripts stay on the training PC.</p></footer>
+</div>

@@ -63,6 +63,10 @@ SUBCALL_START_GAP_S = 0.25
 
 ROOT_TEMPERATURE = 1.0  # training and eval alike (spec §5.1)
 ENABLE_THINKING = False  # root and sub-calls (spec §5.1)
+# Root thinking for one baseline arm only (plan step 11, decision 11b; step 2 §6): the base model as an RLM with its
+# root at reasoning effort `medium`. Training keeps thinking off, sub-calls stay off whatever the root does, and
+# `xhigh` is never used (it broke the turn cap and once never answered).
+ROOT_THINKING_EFFORTS = ("low", "medium")
 
 # Qwen/Qwen3.8-27B special tokens, from its tokenizer_config.json. vLLM reports no logprob for a
 # prompt's first token, which is always <|im_start|>.
@@ -288,6 +292,7 @@ class Usage:
     root_prompt_tokens: int = 0
     root_cached_tokens: int = 0
     root_completion_tokens: int = 0
+    root_reasoning_tokens: int = 0  # part of root_completion_tokens; 0 unless the root thinks (decision 11b's arm)
     subcalls: int = 0
     subcall_prompt_tokens: int = 0
     subcall_cached_tokens: int = 0
@@ -302,6 +307,7 @@ class Usage:
             self.root_prompt_tokens += prompt
             self.root_cached_tokens += cached
             self.root_completion_tokens += completion
+            self.root_reasoning_tokens += reasoning_tokens(usage)
         else:
             self.subcalls += 1
             self.subcall_prompt_tokens += prompt
@@ -333,13 +339,15 @@ class RequestStats:
     rejected: int = 0  # non-retryable 4xx
     paced_s: float = 0.0  # waiting for a start time from the Pacer, summed over tries, like the limiter's waited_s
     failed: collections.Counter = field(default_factory=collections.Counter)  # RequestFailed raised, by kind
+    statuses: collections.Counter = field(default_factory=collections.Counter)  # failed tries by HTTP status (step 11)
     events: collections.deque = field(default_factory=lambda: collections.deque(maxlen=500))  # failures with cf-ray
 
     def as_dict(self) -> dict:
         return {"calls": dict(self.calls), "attempts": self.attempts, "retries": self.retries,
                 "rate_limited": self.rate_limited, "server_errors": self.server_errors, "timeouts": self.timeouts,
                 "connection_errors": self.connection_errors, "rejected": self.rejected,
-                "paced_s": round(self.paced_s, 3), "failed": dict(self.failed), "events": list(self.events)}
+                "paced_s": round(self.paced_s, 3), "failed": dict(self.failed),
+                "statuses": {str(k): v for k, v in self.statuses.items()}, "events": list(self.events)}
 
 
 # ----------------------------------------------------------------------------- token ids and thinking
@@ -368,6 +376,22 @@ def thinking_off_prompt(prompt_ids: list[int]) -> bool:
     if THINK_END_ID not in prompt_ids[-3:] or THINK_START_ID not in tail:
         return False
     return tail.index(THINK_START_ID) < max(i for i, t in enumerate(tail) if t == THINK_END_ID)
+
+
+def thinking_on_prompt(prompt_ids: list[int]) -> bool:
+    """Whether the rendered prompt ends with an open think block (`<think>\\n`), as Qwen3.8's template does with
+    thinking on (step 2 §4)."""
+    return THINK_START_ID in prompt_ids[-2:] and THINK_END_ID not in prompt_ids[-3:]
+
+
+def reasoning_text(choice: Any) -> str | None:
+    """The thinking text of a choice, which W&B's server returns beside the content (step 2 §6), if any."""
+    message = getattr(choice, "message", None)
+    for name in ("reasoning", "reasoning_content"):
+        text = getattr(message, name, None) or ((getattr(message, "model_extra", None) or {}).get(name))
+        if text:
+            return str(text)
+    return None
 
 
 def reasoning_tokens(usage: Any) -> int:
@@ -400,11 +424,18 @@ class ModelClient:
     Without a `limiter` or `pacer` given, the client makes its own, giving `subcall_model` its cap
     of MAX_SUBCALLS_IN_FLIGHT and its start gap of SUBCALL_START_GAP_S (step 10 §6). One given is
     used as it is: pass the same ones to clients that should share them.
+
+    `root_thinking` is None (thinking off, as in training) or a reasoning effort in ROOT_THINKING_EFFORTS, for
+    decision 11b's baseline arm: root turns then think at that effort, and sub-calls stay off.
     """
 
     def __init__(self, openai_client: Any, *, subcall_model: str, limiter: Limiter | None = None,
-                 pacer: Pacer | None = None, retry: RetryPolicy = RetryPolicy(), rng: random.Random | None = None):
+                 pacer: Pacer | None = None, retry: RetryPolicy = RetryPolicy(), rng: random.Random | None = None,
+                 root_thinking: str | None = None):
+        if root_thinking is not None and root_thinking not in ROOT_THINKING_EFFORTS:
+            raise ValueError(f"root thinking must be None or one of {ROOT_THINKING_EFFORTS}, not {root_thinking!r}")
         self._client = openai_client.with_options(max_retries=0)
+        self.root_thinking = root_thinking
         self.subcall_model = subcall_model
         self.limiter = limiter if limiter is not None else Limiter(model_caps={subcall_model: MAX_SUBCALLS_IN_FLIGHT})
         self.pacer = pacer if pacer is not None else Pacer({subcall_model: SUBCALL_START_GAP_S})
@@ -425,10 +456,15 @@ class ModelClient:
 
     async def root_turn(self, messages: list[dict], *, model: str, usage: Usage | None = None,
                         max_tokens: int = bridge.ROOT_MAX_TOKENS, temperature: float = ROOT_TEMPERATURE) -> Any:
-        """One root turn. Returns the choice, with the token ids ART needs attached. Raises RequestFailed."""
+        """One root turn. Returns the choice, with the token ids ART needs attached. Raises RequestFailed.
+
+        With `root_thinking` set, the turn thinks at that effort: the rendered prompt must then end with an open
+        think block, and the choice also carries its `reasoning_tokens` (in model_extra)."""
+        effort = self.root_thinking
+        template = {"enable_thinking": True, "reasoning_effort": effort} if effort else {"enable_thinking": ENABLE_THINKING}
         response = await self._request(
             "root", model, messages=messages, max_tokens=max_tokens, temperature=temperature, logprobs=True,
-            extra_body={"prompt_logprobs": 0, "chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+            extra_body={"prompt_logprobs": 0, "chat_template_kwargs": template})
         choice = self._first_choice(response, model)
         prompt_logprobs = (response.model_extra or {}).get("prompt_logprobs")
         if not prompt_logprobs or choice.logprobs is None or not choice.logprobs.content:
@@ -437,8 +473,28 @@ class ModelClient:
             prompt_ids = attach_token_ids(choice, prompt_logprobs)
         except (AttributeError, StopIteration, TypeError, ValueError) as exc:
             self._fail("bad_response", f"token ids could not be rebuilt ({exc!r})", model)
-        if reasoning_tokens(response.usage) or not thinking_off_prompt(prompt_ids):
+        if effort:
+            if not thinking_on_prompt(prompt_ids):
+                self._fail("thinking_off", "thinking was asked for, but the server rendered a prompt without it", model)
+            if choice.model_extra is not None:
+                choice.model_extra["reasoning_tokens"] = reasoning_tokens(response.usage)
+        elif reasoning_tokens(response.usage) or not thinking_off_prompt(prompt_ids):
             self._fail("thinking_on", "the server rendered a thinking prompt or spent reasoning tokens", model)
+        if usage is not None:
+            usage.add("root", response.usage)
+        return choice
+
+    async def answer(self, messages: list[dict], *, model: str, usage: Usage | None = None, max_tokens: int,
+                     temperature: float = ROOT_TEMPERATURE) -> Any:
+        """One call with thinking off that returns the whole choice and counts its tokens as a root call: the
+        direct-reading baseline (plan step 11), where the context is in the prompt instead of a REPL. No logprobs:
+        nothing trains on it, and a prompt can be ~130K tokens. Raises RequestFailed."""
+        response = await self._request(
+            "direct", model, messages=messages, max_tokens=max_tokens, temperature=temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+        choice = self._first_choice(response, model)
+        if reasoning_tokens(response.usage):
+            self._fail("thinking_on", "a direct-reading call spent reasoning tokens", model)
         if usage is not None:
             usage.add("root", response.usage)
         return choice
@@ -523,6 +579,7 @@ class ModelClient:
                     return response
                 except openai.APIStatusError as exc:
                     status, cf_ray = exc.status_code, _header(exc, "cf-ray")
+                    self.stats.statuses[status] += 1
                     if status == 429:
                         self.stats.rate_limited += 1
                         failure = "rate_limited"

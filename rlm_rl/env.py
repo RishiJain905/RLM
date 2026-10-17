@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 from . import bridge, detectors, reward
 from .bridge import InfraError
-from .client import ModelClient, RequestFailed, Usage
+from .client import ModelClient, RequestFailed, Usage, reasoning_text
 from .reward import Score
 from .sandbox import CellResult, Sandbox
 
@@ -83,6 +83,8 @@ class Turn:
     observation: str | None  # what the model was shown next; None after a submit or the last turn
     root_s: float  # the root call, queueing and retries included
     cell_s: float
+    reasoning_tokens: int = 0  # thinking tokens in the turn's output: 0 with thinking off, as in training
+    reasoning: str | None = None  # the thinking text, when the root thinks (plan step 11's medium-thinking arm)
 
 
 @dataclass
@@ -272,9 +274,11 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 code = extract_code(reply)
                 result = CellResult("", 0, bridge.NO_CODE_BLOCK_ERROR) if code is None else await box.run_cell(code)
                 _cap_output(result, lim.output_max_chars)
-                turn = Turn(reply, choice.finish_reason, len((choice.model_extra or {}).get("token_ids", ())),
+                extra = choice.model_extra or {}
+                turn = Turn(reply, choice.finish_reason, len(extra.get("token_ids", ())),
                             code, None if code is None else _cell_dict(result), None,
-                            round(t1 - t0, 3), round(time.monotonic() - t1, 3))
+                            round(t1 - t0, 3), round(time.monotonic() - t1, 3),
+                            reasoning_tokens=int(extra.get("reasoning_tokens") or 0), reasoning=reasoning_text(choice))
                 ep.turns.append(turn)
                 if result.submitted:
                     ep.submitted, ep.answer, ep.answer_valid = True, result.answer, result.answer_valid

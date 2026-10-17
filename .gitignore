@@ -15,5 +15,6 @@ results/*/capability/
 results/*/abandoned/
 results/dry/
 results/dashboard/
+results/dashboard-step*/
 results/red-team-fixes/
 .playwright-mcp/

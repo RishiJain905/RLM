@@ -1,0 +1,387 @@
+<title>Step 11 Baselines</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: the step 9 dashboard's instrument strip and panels, reused for one eval of checkpoint 0 per arm: arms are the columns everywhere, so a reader compares across a row. */
+:root {
+  --bg: #f2f4f7; --panel: #ffffff; --wash: #eceff4; --ink: #0f1621; --ink-2: #4a5565; --muted: #7d8898;
+  --line: #e1e5eb; --axis: #c2c9d3; --ring: rgba(15, 22, 33, 0.10);
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b;
+  --good-ink: #006300; --warn-ink: #7a5200; --crit-ink: #ad2727;
+  --seq-0: #eef4fc; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
+  --seq-t-dark: #ffffff;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.78rem; --step-0: 0.9rem; --step-1: 1.05rem; --step-2: 1.35rem; --step-3: 1.9rem;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+    --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70;
+    --good-ink: #3fc23f; --warn-ink: #f5bd47; --crit-ink: #ec7373;
+    --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+    --seq-t-dark: #0b0e13;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+  --line: #222935; --axis: #353f4d; --ring: rgba(255, 255, 255, 0.10);
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70;
+  --good-ink: #3fc23f; --warn-ink: #f5bd47; --crit-ink: #ec7373;
+  --seq-0: #162233; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+  --seq-t-dark: #0b0e13;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.45; }
+:focus-visible { outline: 2px solid var(--c1); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; gap: 8px; padding-block: 12px 0; }
+.idrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: var(--step-2); letter-spacing: -0.01em; text-wrap: balance; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: var(--step--1); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.badge.dry { border-color: var(--warn); color: var(--warn-ink); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-weight: 600; font-size: var(--step--1); border: 1px solid currentColor; white-space: nowrap; }
+.t-good { color: var(--good-ink); } .t-warn { color: var(--warn-ink); } .t-crit { color: var(--crit-ink); } .t-muted { color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+.running .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 600; }
+.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav a { flex: none; padding: 8px 10px 9px; font-size: var(--step--1); font-weight: 600; color: var(--ink-2); text-decoration: none; border-bottom: 2px solid transparent; }
+.nav a:hover { color: var(--ink); border-bottom-color: var(--axis); }
+main { display: grid; gap: 18px; padding-block: 18px 40px; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 14px; min-width: 0; scroll-margin-top: 150px; }
+section.panel > * { min-width: 0; }
+.phead h2 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); text-wrap: balance; }
+.phead p { margin: 4px 0 0; color: var(--ink-2); font-size: var(--step--1); max-width: 78ch; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.tile .lab { font-size: var(--step--1); color: var(--ink-2); font-weight: 600; }
+.tile .val { font-size: var(--step-3); font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile .val small { font-size: var(--step-0); font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.tile .ctx { font-size: var(--step--1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.track { height: 8px; border-radius: 4px; background: var(--seq-1); overflow: hidden; display: flex; }
+.fill { height: 100%; background: var(--c1); }
+.fill.run { background: var(--c3); } .fill.warn { background: var(--warn); } .fill.crit { background: var(--crit); }
+.gates { display: grid; gap: 0; }
+.gate { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 4px 16px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.gate:last-child { border-bottom: 0; }
+.gate .nm { font-weight: 650; }
+.gate .nm small { display: block; color: var(--muted); font-weight: 500; font-size: 0.72rem; }
+.gate .tx { font-size: var(--step--1); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.gate .tx b { color: var(--ink); font-family: var(--font-data); }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; font-size: var(--step--1); width: 100%; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.74rem; }
+td.n, th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+td.cell { text-align: center; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 72px; border: 2px solid var(--panel); border-radius: 4px; }
+td.cell small { display: block; font-size: 0.66rem; opacity: 0.8; }
+.c-title { font-weight: 600; font-size: var(--step--1); }
+.sub { font-size: var(--step--1); color: var(--ink-2); }
+.empty { color: var(--muted); font-size: var(--step--1); padding: 6px 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.stack { display: grid; gap: 6px; min-width: 0; }
+.oc-correct { color: var(--good-ink); font-weight: 600; } .oc-wrong, .oc-no { color: var(--crit-ink); } .oc-infra { color: var(--warn-ink); font-weight: 600; }
+footer { color: var(--ink-2); font-size: var(--step--1); padding-block: 0 40px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 92ch; }
+@media (max-width: 640px) { .gate { grid-template-columns: 1fr; } section.panel { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .running .dot { animation: none; } }
+</style>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <div class="idrow"><span class="eyebrow">RLM · plan step 11 · base Qwen3.8-27B on selection-v2 · no training</span></div>
+    <div class="idrow">
+      <h1 id="run-name">Step 11 baselines</h1>
+      <span id="dry" class="badge dry" hidden>Dry run: fake model, no W&amp;B, $0</span>
+      <span id="status" class="pill"></span>
+    </div>
+    <div class="readout" id="readout"></div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview">Overview</a><a href="#gates">Step 11 gates</a><a href="#families">By family</a><a href="#levels">By level</a>
+      <a href="#editing">Editing</a><a href="#cost">Cost and time</a><a href="#infra">Infra</a><a href="#episodes">Episodes</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <main id="main">
+    <section class="panel" id="overview">
+      <div class="phead"><div class="eyebrow">Overview</div><h2>Three arms on the same 64 tasks</h2><p>Every arm evaluates the untrained base model on the selection set: 48 read tasks and 16 edit tasks. The RLM arm runs the edit tasks twice, so it also measures what an edit episode costs before production. Infra episodes (rate limits, sandboxes, graders) are flagged and run again, never scored as failures.</p></div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="panel" id="gates">
+      <div class="phead"><div class="eyebrow">Plan step 11 · done-when</div><h2>What these numbers decide before production</h2><p>Each check fills in as its episodes finish. The thresholds are the plan's, from code-editing-plan.md §9 and §11 and decision 11b.</p></div>
+      <div class="gates" id="gate-list"></div>
+    </section>
+
+    <section class="panel" id="families">
+      <div class="phead"><div class="eyebrow">Exact accuracy</div><h2>Pass rate by family</h2><p>Read families score an exact answer; edit families score resolved, every hidden test passing. Each cell shows the pass rate and how many episodes it counts.</p></div>
+      <div class="scroll" id="family-table"></div>
+    </section>
+
+    <section class="panel" id="levels">
+      <div class="phead"><div class="eyebrow">Difficulty</div><h2>Pass rate by family and level</h2><p>The selection set holds 1 to 4 tasks per family and level, so a single cell says little; read across rows. Level 1 contexts are about 35K characters, level 5 about 400K.</p></div>
+      <div class="scroll" id="level-table"></div>
+    </section>
+
+    <section class="panel" id="editing">
+      <div class="phead"><div class="eyebrow">Edit tiers · spec §12.9</div><h2>Editing</h2><p>Edit real is 10 held-out repository tasks (Python 3, Go 4, JavaScript 3); edit synth is 6 generated Python tasks. Edit episodes get 20 turns, 30 sub-calls, 4,096 tokens a turn and the seven coding tools. The repositories themselves are never named here.</p></div>
+      <div class="grid2" id="edit-panels"></div>
+    </section>
+
+    <section class="panel" id="cost">
+      <div class="phead"><div class="eyebrow">Cost and time</div><h2>What an episode costs, and what that means for production</h2><p>Estimates at W&amp;B's prices ($0.40 per million input tokens, $3.00 per million output); W&amp;B's billing page is the truth. Times include waiting for the limiter and the pacing of requests.</p></div>
+      <div class="stack" id="spend-meter"></div>
+      <div class="scroll" id="cost-table"></div>
+      <div id="projection"></div>
+    </section>
+
+    <section class="panel" id="infra">
+      <div class="phead"><div class="eyebrow">Infra · rate limiting</div><h2>Requests, retries and lost episodes</h2><p>All arms share one limiter: at most 12 requests in flight to the base model, started at least 0.25 s apart, each retried up to 8 times from 4 s. An infra episode is run again at the end, so it costs time and some money, never accuracy.</p></div>
+      <div class="scroll" id="infra-table"></div>
+    </section>
+
+    <section class="panel" id="episodes">
+      <div class="phead"><div class="eyebrow">Episodes</div><h2>Every episode, newest first</h2><p>One row per attempt, infra attempts included. These are selection-set tasks, which stay private, so the page shows each episode's shape and outcome and none of its text; the full transcripts stay on the training PC.</p></div>
+      <div class="chips" id="episode-filter" role="group" aria-label="Filter episodes"></div>
+      <div class="scroll" id="episode-table"></div>
+    </section>
+  </main>
+  <footer>
+    <p id="foot-src"></p>
+    <p>Never on this page: keys, task seeds, eval tasks or benchmark items, checkpoint names, task ids, and for edit tasks the gold patch, hidden test names and the selection set's repositories. Every build is scanned for them before it is published.</p>
+  </footer>
+</div>
+
+<script type="application/json" id="dash-data">/*__DASHBOARD_DATA__*/null</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("dash-data").textContent || "null") || {};
+  var ARMS = ["rlm", "direct", "rlm_medium"].filter(function (a) { return D.arms && D.arms[a]; });
+  var SHORT = { rlm: "RLM", direct: "Direct reading", rlm_medium: "RLM, thinking medium" };
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function pct(x, d) { return x == null ? "–" : (100 * x).toFixed(d == null ? 0 : d) + "%"; }
+  function usd(x, d) { return x == null ? "–" : "$" + x.toFixed(d == null ? 2 : d); }
+  function num(x, d) { return x == null ? "–" : Number(x).toFixed(d == null ? 1 : d); }
+  function secs(x) { if (x == null) return "–"; if (x < 90) return Math.round(x) + " s"; if (x < 5400) return (x / 60).toFixed(1) + " min"; return (x / 3600).toFixed(1) + " h"; }
+  function ago(t) { if (!t) return "–"; var s = Date.now() / 1000 - t; return s < 90 ? Math.round(s) + " s ago" : s < 5400 ? Math.round(s / 60) + " min ago" : (s / 3600).toFixed(1) + " h ago"; }
+  function seqCell(rate, n, se) {
+    if (rate == null || !n) return '<td class="cell t-muted">–</td>';
+    var i = Math.max(0, Math.min(6, Math.round(rate * 6)));
+    var fg = i >= 4 ? "var(--seq-t-dark)" : "var(--ink)";
+    return '<td class="cell" style="background:var(--seq-' + i + ');color:' + fg + '">' + pct(rate) + "<small>n " + n + (se != null ? " ± " + pct(se) : "") + "</small></td>";
+  }
+
+  // header
+  var run = D.run || {};
+  if (D.dry_run) $("dry").hidden = false;
+  var st = run.status || "–";
+  var cls = st === "running" ? "t-good running" : st === "finished" ? "t-good" : st === "stalled" ? "t-crit" : "t-warn";
+  $("status").className = "pill " + cls;
+  $("status").innerHTML = '<span class="dot"></span>' + esc(st);
+  var sp = D.spend || {};
+  var pot = D.pot || {};
+  $("readout").innerHTML = "<span>spent <b>" + usd(sp.total_usd) + "</b> of the <b>" + usd(sp.ceiling_usd, 0) + "</b> ceiling</span>" +
+    (pot.inference_left_usd != null ? "<span>W&amp;B pot before step 11 <b>" + usd(pot.inference_left_usd) + "</b> (" + esc(pot.as_of || "") + ")</span>" : "") +
+    "<span>updated <b>" + ago(run.updated_at) + "</b></span><span>set <b>" + esc(run.eval_set || "") + "</b></span>";
+  $("foot-src").textContent = "Run " + (run.name || "") + ", built " + new Date((D.built_at || 0) * 1000).toLocaleString() + ". Rebuilt from the run's files on the training PC and republished as episodes finish.";
+
+  // tiles
+  $("tiles").innerHTML = ARMS.map(function (a) {
+    var A = D.arms[a], P = A.progress || {};
+    var planned = A.planned || P.planned || 0, done = P.done || 0, running = P.running || 0;
+    var w1 = planned ? 100 * done / planned : 0, w2 = planned ? 100 * running / planned : 0;
+    return '<div class="tile"><div class="lab">' + esc(A.label) + '</div><div class="val">' + pct(A.accuracy, 1) +
+      (A.accuracy_se != null ? "<small>± " + pct(A.accuracy_se, 1) + "</small>" : "") + "</div>" +
+      '<div class="ctx">' + (A.n || 0) + " scored of " + planned + " planned" + (running ? ", " + running + " running" : "") +
+      (A.attempts && A.attempts.infra ? ", " + A.attempts.infra + " infra attempts" : "") + "</div>" +
+      '<div class="track" aria-hidden="true"><div class="fill" style="width:' + w1 + '%"></div><div class="fill run" style="width:' + w2 + '%"></div></div>' +
+      '<div class="ctx">' + usd(A.est_cost_usd) + " so far" + (P.skipped_budget ? ", " + P.skipped_budget + " not started (ceiling)" : "") + "</div></div>";
+  }).join("") || '<div class="empty">No episode has finished yet.</div>';
+
+  // gates
+  var gates = [], G = D.gates || {}, rlm = D.arms.rlm, med = D.arms.rlm_medium, C = D.comparisons || {};
+  function gate(name, note, state, text, labels) { gates.push({ name: name, note: note, state: state, text: text, labels: labels || {} }); }
+  function stateLabel(g) {
+    var s = g.state, L = g.labels;
+    return s === "pass" ? '<span class="pill t-good">' + esc(L.pass || "within the plan") + "</span>" : s === "act" ? '<span class="pill t-crit">' + esc(L.act || "changes production") + "</span>" : '<span class="pill t-muted">waiting for episodes</span>';
+  }
+  if (rlm && rlm.edit) {
+    var r = rlm.edit.turn_cap_unresolved_rate;
+    gate("Edit turn cap", "over 20%: edit turns go to 30", r == null ? "wait" : r > G.turn_cap_unresolved ? "act" : "pass",
+      "<b>" + pct(r) + "</b> of the RLM arm's edit episodes hit the 20-turn cap unresolved (" + (rlm.edit.turn_cap_hits_unresolved || 0) + " of " + ((rlm.kinds.edit || {}).n || 0) + ")",
+      { pass: "turns stay at 20", act: "edit turns go to 30" });
+    var l1 = (rlm.edit.tiers || {})["edit_real/L1"];
+    gate("Edit real, level 1", "under 15%: edit real starts at a lower share for 20 steps", !l1 || !l1.n ? "wait" : l1.rate < G.edit_real_l1 ? "act" : "pass",
+      l1 && l1.n ? "<b>" + pct(l1.rate) + "</b> resolved over " + l1.n + " episodes (5 tasks, run twice)" : "no level 1 episode finished yet",
+      { pass: "share stays at 25%", act: "lower share for 20 steps" });
+  } else {
+    gate("Edit turn cap", "over 20%: edit turns go to 30", "wait", "no edit episode finished yet");
+    gate("Edit real, level 1", "under 15%: edit real starts at a lower share for 20 steps", "wait", "no edit episode finished yet");
+  }
+  var P0 = D.production;
+  if (P0 && P0.complete) {
+    gate("Production cost per step", "the plan assumed ~$2.10 a step, ~75 steps", P0.step_usd > 1.25 * P0.plan_step_usd ? "act" : "pass",
+      "<b>" + usd(P0.step_usd) + "</b> a step at production's mix, so about <b>" + Math.round(P0.steps_for_ceiling) + " steps</b> for $157 (plan: " + P0.plan_steps + ")" +
+      (P0.medium_step_usd ? "; with medium thinking " + usd(P0.medium_step_usd) + ", about " + Math.round(P0.medium_steps_for_ceiling) + " steps" : ""),
+      { pass: "fits the plan", act: "fewer steps" });
+  } else {
+    gate("Production cost per step", "the plan assumed ~$2.10 a step, ~75 steps", "wait", "needs a finished RLM episode of every production family");
+  }
+  var m = C.medium_vs_rlm;
+  gate("Thinking at medium (11b)", "production thinks at medium only at about +12 points", !m || m.diff == null ? "wait" : m.diff >= G.medium_gain ? "act" : "pass",
+    m && m.diff != null ? "<b>" + (m.diff >= 0 ? "+" : "") + (100 * m.diff).toFixed(1) + " points</b>" + (m.se != null ? " ± " + (100 * m.se).toFixed(1) : "") + " over " + m.tasks + " tasks (" + pct(m.b) + " vs " + pct(m.a) + ")" : "the medium-thinking arm hasn't run yet",
+    { pass: "production stays off", act: "production thinks at medium" });
+  ARMS.filter(function (a) { return D.arms[a].tool_call && ((D.arms[a].tool_call.read || {}).episodes || (D.arms[a].tool_call.edit || {}).episodes); }).forEach(function (a) {
+    var T = D.arms[a].tool_call, parts = [];
+    ["read", "edit"].forEach(function (k) {
+      var t = T[k] || {};
+      if (!t.episodes) return;
+      parts.push(k + ": <b>" + (t.episodes_with || 0) + " of " + t.episodes + "</b> episodes (" + pct((t.turns_with || 0) / (t.turns || 1)) + " of turns), " + pct((t.accuracy_with || {}).rate) + " correct with it, " + pct((t.accuracy_without || {}).rate) + " without");
+    });
+    if (a === "direct" || !parts.length) return;
+    gates.push({ name: "Tool-call syntax, " + SHORT[a], note: "turns answered as a native tool call, which the REPL can't run", state: "info", text: parts.join("; ") });
+  });
+  var dr = C.rlm_vs_direct_read;
+  gates.push({ name: "RLM against direct reading", note: "read tasks; the claim that the RLM setup helps", state: "info",
+    text: dr && dr.diff != null ? "RLM <b>" + pct(dr.b) + "</b> vs direct <b>" + pct(dr.a) + "</b>, " + (dr.diff >= 0 ? "+" : "") + (100 * dr.diff).toFixed(1) + " points" + (dr.se != null ? " ± " + (100 * dr.se).toFixed(1) : "") + " over " + dr.tasks + " tasks" : "waiting for both arms" });
+  $("gate-list").innerHTML = gates.map(function (g) {
+    return '<div class="gate"><div class="nm">' + esc(g.name) + "<small>" + esc(g.note) + '</small></div><div class="tx">' + (g.state === "info" ? "" : stateLabel(g)) + "<span>" + g.text + "</span></div></div>";
+  }).join("");
+
+  // by family
+  function familyOrder(keys) {
+    var order = ["aggregation", "callgraph", "needle", "repo_loc_select", "tickets_all", "tickets_customer", "edit_synth", "edit_real_select"];
+    return keys.sort(function (a, b) { var i = order.indexOf(a), j = order.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || (a < b ? -1 : 1); });
+  }
+  var fams = {};
+  ARMS.forEach(function (a) { Object.keys(D.arms[a].by_family || {}).forEach(function (f) { fams[f] = 1; }); });
+  var head = "<tr><th>Family</th>" + ARMS.map(function (a) { return '<th class="n">' + esc(SHORT[a]) + "</th>"; }).join("") + "</tr>";
+  var allRow = "<tr><td><b>All</b></td>" + ARMS.map(function (a) { var A = D.arms[a]; return seqCell(A.accuracy, A.n, A.accuracy_se); }).join("") + "</tr>";
+  $("family-table").innerHTML = Object.keys(fams).length ? "<table>" + head + familyOrder(Object.keys(fams)).map(function (f) {
+    return "<tr><td>" + esc(f) + "</td>" + ARMS.map(function (a) { var g = (D.arms[a].by_family || {})[f]; return g ? seqCell(g.rate, g.n) : '<td class="cell t-muted">–</td>'; }).join("") + "</tr>";
+  }).join("") + allRow + "</table>" : '<div class="empty">No episode has finished yet.</div>';
+
+  // by level
+  var lv = {};
+  ARMS.forEach(function (a) { Object.keys(D.arms[a].by_level || {}).forEach(function (k) { lv[k] = 1; }); });
+  var lk = Object.keys(lv).sort(function (x, y) {
+    var fx = x.split("/L")[0], fy = y.split("/L")[0];
+    if (fx !== fy) return familyOrder([fx, fy])[0] === fx ? -1 : 1;
+    return Number(x.split("/L")[1]) - Number(y.split("/L")[1]);
+  });
+  $("level-table").innerHTML = lk.length ? "<table>" + head.replace("Family", "Family and level") + lk.map(function (k) {
+    return "<tr><td>" + esc(k.replace("/L", " · L")) + "</td>" + ARMS.map(function (a) { var g = (D.arms[a].by_level || {})[k]; return g ? seqCell(g.rate, g.n) : '<td class="cell t-muted">–</td>'; }).join("") + "</tr>";
+  }).join("") + "</table>" : '<div class="empty">No episode has finished yet.</div>';
+
+  // editing
+  var editArms = ARMS.filter(function (a) { return D.arms[a].edit; });
+  if (!editArms.length) {
+    $("edit-panels").innerHTML = '<div class="empty">No edit episode has finished yet. Edit episodes run in Docker on the data drive; a Go task can take an hour.</div>';
+  } else {
+    var tierKeys = {};
+    editArms.forEach(function (a) { Object.keys(D.arms[a].edit.tiers || {}).forEach(function (k) { tierKeys[k] = 1; }); });
+    var tk = Object.keys(tierKeys).sort();
+    var th = "<tr><th>Tier</th>" + editArms.map(function (a) { return '<th class="n">' + esc(SHORT[a]) + "</th>"; }).join("") + "</tr>";
+    var t1 = "<table>" + th + tk.map(function (k) {
+      return "<tr><td>" + esc(k.replace("/", " · ")) + "</td>" + editArms.map(function (a) { var g = D.arms[a].edit.tiers[k]; return g ? seqCell(g.rate, g.n) : '<td class="cell t-muted">–</td>'; }).join("") + "</tr>";
+    }).join("") + "</table>";
+    var rows = [["Episodes scored", function (A) { return (A.kinds.edit || {}).n; }, function (x) { return x == null ? "–" : x; }],
+      ["Submitted", function (A) { return A.edit.submitted; }, pct],
+      ["Empty diff", function (A) { return A.edit.empty_diff; }, pct],
+      ["Fail-to-pass tests passed (mean)", function (A) { return A.edit.f2p_pass_mean; }, pct],
+      ["Ran tests before submitting", function (A) { return A.edit.tested_before_submit; }, pct],
+      ["Hit the 20-turn cap", function (A) { return A.edit.turn_cap_rate; }, pct],
+      ["Turns (mean)", function (A) { return (A.kinds.edit || {}).turns_mean; }, num],
+      ["Sub-calls (mean)", function (A) { return (A.kinds.edit || {}).subcalls_mean; }, num],
+      ["Cost an episode (mean)", function (A) { return (A.kinds.edit || {}).cost_mean_usd; }, function (x) { return usd(x, 3); }],
+      ["Wall time (median)", function (A) { return (A.kinds.edit || {}).wall_median_s; }, secs],
+      ["Grader time (median)", function (A) { return A.edit.grader_s_median; }, secs]];
+    var t2 = "<table>" + th.replace("Tier", "Behaviour") + rows.map(function (r) {
+      return "<tr><td>" + r[0] + "</td>" + editArms.map(function (a) { return '<td class="n">' + r[2](r[1](D.arms[a])) + "</td>"; }).join("") + "</tr>";
+    }).join("") + "</table>";
+    var plan = D.plan_edit_usd || {}, fc = (D.family_costs || {}).rlm || {};
+    var t3 = '<p class="sub">Cost per edit episode against the plan\'s guesses (code-editing-plan.md §10): edit synth ' + usd(fc.edit_synth, 3) + " measured vs " + usd(plan.edit_synth, 2) + " guessed; edit real " + usd(fc.edit_real_select, 3) + " measured vs " + usd(plan.edit_real, 2) + " guessed (RLM arm).</p>";
+    $("edit-panels").innerHTML = '<div class="stack"><div class="c-title">Resolved, by tier, level and language</div><div class="scroll">' + t1 + '</div></div><div class="stack"><div class="c-title">How the edit episodes went</div><div class="scroll">' + t2 + "</div>" + t3 + "</div>";
+  }
+
+  // cost
+  var ceil = sp.ceiling_usd || 0, tot = sp.total_usd || 0, res = sp.reserved_usd || 0;
+  var used = ceil ? Math.min(100, 100 * tot / ceil) : 0, held = ceil ? Math.min(100 - used, 100 * res / ceil) : 0;
+  $("spend-meter").innerHTML = '<div class="sub">Spent <b>' + usd(tot) + "</b> of the " + usd(ceil, 0) + " hard ceiling" + (res ? ", " + usd(res) + " held for episodes in flight" : "") +
+    ". " + ARMS.map(function (a) { return esc(SHORT[a]) + " " + usd((sp.by_arm || {})[a]); }).join(" · ") + "</div>" +
+    '<div class="track"><div class="fill' + (used > 90 ? " crit" : used > 75 ? " warn" : "") + '" style="width:' + used + '%"></div><div class="fill run" style="width:' + held + '%"></div></div>';
+  var ck = [];
+  ARMS.forEach(function (a) { ["read", "edit"].forEach(function (k) { var K = D.arms[a].kinds[k]; if (K && K.n) ck.push([a, k, K]); }); });
+  $("cost-table").innerHTML = ck.length ? "<table><tr><th>Arm</th><th>Tasks</th><th class=\"n\">Episodes</th><th class=\"n\">Cost mean</th><th class=\"n\">p90</th><th class=\"n\">Max</th><th class=\"n\">Wall median</th><th class=\"n\">p90</th><th class=\"n\">Turns</th><th class=\"n\">Sub-calls</th><th class=\"n\">Root output tokens</th><th class=\"n\">of it thinking</th><th class=\"n\">Root prompt tokens</th></tr>" +
+    ck.map(function (x) { var K = x[2]; return "<tr><td>" + esc(SHORT[x[0]]) + "</td><td>" + x[1] + '</td><td class="n">' + K.n + '</td><td class="n">' + usd(K.cost_mean_usd, 3) + '</td><td class="n">' + usd(K.cost_p90_usd, 3) + '</td><td class="n">' + usd(K.cost_max_usd, 3) + '</td><td class="n">' + secs(K.wall_median_s) + '</td><td class="n">' + secs(K.wall_p90_s) + '</td><td class="n">' + num(K.turns_mean) + '</td><td class="n">' + num(K.subcalls_mean) + '</td><td class="n">' + num(K.root_completion_tokens_mean, 0) + '</td><td class="n">' + num(K.reasoning_tokens_mean, 0) + '</td><td class="n">' + num(K.root_prompt_tokens_mean, 0) + "</td></tr>"; }).join("") + "</table>"
+    : '<div class="empty">No episode has finished yet.</div>';
+  var pj = "";
+  if (P0 && P0.complete) {
+    pj = '<p class="sub">Production at spec §12.7\'s mix (aggregation 25%, call graph 10%, needle 10%, repo localization 15%, edit synth 15%, edit real 25%), 32 episodes a step, priced from the RLM arm\'s cost per family: <b>' + usd(P0.step_usd) + "</b> a step, about <b>" + Math.round(P0.steps_for_ceiling) + "</b> steps for the $157 ceiling, against the plan's $" + P0.plan_step_usd.toFixed(2) + " and ~" + P0.plan_steps + ". Inferred: the selection set spreads levels 1 to 5, while production starts every family at level 1." + (P0.medium_ratio ? " Medium thinking cost " + P0.medium_ratio.toFixed(2) + "x the RLM arm on the same tasks." : "") + "</p>";
+  } else if (P0) {
+    pj = '<p class="sub">The production projection needs a finished RLM episode of every family in production\'s mix; so far: ' + esc((P0.measured || []).join(", ") || "none") + ".</p>";
+  }
+  $("projection").innerHTML = pj;
+
+  // infra
+  $("infra-table").innerHTML = ARMS.length ? "<table><tr><th>Arm</th><th class=\"n\">Requests tried</th><th class=\"n\">429s</th><th class=\"n\">429 share</th><th class=\"n\">Retries</th><th class=\"n\">5xx</th><th>Failed tries by status</th><th class=\"n\">Timeouts</th><th class=\"n\">Pacing wait</th><th class=\"n\">Infra attempts</th><th>Kinds</th><th class=\"n\">Spent on them</th></tr>" +
+    ARMS.map(function (a) { var A = D.arms[a], R = A.requests || {}, T = A.attempts || {};
+      var kinds = Object.keys(T.kinds || {}).map(function (k) { return esc(k) + " " + T.kinds[k]; }).join(", ") || "none";
+      return "<tr><td>" + esc(SHORT[a]) + '</td><td class="n">' + (R.attempts == null ? "–" : R.attempts) + '</td><td class="n">' + (R.rate_limited == null ? "–" : R.rate_limited) + '</td><td class="n">' + (R.attempts ? pct((R.rate_limited || 0) / R.attempts, 1) : "–") + '</td><td class="n">' + (R.retries == null ? "–" : R.retries) + '</td><td class="n">' + (R.server_errors == null ? "–" : R.server_errors) + "</td><td>" + (Object.keys(R.statuses || {}).map(function (k) { return "HTTP " + esc(k) + ": " + R.statuses[k]; }).join(", ") || "–") + '</td><td class="n">' + (R.timeouts == null ? "–" : R.timeouts) + '</td><td class="n">' + secs(R.paced_s) + '</td><td class="n">' + (T.infra || 0) + " of " + (T.total || 0) + "</td><td>" + kinds + '</td><td class="n">' + usd(T.infra_cost_usd, 3) + "</td></tr>"; }).join("") +
+    '</table><p class="sub">Request counts are for the current session of each arm; infra attempts count every session.</p>' : '<div class="empty">No episode has finished yet.</div>';
+
+  // episodes
+  var EP = D.episodes || [];
+  var filters = [["all", "All"]].concat(ARMS.map(function (a) { return [a, SHORT[a]]; })).concat([["edit", "Edit tasks"], ["infra", "Infra"], ["wrong", "Not correct"]]);
+  var current = "all";
+  try { current = localStorage.getItem("step11-filter") || "all"; } catch (e) { /* storage blocked */ }
+  if (!filters.some(function (f) { return f[0] === current; })) current = "all";
+  function keep(e) {
+    if (current === "all") return true;
+    if (current === "edit") return e.edit;
+    if (current === "infra") return e.outcome === "infra";
+    if (current === "wrong") return e.outcome === "wrong" || e.outcome === "no answer";
+    return e.arm === current;
+  }
+  function drawEpisodes() {
+    $("episode-filter").innerHTML = filters.map(function (f) { return '<button type="button" class="chip" data-f="' + f[0] + '" aria-pressed="' + (f[0] === current) + '">' + esc(f[1]) + "</button>"; }).join("");
+    var rows = EP.filter(keep);
+    $("episode-table").innerHTML = rows.length ? "<table><tr><th>Finished</th><th>Arm</th><th>Family</th><th class=\"n\">Level</th><th>Language</th><th>Outcome</th><th class=\"n\">Turns</th><th class=\"n\">Sub-calls</th><th class=\"n\">Root tokens</th><th class=\"n\">Thinking</th><th class=\"n\">Tool-call turns</th><th class=\"n\">Cut turns</th><th class=\"n\">Context</th><th class=\"n\">Cost</th><th class=\"n\">Wall</th></tr>" +
+      rows.slice(0, 400).map(function (e) {
+        var oc = e.outcome === "correct" ? "oc-correct" : e.outcome === "infra" ? "oc-infra" : e.outcome === "wrong" ? "oc-wrong" : "oc-no";
+        return "<tr><td>" + (e.finished_at ? new Date(e.finished_at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–") + "</td><td>" + esc(SHORT[e.arm] || e.arm) + "</td><td>" + esc(e.family) + (e.sample ? " (2nd run)" : "") + '</td><td class="n">' + (e.level == null ? "–" : e.level) + "</td><td>" + esc(e.language || "") + '</td><td class="' + oc + '">' + esc(e.outcome) + (e.infra_kind ? " · " + esc(e.infra_kind) : "") + (e.f2p_pass != null && e.outcome !== "correct" ? " · f2p " + pct(e.f2p_pass) : "") + '</td><td class="n">' + e.turns + (e.max_turns && e.turns >= e.max_turns ? " (cap)" : "") + '</td><td class="n">' + (e.subcalls == null ? "–" : e.subcalls) + '</td><td class="n">' + (e.root_tokens == null ? "–" : e.root_tokens) + '</td><td class="n">' + (e.reasoning_tokens || "") + '</td><td class="n">' + (e.tool_call_turns || "") + '</td><td class="n">' + (e.truncated_turns || "") + '</td><td class="n">' + (e.context_chars == null ? "–" : Math.round(e.context_chars / 1000) + "K") + '</td><td class="n">' + usd(e.cost_usd, 3) + '</td><td class="n">' + secs(e.wall_s) + "</td></tr>";
+      }).join("") + "</table>" + (rows.length > 400 ? '<p class="sub">Showing the newest 400 of ' + rows.length + ".</p>" : "")
+      : '<div class="empty">No episode matches this filter yet.</div>';
+  }
+  $("episode-filter").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-f]");
+    if (!b) return;
+    current = b.getAttribute("data-f");
+    try { localStorage.setItem("step11-filter", current); } catch (e) { /* storage blocked */ }
+    drawEpisodes();
+  });
+  drawEpisodes();
+})();
+</script>

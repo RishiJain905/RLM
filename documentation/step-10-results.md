@@ -10,6 +10,8 @@
 >
 > **Dashboard:** [claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3](https://claude.ai/artifact/Jrm5PZd6VQNJT7cpkM9ou3), now shared with anyone who has the link. It shows the finished seed (versions 22-67 of the page cover this step).
 >
+> **Frozen copy (2026-10-16, Rishi's ask at step 11):** [Step 10 Dashboard](https://claude.ai/artifact/Cto75Tz4h4A4KXjthBAXhy) is the finished second-seed page as published, with a banner saying it never updates. Later runs publish elsewhere (step 11: [Step 11 Baselines](https://claude.ai/artifact/KLzyWe43mQoHtV4Mn35r3q)), so this copy always shows step 10. It is private until shared from its Share menu.
+>
 > **W&B inference spent:** $16.22 on W&B's billing page ($201.33 left of $250). The run estimated $16.40: $15.74 for the seed (training $13.77, eval $1.97) and $0.66 for the 10d step (§8). The plan budgeted ~$12 plus ~$0.50.
 >
 > **Status:** complete, with Rishi's three follow-ups built: resuming from a saved checkpoint (§8.1, tested live), sub-call spacing and the 8,000-character output cap (§10). The follow-up tests spent $0.31 more of inference and ~$0.16 of GPU time.

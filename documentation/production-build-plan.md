@@ -47,7 +47,7 @@ The goal is to train a Qwen3.8-27B LoRA as an RLM root with GRPO on W&B serverle
 | 9 | Live dashboard | PC + Claude | §2.5, §8.5, §9 | $0 | 9a, 9b, 9c | Done; the billing check waits for step 10 |
 | E1-E6 | Code editing build, "step 9.5" ([code-editing-plan.md](code-editing-plan.md) §13) | Design + PC | spec §12 | $0 | taken (E-a to E-g) | Done 2026-10-13; red-team fixes 2026-10-15 |
 | 10 | Second seed (also the smoke test) | Spend | H12 | ~$12 | taken (E-d, E-g); 10d new | **Next:** ready, waits for your go-ahead |
-| 11 | Baselines | Spend | §8.2 | ~$9 | 11a, 11b | After step 10 |
+| 11 | Baselines | Spend | §8.2 | ~$9 | 11a, 11b taken | Done 2026-10-17 ([results](step-11-results.md)); three calls before step 12 |
 | 12 | Production run | Spend | §8.6 | up to ~$157 + ~$30 evals | 12a taken; 12b new | After step 11; 12b first |
 | 13 | Final eval off W&B | PC or GPU host | §7.4 | $0 on W&B | 13a, 13b | After step 12 |
 
@@ -589,7 +589,7 @@ Rolling back and the learning-rate fallback both fork an earlier checkpoint thro
 
 ## Step 11. Baselines
 
-**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-16):** after step 10. The selection set is built; the script that runs the baselines isn't yet (below).
+**Type:** Spend · **Cost:** ~$9, plus ~$2-3 if 11b adds the thinking arm · **Research:** §8.2 · **Status (2026-10-17):** done, $5.89 measured (up to $8.04 counting failed tries W&B may bill). Results in [step-11-results.md](step-11-results.md): base RLM 42.5%, direct reading 59.1% (read tasks), medium thinking 59.4% (+17 points over off). Prompt v2 makes the base model answer in tool-call syntax on many turns, and three decisions (that fix, thinking, edit turns) come before step 12 (results §11). The baseline script is `scripts/baselines.py`.
 
 ### What we run
 
@@ -645,7 +645,7 @@ GRPO at 32 episodes per step (8 tasks × 4 rollouts), with every family starting
   - code reading 20% (`callgraph` 10%, `needle` 10%);
   - repo localization 15%;
   - editing 40% (`edit_real` 25%, `edit_synth` 15%).
-- **Cost:** with 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). Step 11 re-checks this.
+- **Cost:** with 40% edit tasks (code-editing-plan.md §10) a step costs ~$2.10, so that is ~75 steps (range ~50-90). Step 11 re-checks this. **Step 11 measured ~$0.95 a step with thinking off and ~$1.19 at medium, so ~130-165 steps for $157** *(inferred: training lengthens episodes; a working range is ~$1-1.5 a step)*; step-11-results.md §7.
 - **Evals:** the selection set and capability check run every 10 steps, at ~$3.50 each.
 - **Thinking:** off, unless 11b's arm earns `medium` for the root.
 
