@@ -99,6 +99,7 @@ class Turn:
     cell_s: float
     reasoning_tokens: int = 0  # thinking tokens in the turn's output: 0 with thinking off, as in training
     reasoning: str | None = None  # the thinking text, when the root thinks (plan step 11's medium-thinking arm)
+    resampled: list = field(default_factory=list)  # broken replies drawn again before this one (resample_broken)
 
 
 @dataclass
@@ -170,6 +171,7 @@ class Episode:
             "first_turn_submit": float(self.submitted and len(turns) == 1),
             "no_code_turns": float(sum(t.code is None for t in turns)),
             "broken_replies": float(reward.broken_replies(turns)),
+            "resampled_replies": float(sum(len(t.resampled) for t in turns)),
             "format_penalty": float(self.reward_components.get("format_penalty", 0.0)),
             "truncated_turns": float(sum(t.finish_reason == "length" for t in turns)),
             "repl_errors": float(sum(bool(t.cell and t.cell.get("error")) for t in turns)),
@@ -229,13 +231,16 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                       detect: Detect | None = detectors.check, run_id: str = "adhoc",
                       sandbox_factory: Callable[..., Any] = Sandbox, prompt_version: str = bridge.PROMPT_VERSION,
                       edit_sandbox_factory: Callable[..., Any] | None = None, edit_sandbox_kwargs: dict | None = None,
-                      grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, **sandbox_kwargs) -> Episode:
+                      grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, resample_broken: int = 0,
+                      **sandbox_kwargs) -> Episode:
     """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
 
     A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
     any fires, its reward becomes 0 and it no longer counts as correct (step 4). `detect=None`
     turns the detectors off, for tests only. `format_penalty` (training runs that turn it on) takes that much off the
-    reward for each broken reply, before the detectors (reward.broken_replies).
+    reward for each broken reply, before the detectors (reward.broken_replies). `resample_broken` draws a broken reply
+    again, up to that many times a turn, before it enters the conversation: the model never sees it, so it can't
+    snowball, and nothing trains on it (the Turn keeps what was dropped).
 
     An edit task (spec §12) runs in the edit sandbox (`edit_sandbox_factory`, editbox.EditSandbox by
     default) under the edit limits. After the last turn the host takes the repository's diff, and a
@@ -282,13 +287,21 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
         async with box:
             for index in range(lim.max_turns):
                 t0 = time.monotonic()
-                choice = await client.root_turn(ep.messages, model=root_model, usage=ep.usage,
-                                                max_tokens=lim.root_max_tokens)
+                dropped: list = []
+                while True:
+                    choice = await client.root_turn(ep.messages, model=root_model, usage=ep.usage,
+                                                    max_tokens=lim.root_max_tokens)
+                    reply = choice.message.content or ""
+                    code = extract_code(reply, tool_calls=prompt_version in bridge.TOOL_CALL_CODE_VERSIONS)
+                    if code is not None or choice.finish_reason == "length" or len(dropped) >= resample_broken:
+                        break
+                    extra = choice.model_extra or {}
+                    dropped.append({"reply": reply, "finish_reason": choice.finish_reason,
+                                    "completion_tokens": len(extra.get("token_ids", ())),
+                                    "reasoning_tokens": int(extra.get("reasoning_tokens") or 0)})
                 t1 = time.monotonic()
-                reply = choice.message.content or ""
                 ep.choices.append(choice)
                 ep.messages.append({"role": "assistant", "content": reply})
-                code = extract_code(reply, tool_calls=prompt_version in bridge.TOOL_CALL_CODE_VERSIONS)
                 result = (CellResult("", 0, bridge.no_code_error(prompt_version)) if code is None
                           else await box.run_cell(code))
                 _cap_output(result, lim.output_max_chars)
@@ -296,7 +309,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 turn = Turn(reply, choice.finish_reason, len(extra.get("token_ids", ())),
                             code, None if code is None else _cell_dict(result), None,
                             round(t1 - t0, 3), round(time.monotonic() - t1, 3),
-                            reasoning_tokens=int(extra.get("reasoning_tokens") or 0), reasoning=reasoning_text(choice))
+                            reasoning_tokens=int(extra.get("reasoning_tokens") or 0), reasoning=reasoning_text(choice),
+                            resampled=dropped)
                 ep.turns.append(turn)
                 if result.submitted:
                     ep.submitted, ep.answer, ep.answer_valid = True, result.answer, result.answer_valid

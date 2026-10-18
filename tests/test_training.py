@@ -439,7 +439,8 @@ class RollbackTest(LoopCase):
         self.dry.server.policy_for = broken_first
         with self.assertRaises(ValueError):
             await self.run_("fp").resume(format_penalty=0.5)
-        st = await self.run_("fp", stop_after=8).resume(from_checkpoint=5, format_penalty=0.1, mask_broken=True)
+        st = await self.run_("fp", stop_after=8).resume(from_checkpoint=5, format_penalty=0.1, mask_broken=True,
+                                                         resample_broken=1)
         self.assertEqual((st["latest"], st["branch"], st["config"]["format_penalty"], st["config"]["mask_broken"]),
                          (8, 1, 0.1, True))
         texts = [n["text"] for n in st["notices"] if n["kind"] == "format"]
@@ -456,7 +457,11 @@ class RollbackTest(LoopCase):
                          [r["lr"] for r in trained])
         self.assertTrue(all(r["masked"]["on"] and r["masked"]["replies"] >= 1 for r in st["steps"][5:]))
         prod = config.production("p", 2e-5)
-        self.assertEqual((prod.format_penalty, prod.mask_broken), (0.0, True))
+        self.assertEqual((prod.format_penalty, prod.mask_broken, prod.resample_broken), (0.0, True, 2))
+        # the first reply is broken every time here, so each episode drew it once more before keeping it
+        self.assertEqual(st["config"]["resample_broken"], 1)
+        self.assertTrue(all(len(r["turns"][0]["resampled"]) == 1 for r in after if r["infra_error"] is None))
+        self.assertGreaterEqual(st["steps"][-1]["shape"]["resampled_replies"], 1.0)
 
     async def test_a_branch_model_that_already_has_checkpoints_stops_the_resume(self):
         await self.run_("rw", cfg=second_seed("rw"), stop_after=6).start()

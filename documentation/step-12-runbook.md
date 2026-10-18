@@ -137,7 +137,17 @@ Steps 11-16 of branch 0 (~$8.40) are kept under `results/prod-v1/abandoned/`.
 .venv-linux/bin/python scripts/train.py resume prod-v1 --live --from 10 --lr 1e-5 --format-penalty 0 --mask-broken --discard-pending
 ```
 
-Branch 1's step 11 (~$1.85) is kept under `abandoned/b1-after10`. Watch broken replies on the Trouble chart. If they still climb, the next levers are ending an episode after a run of broken replies, and a lower learning rate.
+Branch 1's step 11 (~$1.85) is kept under `abandoned/b1-after10`.
+
+**Drawing broken replies again (branch 2, from step 14).** Per-step broken-reply counts swing with a few episodes that snowball (one edit episode can contribute 25), so per-episode numbers read better: episodes with a run of 5 or more broken replies went 0-2 a step through step 9, then 5 at step 10 (sampled from checkpoint 9), 8 at branch 0's step 16, and 2-7 on branch 2's first steps. The base model's own broken replies (steps 1-3) were mostly native tool-call tags (`<tool_call>` then `<function=shell>`), also cut short; prompt v3 already tells it those don't run. Masking stops the training signal; this stops the snowball:
+
+| Change | Where | What it does |
+|---|---|---|
+| Draw a broken reply again | `env.run_episode(resample_broken=)`, `config.RESAMPLE_BROKEN = 2`, `RunConfig.resample_broken` | In training rollouts, a broken reply is drawn again, up to twice a turn, before it enters the conversation: the model never sees it, so it can't copy it, and it never reaches training. The turn keeps what was dropped (`Turn.resampled`); if the third draw is broken too it stays, masked, as before. Evals keep one draw, so checkpoint scores stay comparable |
+| Resume switch | `train.py resume --resample-broken 2` | Turns it on for a run started before it existed |
+| Dashboard | Trouble per episode | "broken replies drawn again" per episode |
+
+The run stopped after branch 2's step 13 (stop switch) and resumed on the same branch with `--resample-broken 2`; no rollback, since branch 2 never trained on a broken reply. Each extra draw is one more root call, so a step costs a little more while broken replies are common. If drawn-again replies keep climbing, the next lever is a lower learning rate.
 
 ## 8. What changed for step 12 ($0, tested)
 

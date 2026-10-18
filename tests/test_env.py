@@ -124,6 +124,23 @@ class EpisodeTest(EnvCase):
         self.assertEqual(len([m for m in to_trajectory(ep).messages_and_choices if not isinstance(m, dict)]), 3)
         self.assertEqual((env.trainable_turns(ep, mask_broken=True), env.trainable_turns(ep, mask_broken=False)), (1, 3))
 
+    async def test_broken_replies_are_drawn_again_before_they_enter_the_conversation(self):
+        submit = "```python\nsubmit(len(context.splitlines()))\n```"
+        replies = iter(["", "<tool_call>", submit])
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode(resample_broken=2, detect=None)  # a turn-1 submit would trip early_submit
+        self.assertEqual((len(ep.turns), ep.correct, ep.usage.root_calls), (1, True, 3))
+        self.assertEqual([d["reply"] for d in ep.turns[0].resampled], ["", "<tool_call>"])
+        self.assertEqual([m["content"] for m in ep.messages if m["role"] == "assistant"], [submit])
+        self.assertEqual((ep.metrics()["resampled_replies"], ep.metrics()["broken_replies"]), (2.0, 0.0))
+        replies = iter(["", "", submit])  # one more draw only: the second broken reply stays and costs the turn
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode(resample_broken=1)
+        self.assertEqual((len(ep.turns), ep.turns[0].reply, len(ep.turns[0].resampled), ep.correct), (2, "", 1, True))
+        replies = iter(["", submit])  # off by default
+        self.server.policy = lambda messages: next(replies)
+        self.assertEqual(len((await self.episode()).turns), 2)
+
     def test_a_reply_cut_at_the_token_cap_is_not_broken(self):
         def turn(reply, finish, code):
             return env.Turn(reply, finish, 10, code, None, None, 0.0, 0.0)

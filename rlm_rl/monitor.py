@@ -285,6 +285,7 @@ def step_metrics(groups: list[list[Episode]], step_filter: StepFilter, *, contro
         "shape": {"subcalls": m("subcalls"), "budget_hit": m("budget_hit"), "turns": m("turns"),
                   "first_turn_submit": m("first_turn_submit"), "no_code_turns": m("no_code_turns"),
                   "broken_replies": m("broken_replies"), "format_penalty": m("format_penalty"),
+                  "resampled_replies": m("resampled_replies"),
                   "repl_errors": m("repl_errors"), "timeouts": m("timeouts"),
                   "root_completion_tokens": m("root_completion_tokens"), "subcall_tokens": m("subcall_tokens"),
                   "truncated_turns": m("truncated_turns"),

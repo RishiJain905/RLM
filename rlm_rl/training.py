@@ -187,10 +187,11 @@ class TrainingRun:
     async def resume(self, *, from_checkpoint: str | int | None = None, lr: float | None = None,
                      retrain_pending: bool = False, discard_pending: bool = False,
                      ceilings: dict | None = None, format_penalty: float | None = None,
-                     mask_broken: bool | None = None) -> dict:
+                     mask_broken: bool | None = None, resample_broken: int | None = None) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
         `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
-        `mask_broken` whether broken replies take a gradient."""
+        `mask_broken` whether broken replies take a gradient; `resample_broken` how many times a broken reply is drawn
+        again in the rollouts."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -223,6 +224,11 @@ class TrainingRun:
             self.state["config"]["mask_broken"] = mask_broken
             self._notice("format", "broken replies " + ("take no gradient from here on (masked)" if mask_broken
                                                         else "are trained on again (not masked)"))
+        if resample_broken is not None and resample_broken != self.cfg.resample_broken:
+            self.cfg = RunConfig.from_dict({**self.cfg.as_dict(), "resample_broken": resample_broken})  # validates it
+            self.state["config"]["resample_broken"] = resample_broken
+            self._notice("format", f"a broken reply is drawn again up to {resample_broken} time(s) a turn in the rollouts "
+                                   "from here on, so it never enters the conversation")
         target = self._resolve_checkpoint(from_checkpoint)
         if target is not None and target != self._latest():
             await self._rollback(target, reason="resumed by the operator from an earlier checkpoint", new_lr=lr)
@@ -446,7 +452,8 @@ class TrainingRun:
         fallback = self._fallback_slots(n, batch)
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
                                   sandbox_factory=self.sandbox_factory, prompt_version=cfg.prompt_version,
-                                  format_penalty=cfg.format_penalty, **self.sandbox_kwargs)
+                                  format_penalty=cfg.format_penalty, resample_broken=cfg.resample_broken,
+                                  **self.sandbox_kwargs)
         t_rollouts = time.monotonic() - t0
         TranscriptLog(path).extend([episode_record(ep, split="train", run=cfg.run, step=n, sample=sample,
                                                    key=f"train/step{n}/{ep.task_id}/{sample}")

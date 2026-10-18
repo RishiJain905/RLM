@@ -191,6 +191,7 @@ REWARD_KEYS = ("mean", "exact", "partial", "near_blind", "submitted", "hacked")
 POLICY_KEYS = ("entropy", "entropy_tokens", "reward_std", "kl_to_base", "kl_k3", "grad_norm", "probs_corr",
                "clip_fraction", "importance_ratio_mean", "importance_ratio_p95", "importance_ratio_p99", "loss")
 SHAPE_KEYS = ("subcalls", "budget_hit", "turns", "first_turn_submit", "no_code_turns", "broken_replies", "format_penalty",
+              "resampled_replies",
               "repl_errors", "timeouts",
               "root_completion_tokens", "subcall_tokens", "truncated_turns", "episodes_with_truncated_turn",
               "output_truncations", "context_chars", "wall_s")

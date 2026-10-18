@@ -61,6 +61,9 @@ PRODUCTION_CEILINGS = {"train": 146.0, "eval": 34.0}  # spec §12.11 planned $15
 # Root thinking for production (Rishi, 2026-10-17, decision 11b): the base model with its root thinking at `medium` beat
 # thinking off by 17 points in the step 11 baselines, at ~1.25x the inference cost a step. Sub-calls stay off.
 PRODUCTION_ROOT_THINKING = "medium"
+# Broken replies drawn again in training rollouts (2026-10-18): once one is in the conversation the model copies it,
+# and one prod-v1 edit episode spent 23 of its 30 turns that way. Two more draws a turn; evals keep one draw.
+RESAMPLE_BROKEN = 2
 
 TRAINING_GPU_USD_PER_STEP = 0.16  # the 20-step run's measured rate (research §7.1); an estimate for the dashboard
 
@@ -93,6 +96,7 @@ class RunConfig:
     root_thinking: str | None = None  # client.ROOT_THINKING_EFFORTS or None (off); production thinks at medium
     format_penalty: float = 0.0  # reward off per broken reply in training rollouts (reward.FORMAT_PENALTY); 0 is off
     mask_broken: bool = False  # broken replies take no gradient (env.to_trajectory); production's fix since 2026-10-18
+    resample_broken: int = 0  # times a training rollout draws a broken reply again before it enters the conversation
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -109,6 +113,8 @@ class RunConfig:
             raise ValueError(f"root thinking must be None or one of {client.ROOT_THINKING_EFFORTS}")
         if not 0.0 <= self.format_penalty <= 0.2:
             raise ValueError("format penalty must be between 0 and 0.2 a reply")
+        if not 0 <= self.resample_broken <= 3:
+            raise ValueError("resample_broken must be between 0 and 3 draws a turn")
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -155,7 +161,8 @@ def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunCon
     return RunConfig(run=run, kind="production", learning_rate=learning_rate,
                      lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", mix=mix, eval_every=10,
                      eval_at_start=True, selection=selection, capability_set=capability_set,
-                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING, mask_broken=True)
+                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING, mask_broken=True,
+                     resample_broken=RESAMPLE_BROKEN)
 
 
 # ----------------------------------------------------------------------------- pinned values (spec §8)
