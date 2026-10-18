@@ -24,9 +24,12 @@ _POOL = ThreadPoolExecutor(max_workers=128, thread_name_prefix="fake-repl")
 
 
 class FakeBridge:
-    def __init__(self, complete, max_subcalls: int = bridge.MAX_SUBCALLS):
+    def __init__(self, complete, max_subcalls: int = bridge.MAX_SUBCALLS, *, max_chars: int = bridge.SUBCALL_MAX_CHARS,
+                 oversize: str = "truncate"):
         self.complete = complete
         self.max_subcalls = max_subcalls
+        self.max_chars = max_chars
+        self.oversize = oversize
         self.subcalls_used = 0
         self.records: list[SubcallRecord] = []
         self.rejected: list[str] = []
@@ -37,8 +40,12 @@ class FakeBridge:
             raise RuntimeError("sub-call failed for an infrastructure reason; this episode will be discarded")
         if self.subcalls_used + len(prompts) > self.max_subcalls:
             raise RuntimeError(bridge.budget_exhausted_message(self.max_subcalls))
+        longest = max((len(p) for p in prompts), default=0)
+        if self.oversize == "error" and longest > self.max_chars:
+            raise ValueError(bridge.oversize_message(longest, self.max_chars))
         self.subcalls_used += len(prompts)
-        results = await asyncio.gather(*(self._one(bridge.truncate_prompt(p)) for p in prompts), return_exceptions=True)
+        results = await asyncio.gather(*(self._one(bridge.truncate_prompt(p, self.max_chars)) for p in prompts),
+                                       return_exceptions=True)
         for r in results:
             if isinstance(r, BaseException) and not isinstance(r, SubcallError):
                 if self.infra_error is None:
@@ -73,10 +80,11 @@ class FakeSandbox:
     """
 
     def __init__(self, context: str, complete, *, run_id: str = "adhoc", kill_after_cells: int | None = None,
-                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None):
+                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None,
+                 subcall_max_chars: int = bridge.SUBCALL_MAX_CHARS, subcall_oversize: str = "truncate"):
         self.context = context
         self.messages = messages or bridge.cell_messages(bridge.PROMPT_VERSION)
-        self.bridge = FakeBridge(complete, max_subcalls)
+        self.bridge = FakeBridge(complete, max_subcalls, max_chars=subcall_max_chars, oversize=subcall_oversize)
         self.events: list[dict] = []
         self.cells = self.timeouts = self.crashes = self.restarts = 0
         self.kill_after_cells = kill_after_cells

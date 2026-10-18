@@ -88,6 +88,14 @@ SELECTION_V2_SYNTH = [("fix", 1), ("callers", 2), ("feature", 3), ("fix", 4), ("
 SELECTION_V3_EXTRA = {("aggregation", 3): 1, ("aggregation", 4): 1, ("aggregation", 5): 1, ("callgraph", 4): 1,
                       ("needle", 5): 1, ("repo_loc_select", 3): 1, ("repo_loc_select", 4): 2}
 SELECTION_V3_DROPPED = ("tickets_all", "tickets_customer")
+# selection-v4 (step-12 task shift, documentation/step-12-multistep-plan.md step 5, 2026-10-18): the families built to
+# need sub-calls, in the new mix's proportions (research 30 / context search 20 / build from a spec 30 / find and fix
+# 20 of 48). research_select reads only MuSiQue's and QAMPARI's dev questions, which training never sees; aggregation
+# gets held-out seeds of aggregation-v3; the coding tasks come from their families' select pools (repositories or
+# tasks training never sees), spread evenly over the levels. Checkpoint 20 is re-scored on it as the new baseline.
+SELECTION_V4_READ = {**{("research_select", level): n for level, n in {1: 3, 2: 3, 3: 3, 4: 3, 5: 2}.items()},
+                     **{("aggregation", level): 2 for level in range(1, 6)}}
+SELECTION_V4_EDIT = {"edit_spec_select": 14, "edit_bugs_select": 10}
 # heldout-test-v2: heldout-test-v1 plus 60 edit tasks, 20 edit_synth_heldout (every kind at every level, plus five
 # more) and the 40 edit_real tasks of the test split (held-out repositories, at least 15 of them feature tasks).
 HELDOUT_V2_SYNTH = [(kind, level) for level in range(1, 6) for kind in ("fix", "callers", "feature")] + \
@@ -100,6 +108,14 @@ def _synth_set(name: str, family: str, plan: list[tuple[str, int]]) -> list[Task
     seeds = task_sets.private_seed_list(name, len(plan))
     return [editsynth.make_task(seed, family, level, f"{name}-{i:02d}", kind=kind)
             for i, (seed, (kind, level)) in enumerate(zip(seeds, plan))]
+
+
+def _spread(tasks: list[Task], n: int) -> list[Task]:
+    """n tasks spread evenly over a list sorted by level, so every level is represented."""
+    tasks = sorted(tasks, key=lambda t: (t.level, t.task_id))
+    if len(tasks) <= n:
+        return tasks
+    return [tasks[round(i * (len(tasks) - 1) / (n - 1))] for i in range(n)] if n > 1 else tasks[:1]
 
 
 def eval_set(name: str) -> tuple[list[Task], int]:
@@ -130,6 +146,11 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         read = [t for t in kept if not bridge.is_edit(t.family)]
         extra = task_sets.fixed_set(f"{name}-extra", SELECTION_V3_EXTRA)
         return read + extra + [t for t in kept if bridge.is_edit(t.family)], 1
+    if name == "selection-v4":
+        read = task_sets.fixed_set(name, SELECTION_V4_READ)
+        edit = [t for family, n in SELECTION_V4_EDIT.items()
+                for t in _spread(task_sets.generator(family).eval_tasks("select", family), n)]
+        return read + edit, 1
     if name == "heldout-test-v2":
         from .tasks import editreal
 

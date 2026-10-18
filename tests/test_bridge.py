@@ -117,15 +117,34 @@ class PromptTextTest(unittest.TestCase):
 
         self.assertEqual(len(bridge.PROMPT_HASH), 64)
         self.assertEqual(bridge.PROMPT_HASH, bridge.PROMPT_HASHES["v3"])
-        self.assertEqual(len(set(bridge.PROMPT_HASHES.values())), 3)
-        # the runs that used v1 and v2 recorded these; adding v3 must not change them
+        self.assertEqual(len(set(bridge.PROMPT_HASHES.values())), 4)
+        # the runs that used v1-v3 recorded these; adding v4 must not change them
         self.assertEqual(bridge.PROMPT_HASHES["v1"][:12], "776e044310ab")
         self.assertEqual(bridge.PROMPT_HASHES["v2"][:12], "d2c3373c3349")
+        self.assertEqual(bridge.PROMPT_HASHES["v3"][:12], "cda4372ff7a8")
         for version, texts in bridge.PROMPTS.items():
             for key in texts:
                 changed = dict(texts, **{key: texts[key] + " "})
                 self.assertNotEqual(hashlib.sha256(json.dumps(changed, sort_keys=True).encode()).hexdigest(),
                                     bridge.PROMPT_HASHES[version])
+
+    def test_prompt_v4_makes_sub_calls_sub_agents(self):
+        """prod-v1 checkpoint 20 (documentation/step-12-multistep-plan.md step 2): stronger sub-calls, an orchestrator
+        prompt, and a budget that isn't scarce."""
+        read, edit = bridge.limits("research", "v4"), bridge.limits("edit_spec", "v4")
+        self.assertEqual((read.max_turns, read.max_subcalls, read.subcall_max_chars, read.subcall_max_tokens,
+                          read.subcall_thinking, read.subcall_oversize), (20, 80, 60_000, 4096, None, "error"))
+        self.assertEqual((edit.max_turns, edit.max_subcalls, edit.subcall_thinking), (30, 80, "low"))
+        self.assertEqual(bridge.limits("aggregation", "v3"), bridge.READ_LIMITS)  # v3 unchanged
+        self.assertEqual(bridge.limits("aggregation", "v3").subcall_max_chars, bridge.SUBCALL_MAX_CHARS)
+        prompt = bridge.system_prompt("v4")
+        for phrase in ("orchestrator", "plan the decomposition", "interfaces first", "60,000", "`llm_batch`"):
+            self.assertIn(phrase, prompt)
+        for name in bridge.API_NAMES:
+            self.assertIn(f"`{name}", prompt)
+        self.assertEqual(bridge.no_code_error("v4"), bridge.NO_CODE_BLOCK_ERROR_V3)
+        self.assertIn("v4", bridge.TOOL_CALL_CODE_VERSIONS)
+        self.assertIn("60,000", bridge.oversize_message(72_000, 60_000))
 
     def test_first_user_message(self):
         context = "a,b\nline 2\nline 3\nline 4"

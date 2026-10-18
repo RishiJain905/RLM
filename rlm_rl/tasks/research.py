@@ -5,12 +5,12 @@ can print (12-20 turns x 8,000 characters), and keyword hits are mostly look-ali
 read: hop by hop, or by handing chunks to sub-calls.
 
 Two kinds of task, from two sources:
-- multi-hop (~70%), from MuSiQue-Ans (CC BY 4.0). The question's own 20 paragraphs (its supporting paragraphs and the
+- multi-hop (~80%), from MuSiQue-Ans (CC BY 4.0). The question's own 20 paragraphs (its supporting paragraphs and the
   dataset's lexically similar distractors) are packed among paragraphs of other questions until the level's size.
   Part of the padding is drawn from paragraphs that share a word with the question, so a keyword search hits many
   documents. The hop-2 entity only appears after hop 1 is read. Graded as free text ("text"): exact match against
   the answer or an alias, else 0.8 x token-F1.
-- list (~30%), from QAMPARI's single-relation questions (CC0; Wikipedia text). One document per Wikipedia page, built
+- list (~20%), from QAMPARI's single-relation questions (CC0; Wikipedia text). One document per Wikipedia page, built
   from the dataset's proof sentences: one per answer, plus pages that name the question's entity in another role
   (hard negatives), pages that share the question's other words, and random pages. The answer is the list of the
   answer documents' titles, graded by set-F1 against a blind guess of [] ("list").
@@ -30,13 +30,22 @@ Families:
 Each split pads only with its own split's text, and no question, MuSiQue sub-question or QAMPARI entity is shared
 across splits.
 
-Levels: 2-hop at ~75K characters up to 4-hop at ~700K; list questions grow from 5-6 answers to 10-15 over the same
-sizes, with more hard negatives.
+Levels: 2-hop at ~75K characters (level 1 only), 3-hop from level 2, up to 4-hop at ~700K; list questions grow from
+5-6 answers to 10-15 over the same sizes, with more hard negatives.
+
+Research-v2 (Rishi, 2026-10-18: "thorough and complex research questions", nothing the model already knows):
+- A question the base model answers from memory, with no documents (scripts/closed_book.py), is never drawn: such a
+  task can be solved without reading, so it teaches nothing about delegating. Only checked questions are drawn once
+  the check's file (CLOSED_BOOK) exists.
+- Level 2 is 3-hop (2-hop stays at level 1).
+- A list task's blind guess is the grep answer (every document naming the question's entity), so a search alone
+  earns nothing and only telling answers from hard negatives does.
 """
 
 from __future__ import annotations
 
 import functools
+import json
 import math
 import random
 import re
@@ -46,7 +55,8 @@ from .. import data
 from ..env import Task
 from ..reward import normalize_text
 
-GENERATOR_VERSION = "research-v1"
+GENERATOR_VERSION = "research-v2"
+CLOSED_BOOK = "research/closed-book-v1.json"  # under the data root's derived/; written by scripts/closed_book.py
 FAMILIES = ("research", "research_select", "research_test")
 SPLIT = {"research": "train", "research_select": "select", "research_test": "test"}
 TRAIN_SOURCES = ("musique", "qampari")
@@ -54,9 +64,11 @@ TRAIN_SOURCES = ("musique", "qampari")
 LEVELS = {1: (60_000, 90_000), 2: (120_000, 180_000), 3: (220_000, 300_000), 4: (380_000, 480_000),
           5: (600_000, 800_000)}
 MAX_LEVEL = max(LEVELS)
-HOPS = {1: (2,), 2: (2, 3), 3: (3,), 4: (3, 4), 5: (4,)}
+HOPS = {1: (2,), 2: (3,), 3: (3,), 4: (3, 4), 5: (4,)}
 LIST_ANSWERS = {1: (5, 6), 2: (5, 8), 3: (6, 10), 4: (8, 12), 5: (10, 15)}
-LIST_SHARE = 0.3
+# Research-v2: 0.2 (was 0.3). QAMPARI's lists are single-relation questions with some label noise (a likely answer
+# used as a distractor in ~3 of 17 sampled), so most research tasks are MuSiQue's multi-hop chains.
+LIST_SHARE = 0.2
 # The share of a context's padding drawn from documents that share a word with the question *(mine)*.
 NEAR_SHARE = {1: 0.25, 2: 0.3, 3: 0.35, 4: 0.4, 5: 0.45}
 # Hard negatives. A gold document always names the question's entity, and padding never does, so a search for the
@@ -162,10 +174,29 @@ def _qampari(split: str) -> dict:
 
 
 @functools.lru_cache(maxsize=None)
+def closed_book() -> dict | None:
+    """The closed-book check's results (scripts/closed_book.py), or None before it has run."""
+    path = data.derived(CLOSED_BOOK)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+@functools.lru_cache(maxsize=None)
+def usable(source: str, split: str) -> frozenset[int] | None:
+    """The question indices a split may draw: checked closed-book and not answered from memory. None: no check for
+    this split yet, so every question."""
+    row = ((closed_book() or {}).get("results") or {}).get(source, {}).get(split)
+    if row is None:
+        return None
+    return frozenset(row["checked"]) - frozenset(row["known"])
+
+
+@functools.lru_cache(maxsize=None)
 def _by_hops(split: str) -> dict[int, list[int]]:
+    ok = usable("musique", split)
     out: dict[int, list[int]] = {}
     for i, q in enumerate(_musique(split)["questions"]):
-        out.setdefault(int(q["hops"]), []).append(i)
+        if ok is None or i in ok:
+            out.setdefault(int(q["hops"]), []).append(i)
     return out
 
 
@@ -183,10 +214,12 @@ def list_pool(split: str, level: int) -> tuple[int, ...]:
     """The QAMPARI questions a level draws from: the level's answer count and enough hard negatives. A small eval
     pool without such questions relaxes the negatives (to half, then none), then the answer count (nearest)."""
     questions = _qampari(split)["questions"]
+    ok = usable("qampari", split)
     lo, hi = LIST_ANSWERS[level]
     for ratio in (NEG_RATIO[level], NEG_RATIO[level] / 2, 0.0):
         pool = tuple(i for i, q in enumerate(questions)
-                     if lo <= len(q["gold"]) <= hi and len(q["neg"]) >= math.ceil(ratio * len(q["gold"])))
+                     if lo <= len(q["gold"]) <= hi and len(q["neg"]) >= math.ceil(ratio * len(q["gold"]))
+                     and (ok is None or i in ok))
         if pool:
             return pool
     best = min(abs(len(q["gold"]) - lo) + abs(len(q["gold"]) - hi) for q in questions)
@@ -308,7 +341,10 @@ def _list_task(rng: random.Random, split: str, level: int, budget: int) -> tuple
     docs = [(pages[i][0], texts[i]) for i in chosen]
     gold_docs = sorted(n for n, i in enumerate(chosen, 1) if i in gold)
     answer = sorted(pages[pid][0] for pid in gold)
-    return q["q"], answer, {"answers": len(answer), "negatives": len(negs), "qtype": q["type"]}, docs, gold_docs
+    # The grep answer: every document naming the question's entity (the answers and the hard negatives). It scored
+    # set-F1 0.3-0.6 without reading, so it is the blind guess, and only telling answers from negatives earns credit.
+    grep = sorted({title for title, text in docs if names is not None and names.search(f"{title} {text}")})
+    return q["q"], answer, {"answers": len(answer), "negatives": len(negs), "qtype": q["type"], "grep": grep}, docs,         gold_docs
 
 
 # ----------------------------------------------------------------------------- tasks
@@ -340,9 +376,10 @@ def build(seed: int, family: str, level: int = 1, task_id: str | None = None) ->
     else:
         question, answer, extra, docs, gold_docs = _list_task(rng, split, level, budget)
         template = rng.choice(HELDOUT_LIST if heldout else TRAIN_LIST)
-        grading = {"type": "list", "item": "entity", "blind": [], "answers": extra["answers"],
+        grading = {"type": "list", "item": "entity", "blind": extra.pop("grep"), "answers": extra["answers"],
                    "negatives": extra["negatives"], "source": "qampari"}
-    grading.update(kind=kind, code_only=False, docs=len(docs))
+    # which closed-book check filtered the pool: a task's seed draws another question once the check changes
+    grading.update(kind=kind, code_only=False, docs=len(docs), closed_book=(closed_book() or {}).get("version"))
     task = Task(task_id, family, template.format(question=question), _render(docs), answer=answer, level=level,
                 grading=grading)
     return task, {"gold_docs": gold_docs, "question": question, "kind": kind, **extra}

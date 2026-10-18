@@ -236,20 +236,46 @@ def step_metrics(groups: list[list[Episode]], step_filter: StepFilter, *, contro
 
     families: dict[str, dict] = {}
     for ep in eps:
-        fam = families.setdefault(ep.family, {"episodes": 0, "scored": 0, "correct": 0, "rewards": [], "levels": set()})
+        fam = families.setdefault(ep.family, {"episodes": 0, "scored": 0, "correct": 0, "rewards": [], "levels": set(),
+                                              "subcalls": 0, "delegated": 0, "correct_delegated": 0})
         fam["episodes"] += 1
         fam["levels"].add(ep.level)
         if ep.infra_error is None:
             fam["scored"] += 1
             fam["correct"] += bool(ep.correct)
             fam["rewards"].append(ep.reward)
+            used = int(getattr(ep, "subcalls_used", 0) or 0)
+            fam["subcalls"] += used
+            fam["delegated"] += used > 0
+            fam["correct_delegated"] += bool(ep.correct) and used > 0
+    # tasks solved without sub-calls (the solo retirement rule, tasks.Retirement): at least half the group right and
+    # none of the right answers delegated
+    solo: dict[str, list[int]] = {}
+    for group in groups:
+        clean_group = [ep for ep in group if ep.infra_error is None]
+        if not clean_group:
+            continue
+        right = [ep for ep in clean_group if ep.correct]
+        row = solo.setdefault(clean_group[0].family, [0, 0])
+        row[1] += 1
+        row[0] += (2 * len(right) >= len(clean_group) and bool(right)
+                   and not any(getattr(ep, "subcalls_used", 0) for ep in right))
     ctl = controller.summary() if controller is not None else {}
     by_family = {}
     for name in sorted(set(families) | set(ctl)):
-        fam = families.get(name, {"episodes": 0, "scored": 0, "correct": 0, "rewards": [], "levels": set()})
+        fam = families.get(name, {"episodes": 0, "scored": 0, "correct": 0, "rewards": [], "levels": set(),
+                                  "subcalls": 0, "delegated": 0, "correct_delegated": 0})
         state = ctl.get(name, {})
         by_family[name] = {"level": state.get("level"), "levels_drawn": sorted(fam["levels"]),
                            "episodes": fam["episodes"], "scored": fam["scored"],
+                           # delegation (step-12 task shift): sub-calls per scored episode, the share of episodes that
+                           # made any, and the share of right answers that came from an episode that delegated
+                           "subcalls_per_episode": _round(fam["subcalls"] / fam["scored"] if fam["scored"] else None),
+                           "delegated_share": _round(fam["delegated"] / fam["scored"] if fam["scored"] else None),
+                           "correct_delegated_share": _round(fam["correct_delegated"] / fam["correct"]
+                                                             if fam["correct"] else None),
+                           "solo_task_share": _round(solo[name][0] / solo[name][1] if solo.get(name, [0, 0])[1]
+                                                     else None),
                            "pass_rate": _round(fam["correct"] / fam["scored"] if fam["scored"] else None),
                            "mean_reward": _round(_mean(fam["rewards"])),
                            "window_pass_rate": _round(state.get("pass_rate")), "saturated": state.get("saturated")}

@@ -28,7 +28,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
 UP_ABOVE = 0.70
-DOWN_BELOW = 0.20
+# Was 0.20. Raised with the step-12 task shift (2026-10-18): groups only teach when a task is neither always solved
+# nor never solved, and Online Difficulty Filtering (arXiv 2504.03380) found a 0.3-0.7 pass-rate band works best.
+DOWN_BELOW = 0.30
 WINDOW_STEPS = 3
 MIN_EPISODES = 8
 FIRST_LEVEL = 1
@@ -84,6 +86,16 @@ class DifficultyController:
 
     def level(self, family: str) -> int:
         return self.families[family].level
+
+    def set_families(self, max_levels: dict[str, int]) -> None:
+        """Make the controller track exactly these families: a new one starts at level 1, a dropped one is forgotten
+        (a resume that changes the training mix, TrainingRun._set_mix)."""
+        for family in list(self.families):
+            if family not in max_levels:
+                del self.families[family]
+        for family, top in max_levels.items():
+            if family not in self.families:
+                self.families[family] = FamilyState(FIRST_LEVEL, top)
 
     def levels(self) -> dict[str, int]:
         return {family: state.level for family, state in self.families.items()}

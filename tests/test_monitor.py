@@ -163,6 +163,20 @@ class StepMetricsTest(MonitorCase):
         self.assertIn("rlm/policy/entropy", flat)
         self.assertNotIn("rlm/policy/importance_ratio_p95", flat)  # missing values are left out
 
+    async def test_delegation_numbers_per_family(self):
+        groups = await self.groups(2, 4)
+        # task 0: 3 of 4 right, only one right answer delegated; task 1: 2 of 4 right, none delegated (solved solo)
+        for ep, (correct, used) in zip(groups[0], [(True, 2), (True, 0), (True, 0), (False, 5)]):
+            ep.correct, ep.subcalls_used, ep.reward = correct, used, float(correct)
+        for ep, (correct, used) in zip(groups[1], [(True, 0), (True, 0), (False, 3), (False, 0)]):
+            ep.correct, ep.subcalls_used, ep.reward = correct, used, float(correct)
+        m = monitor.step_metrics(groups, filter_step(groups))
+        fam = m["families"]["lines"]
+        self.assertEqual(fam["subcalls_per_episode"], 1.25)  # 10 sub-calls over 8 episodes
+        self.assertEqual(fam["delegated_share"], 0.375)  # 3 of 8 made any
+        self.assertEqual(fam["correct_delegated_share"], 0.2)  # 1 of 5 right answers
+        self.assertEqual(fam["solo_task_share"], 0.5)  # task 1 only
+
     async def test_the_client_counts_every_response_it_pays_for(self):
         before = self.client.spent_usd()
         await self.groups(1, 2)

@@ -29,10 +29,10 @@ from typing import Any, Awaitable, Callable
 
 API_VERSION = "v1"
 PROMPT_VERSION = "v3"
-PROMPT_VERSIONS = ("v1", "v2", "v3")
+PROMPT_VERSIONS = ("v1", "v2", "v3", "v4")
 # Versions that run code written in Qwen3.8's tool-call syntax (env.extract_code): in step 11 the base model wrote
 # `<tool_call>` tags on 43% of its turns under prompt v2, whose system prompt lists the coding tools.
-TOOL_CALL_CODE_VERSIONS = ("v3",)
+TOOL_CALL_CODE_VERSIONS = ("v3", "v4")
 
 # What the model sees in the REPL (spec §1.1), and the only requests the socket accepts (§1.4).
 # `submit` never crosses the bridge: its value comes back with the cell result.
@@ -70,6 +70,12 @@ class Limits:
     memory_mb: int
     pids: int
     grader_timeout_s: int | None  # edit families only
+    # Sub-calls (prompt v4, 2026-10-18): how much one sub-call reads and writes, whether it thinks, and what an
+    # oversize prompt does ("truncate": cut it, as v1-v3 did; "error": refuse it in the REPL so the model splits it).
+    subcall_max_chars: int = 24_000
+    subcall_max_tokens: int = 1024
+    subcall_thinking: str | None = None
+    subcall_oversize: str = "truncate"
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -83,6 +89,13 @@ EDIT_LIMITS = Limits(max_turns=20, max_subcalls=30, root_max_tokens=4096, output
 # Prompt v3's edit turns (Rishi, 2026-10-17): 56% of the base model's edit episodes ended unresolved at 20 turns in
 # step 11, over code-editing-plan.md §9's 20% threshold.
 EDIT_MAX_TURNS_V3 = 30
+# Prompt v4 (prod-v1 checkpoint 20, Rishi 2026-10-18, documentation/step-12-multistep-plan.md step 2): sub-calls are
+# sub-agents worth calling. Each reads 60,000 characters and writes 4,096 tokens, coding sub-calls think at low effort,
+# an oversize prompt is an error instead of a silent cut, the budget is 80 sub-calls, and read families get 20 turns.
+READ_LIMITS_V4 = dataclasses.replace(READ_LIMITS, max_turns=20, max_subcalls=80, root_max_tokens=4096,
+                                     subcall_max_chars=60_000, subcall_max_tokens=4096, subcall_oversize="error")
+EDIT_LIMITS_V4 = dataclasses.replace(EDIT_LIMITS, max_turns=30, max_subcalls=80, subcall_max_chars=60_000,
+                                     subcall_max_tokens=4096, subcall_thinking="low", subcall_oversize="error")
 
 
 def is_edit(family: str) -> bool:
@@ -92,6 +105,8 @@ def is_edit(family: str) -> bool:
 def limits(family: str, version: str = PROMPT_VERSION) -> Limits:
     """The limits an episode of this family runs under (spec §12.3): prompt v1's output cap for a v1 episode, and
     prompt v3's 30 edit turns."""
+    if version == "v4":
+        return EDIT_LIMITS_V4 if is_edit(family) else READ_LIMITS_V4
     lim = EDIT_LIMITS if is_edit(family) else READ_LIMITS
     if version == "v1":
         return dataclasses.replace(lim, output_max_chars=OUTPUT_MAX_CHARS_V1)
@@ -206,6 +221,32 @@ CELL_CRASH_ERROR = (
     "`context` and your sub-call budget are unchanged."
 )
 
+# Prompt v4 (2026-10-18): v3 with the orchestrator framing the published RLM harnesses use (alexzhang13/rlm, Prime
+# Intellect's RLMEnv, the RLM harness post's "nudge to decompose"), sub-calls described as the sub-agents they now are,
+# and interface-first delegation for code (the main multi-agent coding failure is parts that don't fit together).
+SYSTEM_PROMPT_V4 = (SYSTEM_PROMPT
+    .replace("it can read about 20,000 characters per call", "it can read about 60,000 characters and write a few "
+             "thousand tokens per call; a longer prompt is an error, so split it")
+    .replace("Your turn and sub-call limits are given with the task. Look at the structure of the input before "
+             "processing it, decompose the work, use code for exact filtering and arithmetic, and use sub-calls for "
+             "judgments that need reading comprehension. Call `submit()` once you are confident.",
+             "Your turn and sub-call limits are given with the task. You are an orchestrator, not a lone solver: your own "
+             "view is small (8000 printed characters a turn), while sub-calls are sub-agents that each read a large "
+             "piece and report back. First look at the structure of the input, then plan the decomposition: which "
+             "pieces, which question for each, how you will combine the answers. Send independent pieces together "
+             "with `llm_batch` (around 20 prompts a batch), ask each sub-call for a short, structured answer you can "
+             "parse, combine the results with code, and check anything surprising with a follow-up sub-call. Use code "
+             "for exact filtering and arithmetic, and sub-calls for reading and judgment. Call `submit()` once you "
+             "are confident.")
+    .replace("Explore with code and print summaries, not whole files. Use `llm_batch` to read many files at once, and "
+             "`llm` to draft or review a change.",
+             "Explore with code and print summaries, not whole files. Split coding work the same way: write the "
+             "interfaces first (signatures, types, docstrings and how the parts call each other), give them to every "
+             "sub-call, let each sub-call draft or review one part (`llm_batch` for parts that don't depend on each "
+             "other) or check one suspect file or hypothesis, then integrate the parts yourself, run the tests and "
+             "fix what fails."))
+assert SYSTEM_PROMPT_V4.count("orchestrator") == 1 and "interfaces first" in SYSTEM_PROMPT_V4 and "60,000" in SYSTEM_PROMPT_V4
+
 _OBSERVATION = [OBS_OUTPUT, OBS_NOTHING_PRINTED, OBS_TRUNCATED, OBS_ERROR, OBS_COUNTERS, OBS_LAST_TURN,
                 NO_CODE_BLOCK_ERROR]
 PROMPTS = {
@@ -219,6 +260,12 @@ PROMPTS = {
            "observation": "\n".join([NO_CODE_BLOCK_ERROR_V3 if t == NO_CODE_BLOCK_ERROR else t for t in _OBSERVATION]
                                     + [CELL_TIMEOUT_TEMPLATE, CELL_CRASH_TEMPLATE, EDIT_FILES_UNCHANGED, CELL_NOT_RUN]),
            "code": "```python blocks, and <function=python> tool-call blocks", "edit_max_turns": str(EDIT_MAX_TURNS_V3)},
+    # v3's messages with v4's system prompt; "limits" puts v4's sub-call and budget changes in its hash
+    "v4": {"system": SYSTEM_PROMPT_V4, "first_user": FIRST_USER_TEMPLATE + "\n\n" + EDIT_FIRST_USER_TEMPLATE,
+           "observation": "\n".join([NO_CODE_BLOCK_ERROR_V3 if t == NO_CODE_BLOCK_ERROR else t for t in _OBSERVATION]
+                                    + [CELL_TIMEOUT_TEMPLATE, CELL_CRASH_TEMPLATE, EDIT_FILES_UNCHANGED, CELL_NOT_RUN]),
+           "code": "```python blocks, and <function=python> tool-call blocks",
+           "limits": json.dumps({"read": READ_LIMITS_V4.as_dict(), "edit": EDIT_LIMITS_V4.as_dict()}, sort_keys=True)},
 }
 PROMPT_HASHES = {v: hashlib.sha256(json.dumps(texts, sort_keys=True).encode()).hexdigest() for v, texts in PROMPTS.items()}
 PROMPT_TEXTS = PROMPTS[PROMPT_VERSION]
@@ -290,7 +337,7 @@ def cell_messages(version: str = PROMPT_VERSION, limits: Limits = READ_LIMITS, e
 def no_code_error(version: str = PROMPT_VERSION) -> str:
     """What a turn without code gets back (v3 adds that tool-call tags don't run)."""
     _check_version(version)
-    return NO_CODE_BLOCK_ERROR_V3 if version == "v3" else NO_CODE_BLOCK_ERROR
+    return NO_CODE_BLOCK_ERROR_V3 if version in ("v3", "v4") else NO_CODE_BLOCK_ERROR
 
 
 def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int,
@@ -308,10 +355,16 @@ def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: i
     return "\n".join(parts)
 
 
-def truncate_prompt(prompt: str) -> str:
-    if len(prompt) > SUBCALL_MAX_CHARS:
-        return prompt[:SUBCALL_MAX_CHARS] + "\n" + SUBCALL_TRUNCATION_MARK
+def truncate_prompt(prompt: str, max_chars: int = SUBCALL_MAX_CHARS) -> str:
+    if len(prompt) > max_chars:
+        return prompt[:max_chars] + "\n" + SUBCALL_TRUNCATION_MARK
     return prompt
+
+
+def oversize_message(n_chars: int, max_chars: int) -> str:
+    """What an oversize sub-call prompt gets under prompt v4: an error the model can act on, not a silent cut."""
+    return (f"sub-call prompt is {n_chars:,} characters; one sub-call reads at most {max_chars:,}. "
+            "Split the input into smaller prompts (llm_batch runs them in parallel).")
 
 
 def budget_exhausted_message(max_subcalls: int = MAX_SUBCALLS) -> str:
@@ -364,9 +417,12 @@ class EpisodeBridge:
     Only host-side failures set `infra_error`; nothing the REPL sends can.
     """
 
-    def __init__(self, socket_path: str, complete: Complete, max_subcalls: int = MAX_SUBCALLS):
+    def __init__(self, socket_path: str, complete: Complete, max_subcalls: int = MAX_SUBCALLS,
+                 max_chars: int = SUBCALL_MAX_CHARS, oversize: str = "truncate"):
         self.socket_path = socket_path
         self.max_subcalls = max_subcalls
+        self.max_chars = max_chars
+        self.oversize = oversize
         self.subcalls_used = 0
         self.records: list[SubcallRecord] = []
         self.rejected: list[str] = []
@@ -448,6 +504,10 @@ class EpisodeBridge:
             return {"error": "sub-call failed for an infrastructure reason; this episode will be discarded"}
         if self.subcalls_used + len(prompts) > self.max_subcalls:
             return {"error": budget_exhausted_message(self.max_subcalls)}
+        if self.oversize == "error":
+            longest = max((len(p) for p in prompts), default=0)
+            if longest > self.max_chars:
+                return {"error": oversize_message(longest, self.max_chars)}
         self.subcalls_used += len(prompts)
         if not prompts:
             return {"outputs": []}
@@ -472,7 +532,7 @@ class EpisodeBridge:
         return {"outputs": results}
 
     async def _one(self, prompt: str) -> str:
-        prompt = truncate_prompt(clean_text(prompt))
+        prompt = truncate_prompt(clean_text(prompt), self.max_chars)
         started = time.monotonic()
         try:
             output = await self._complete(prompt)

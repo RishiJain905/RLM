@@ -63,11 +63,16 @@ MAX_DIRECT_AT_ONCE = 6  # ~130K-token prompts; the limiter's cap on the base mod
 RESERVE_MARGIN = 1.5
 DEFAULT_RESERVE_USD = {("rlm", "read"): 0.08, ("rlm", "edit"): 0.40, ("direct", "read"): 0.08,
                        ("rlm_medium", "read"): 0.15, ("rlm_medium", "edit"): 0.60,
-                       ("prod_v3", "read"): 0.10, ("prod_v3", "edit"): 0.20}  # from rlm_medium's measured costs
+                       ("prod_v3", "read"): 0.10, ("prod_v3", "edit"): 0.20,  # from rlm_medium's measured costs
+                       # prompt v4 (step-12 task shift): sub-calls read 60K characters, so a read episode can cost more
+                       ("pilot_on", "read"): 0.30, ("pilot_on", "edit"): 0.40, ("pilot_off", "read"): 0.10,
+                       ("pilot_off", "edit"): 0.25, ("pilot_on_c0", "read"): 0.30, ("pilot_on_c0", "edit"): 0.40}
 # What the projection before a run assumes for an episode not yet measured: the plan's estimates.
 DEFAULT_PROJECT_USD = {("rlm", "read"): 0.04, ("rlm", "edit"): 0.11, ("direct", "read"): 0.03,
                        ("rlm_medium", "read"): 0.065, ("rlm_medium", "edit"): 0.18,
-                       ("prod_v3", "read"): 0.04, ("prod_v3", "edit"): 0.06}  # step 11: medium $0.036 / $0.042
+                       ("prod_v3", "read"): 0.04, ("prod_v3", "edit"): 0.06,  # step 11: medium $0.036 / $0.042
+                       ("pilot_on", "read"): 0.10, ("pilot_on", "edit"): 0.12, ("pilot_off", "read"): 0.04,
+                       ("pilot_off", "edit"): 0.08, ("pilot_on_c0", "read"): 0.10, ("pilot_on_c0", "edit"): 0.12}
 
 SPEND_EVERY_S = 5.0
 TOOL_CALL_MARK = "<tool_call>"  # Qwen3.8's native tool-call tag, which the REPL can't run (step 11 results)
@@ -81,6 +86,12 @@ class Arm:
     edit_samples: int = 1  # samples per edit task; read tasks run once
     read_only: bool = False
     prompt_version: str = "v2"  # step 11's first arms ran v2; bridge.PROMPT_VERSION is v3 since
+    # The step-12 pilot (documentation/step-12-multistep-plan.md step 3): which checkpoint the root is ("base" or a
+    # key of BaselineRun's `models`), how many samples a read task gets, and limits changed for this arm (the
+    # no-sub-call ablation sets max_subcalls to 0).
+    checkpoint: str = "base"
+    read_samples: int = 1
+    limits_override: tuple = ()  # (name, value) pairs, so the dataclass stays hashable
 
 
 ARMS = {
@@ -88,6 +99,11 @@ ARMS = {
     "direct": Arm("direct", "direct", None, 0, read_only=True),
     "rlm_medium": Arm("rlm_medium", "rlm", "medium", EDIT_SAMPLES["rlm_medium"]),
     "prod_v3": Arm("prod_v3", "rlm", "medium", 1, prompt_version="v3"),
+    # The step-12 pilot: prompt v4 on checkpoint 20 with sub-calls, without them, and the base model with them
+    "pilot_on": Arm("pilot_on", "rlm", "medium", 2, prompt_version="v4", checkpoint="ckpt20", read_samples=2),
+    "pilot_off": Arm("pilot_off", "rlm", "medium", 2, prompt_version="v4", checkpoint="ckpt20", read_samples=2,
+                     limits_override=(("max_subcalls", 0),)),
+    "pilot_on_c0": Arm("pilot_on_c0", "rlm", "medium", 1, prompt_version="v4", checkpoint="base", read_samples=1),
 }
 
 
@@ -290,7 +306,7 @@ def plan_jobs(tasks: list[Task], arm: Arm) -> list[Job]:
         if bridge.is_edit(task.family):
             jobs += [Job(arm, task, s) for s in range(arm.edit_samples)]
         else:
-            jobs.append(Job(arm, task, 0))
+            jobs += [Job(arm, task, s) for s in range(arm.read_samples)]
 
     def order(job: Job):
         lang = str((job.task.edit or {}).get("language") or "").lower()
@@ -344,11 +360,12 @@ class BaselineRun:
                  sandbox_factory: Callable[..., Any] = Sandbox, sandbox_kwargs: dict | None = None,
                  pacer: Any = None, retry: rclient.RetryPolicy | None = None, log: Callable[[str], None] = print,
                  max_read: int = MAX_READ_AT_ONCE, max_edit: int = MAX_EDIT_AT_ONCE,
-                 max_direct: int = MAX_DIRECT_AT_ONCE, eval_set: str = EVAL_SET):
+                 max_direct: int = MAX_DIRECT_AT_ONCE, eval_set: str = EVAL_SET, models: dict | None = None):
         self.name = run
         self.eval_set = eval_set
         self.run_dir = Path(results) / run
         self.base_model = base_model
+        self.models = {"base": base_model, **(models or {})}  # Arm.checkpoint -> inference model name
         self.ceiling = ceiling
         self.sandbox_factory = sandbox_factory
         self.sandbox_kwargs = sandbox_kwargs or {}
@@ -419,9 +436,10 @@ class BaselineRun:
                 if arm.mode == "direct":
                     ep = await run_direct(job.task, client=client, model=self.base_model)
                 else:
-                    ep = await run_episode(job.task, client=client, root_model=self.base_model,
+                    ep = await run_episode(job.task, client=client, root_model=self.models[arm.checkpoint],
                                            run_id=f"{self.name}-{arm.name}", sandbox_factory=self.sandbox_factory,
-                                           prompt_version=arm.prompt_version, **self.sandbox_kwargs)
+                                           prompt_version=arm.prompt_version,
+                                           limits_override=dict(arm.limits_override) or None, **self.sandbox_kwargs)
             finally:
                 prog["running"] -= 1
                 self.budget.release(amount)

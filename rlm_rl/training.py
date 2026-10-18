@@ -58,7 +58,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from . import capability, config as rconfig, monitor, reward, stoprules, tasks as rtasks
+from . import bridge, capability, config as rconfig, monitor, reward, stoprules, tasks as rtasks
 from .bridge import InfraError
 from .client import ModelClient, RetryPolicy
 from .config import RunConfig
@@ -131,6 +131,10 @@ def load_state(results: Path, run: str) -> dict:
     return json.loads(state_path(results, run).read_text(encoding="utf-8"))
 
 
+def _mix_text(mix: dict) -> str:
+    return ", ".join(f"{family} {share:.0%}" for family, share in mix.items() if share > 0)
+
+
 class TrainingRun:
     def __init__(self, run: str, *, backend: Backend, cfg: RunConfig | None = None, results: Path = RESULTS,
                  sandbox_factory: Callable[..., Any] = Sandbox, sandbox_kwargs: dict | None = None,
@@ -192,12 +196,13 @@ class TrainingRun:
                      retrain_pending: bool = False, discard_pending: bool = False,
                      ceilings: dict | None = None, format_penalty: float | None = None,
                      mask_broken: bool | None = None, resample_broken: int | None = None,
-                     mix: dict | None = None) -> dict:
+                     mix: dict | None = None, task_shift: str | None = None) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
         `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
         `mask_broken` whether broken replies take a gradient; `resample_broken` how many times a broken reply is drawn
         again in the rollouts. `mix` sets the shares of the families it names (the run's own families only; the
-        shares must still add up to 1)."""
+        shares must still add up to 1). `task_shift` applies a named change of families, prompt and group shape
+        (config.TASK_SHIFTS) before `mix`."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -230,6 +235,8 @@ class TrainingRun:
             self.state["config"]["mask_broken"] = mask_broken
             self._notice("format", "broken replies " + ("take no gradient from here on (masked)" if mask_broken
                                                         else "are trained on again (not masked)"))
+        if task_shift:
+            self._shift_tasks(task_shift)
         if mix:
             self._set_mix(mix)
         if resample_broken is not None and resample_broken != self.cfg.resample_broken:
@@ -467,6 +474,7 @@ class TrainingRun:
         TranscriptLog(path).extend([episode_record(ep, split="train", run=cfg.run, step=n, sample=sample,
                                                    key=f"train/step{n}/{ep.task_id}/{sample}")
                                     for group in groups for sample, ep in enumerate(group)])
+        self._delegation_bonus(n, groups)
         step_filter = filter_step(groups)
         controller_before = self.ctl.state_dict()
         retirement_before = self.retirement.state_dict()
@@ -636,8 +644,57 @@ class TrainingRun:
         before = dict(self.cfg.mix)
         self.cfg.mix = new
         self.state["config"]["mix"] = dict(new)
+        # new families start at level 1 and dropped ones leave the controller (and the saturation rule)
+        self.ctl.set_families(rtasks.max_levels([f for f, w in new.items() if w > 0]))
+        self.state["controller"] = self.ctl.state_dict()
         moved = ", ".join(f"{f} {before[f]:.0%} -> {new[f]:.0%}" for f in new if abs(new[f] - before[f]) > 1e-9)
         self._notice("mix", f"training mix set by the operator: {moved}")
+
+    def _shift_tasks(self, name: str) -> None:
+        """Apply config.TASK_SHIFTS[name]: a new training mix (its families may be new to the run), prompt version,
+        group shape and selection set. New families start at level 1 and dropped ones leave the controller. The
+        selection set's earlier scores aren't comparable, so the best checkpoint is picked on the new set from here
+        on (stoprules.eval_points reads one eval name), and the resume re-scores its checkpoint on it."""
+        if name not in rconfig.TASK_SHIFTS:
+            raise ValueError(f"no task shift named {name!r}; known: {sorted(rconfig.TASK_SHIFTS)}")
+        if any(s["name"] == name for s in self.state.get("task_shifts", [])):
+            return  # applied at an earlier resume
+        change = rconfig.TASK_SHIFTS[name]
+        new = RunConfig.from_dict({**self.cfg.as_dict(), **change})  # validates the prompt version and the mix
+        if new.kind == "production":
+            rtasks.check_mix(new.mix)
+        before = {key: getattr(self.cfg, key) for key in change}
+        self.cfg = new
+        for key in change:
+            self.state["config"][key] = getattr(new, key)
+        self.ctl.set_families(rtasks.max_levels([f for f, w in new.mix.items() if w > 0]))
+        self.state["controller"] = self.ctl.state_dict()
+        self.state.setdefault("task_shifts", []).append({
+            "name": name, "after_checkpoint": self._latest(), "at": time.time(), "before": before, "after": change,
+            "prompt_hash": bridge.PROMPT_HASHES[new.prompt_version],
+            "generators": {f: getattr(rtasks.generator(f), "GENERATOR_VERSION", None) for f in new.mix}})
+        self._notice("mix", f"task shift {name} by the operator: mix {_mix_text(before['mix'])} -> "
+                            f"{_mix_text(new.mix)}; prompt {before.get('prompt_version')} -> {new.prompt_version}; "
+                            f"{new.tasks_per_step} tasks x {new.rollouts} rollouts a step; selection set "
+                            f"{new.selection}")
+
+    def _delegation_bonus(self, n: int, groups: list[list[Episode]]) -> int:
+        """The reserve delegation bonus (RunConfig.delegation_bonus): on its steps, a right answer from an episode
+        that made sub-calls which answered gets the bonus. Wrong answers never do, so delegating can't be farmed for
+        its own sake. Returns how many episodes got it."""
+        cfg = self.cfg
+        if not cfg.delegation_bonus or n > cfg.delegation_bonus_until or n % cfg.delegation_bonus_every:
+            return 0
+        given = 0
+        for ep in (ep for group in groups for ep in group):
+            answered = any(s.get("output") for s in (ep.subcalls or []) if isinstance(s, dict))
+            if ep.infra_error is None and ep.correct and not ep.hacks and answered:
+                ep.reward_components["delegation_bonus"] = cfg.delegation_bonus
+                ep.reward = round(ep.reward + cfg.delegation_bonus, 4)
+                given += 1
+        if given:
+            self._notice("bonus", f"step {n}: delegation bonus {cfg.delegation_bonus:g} on {given} right answer(s)")
+        return given
 
     async def _warm(self, model: str, n: int) -> None:
         """Wake the checkpoint step n samples from with one tiny call before its episodes start (WARM_TRIES)."""

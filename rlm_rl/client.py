@@ -500,17 +500,23 @@ class ModelClient:
             usage.add("root", response.usage)
         return choice
 
-    def subcaller(self, usage: Usage | None = None, model: str | None = None) -> Complete:
-        """The `complete` function a Sandbox serves sub-calls with, counting tokens into `usage`."""
+    def subcaller(self, usage: Usage | None = None, model: str | None = None, *,
+                  max_tokens: int = bridge.SUBCALL_MAX_TOKENS, thinking: str | None = None) -> Complete:
+        """The `complete` function a Sandbox serves sub-calls with, counting tokens into `usage`. `thinking` is None
+        (off, as v1-v3) or a reasoning effort (prompt v4's coding sub-calls think at "low")."""
         model = model or self.subcall_model
+        if thinking is not None and thinking not in ROOT_THINKING_EFFORTS:
+            raise ValueError(f"sub-call thinking must be None or one of {ROOT_THINKING_EFFORTS}, not {thinking!r}")
+        template = ({"enable_thinking": True, "reasoning_effort": thinking} if thinking
+                    else {"enable_thinking": bridge.SUBCALL_ENABLE_THINKING})
 
         async def complete(prompt: str) -> str:
             response = await self._request(
                 "subcall", model, messages=[{"role": "user", "content": prompt}],
-                max_tokens=bridge.SUBCALL_MAX_TOKENS, temperature=bridge.SUBCALL_TEMPERATURE,
-                extra_body={"chat_template_kwargs": {"enable_thinking": bridge.SUBCALL_ENABLE_THINKING}})
+                max_tokens=max_tokens, temperature=bridge.SUBCALL_TEMPERATURE,
+                extra_body={"chat_template_kwargs": template})
             choice = self._first_choice(response, model)
-            if reasoning_tokens(response.usage):
+            if not thinking and reasoning_tokens(response.usage):
                 self._fail("thinking_on", "a sub-call spent reasoning tokens", model)
             if usage is not None:
                 usage.add("subcall", response.usage)

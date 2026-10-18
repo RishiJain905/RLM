@@ -43,7 +43,7 @@ def guess_rewards(t, rng: random.Random, spread: float = 0.0) -> dict:
     typical blind error, the noise scale step 5 documented (per-task noise would inflate it)."""
     kind, blind = t.grading["type"], t.grading.get("blind")
 
-    if kind in ("int", "float"):
+    if kind in ("int", "float", "count"):
         gold, guess = reward.parse_number(t.answer), reward.parse_number(blind)
         scale = spread or abs(guess - gold) or 1.0
         noisy = {s: reward.score_answer(guess + round(rng.gauss(0, s * scale)), t.answer, t.grading).reward
@@ -52,7 +52,7 @@ def guess_rewards(t, rng: random.Random, spread: float = 0.0) -> dict:
                    for s in (1, 2, 3)}
         return {"offset": 0.0, "noisy_half": noisy[0.5], "noisy_one": noisy[1.0],
                 "reader1": readers[1], "reader2": readers[2], "reader3": readers[3]}
-    if kind == "entity":
+    if kind in ("entity", "text"):  # text (research): no blind guess either
         return {"offset": 0.0, "noisy_half": 0.0, "noisy_one": 0.0,
                 "reader1": 0.0, "reader2": 0.0, "reader3": 0.0}  # no guess, no partial credit
 
@@ -69,9 +69,9 @@ def best_fixed_strategy(tasks_of_type: list) -> float:
     """What the best FIXED guesser earns on one answer type's tasks: one offset (numbers) or one prefix
     fraction (lists), picked before seeing the tasks. Step 5's semantics, extended to lists."""
     kind = tasks_of_type[0].grading["type"]
-    if kind == "entity":
+    if kind in ("entity", "text"):
         return 0.0
-    if kind in ("int", "float"):
+    if kind in ("int", "float", "count"):
         spreads = [abs(reward.parse_number(t.grading["blind"]) - reward.parse_number(t.answer)) or 1.0
                    for t in tasks_of_type]
         mean_spread = statistics.fmean(spreads)
@@ -91,7 +91,7 @@ def check_family(family: str, level: int, n: int, seed: int) -> dict:
     for t in task_list:
         by_type[t.grading["type"]].append(t)
     spreads = {kind: (statistics.fmean(abs(reward.parse_number(t.grading["blind"]) - reward.parse_number(t.answer))
-                                        or 1.0 for t in ts) if kind in ("int", "float") else 0.0)
+                                        or 1.0 for t in ts) if kind in ("int", "float", "count") else 0.0)
                for kind, ts in by_type.items()}
     blinds = [reward.blind_score(t) for t in task_list]
     rows = [guess_rewards(t, rng, spreads[t.grading["type"]]) for t in task_list]

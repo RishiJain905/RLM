@@ -238,8 +238,10 @@ class Sandbox:
 
     def __init__(self, context: str, complete: Complete, *, limits: SandboxLimits = SandboxLimits(),
                  image: str | None = None, run_id: str = "adhoc", docker: str = "docker", root: Path | None = None,
-                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None):
+                 max_subcalls: int = bridge.MAX_SUBCALLS, messages: bridge.CellMessages | None = None,
+                 subcall_max_chars: int = bridge.SUBCALL_MAX_CHARS, subcall_oversize: str = "truncate"):
         self.limits = limits
+        self.subcall_limits = {"max_chars": int(subcall_max_chars), "oversize": subcall_oversize}
         self.image = image or image_tag()
         self.run_id = run_id
         self.docker = docker
@@ -248,7 +250,8 @@ class Sandbox:
             bridge.READ_LIMITS, cell_timeout_s=int(limits.cell_timeout_s)))
         self.episode_id = secrets.token_hex(8)
         self.dir = _private_root(root or default_root()) / f"ep-{self.episode_id}"
-        self.bridge = EpisodeBridge(str(self.dir / "bridge.sock"), complete, max_subcalls)
+        self.bridge = EpisodeBridge(str(self.dir / "bridge.sock"), complete, max_subcalls,
+                                    max_chars=int(subcall_max_chars), oversize=subcall_oversize)
         self.events: list[dict] = []  # blocked or logged attempts, from every container of this episode
         self.events_dropped = 0
         self.log: collections.deque[str] = collections.deque(maxlen=LOG_LINES)  # other container output
@@ -285,6 +288,9 @@ class Sandbox:
         context_file = self.dir / "context.txt"
         context_file.write_bytes(self._context.encode("utf-8"))
         os.chmod(context_file, 0o644)
+        limits_file = self.dir / "subcalls.json"  # read by repl_worker._load_subcall_limits
+        limits_file.write_text(json.dumps(self.subcall_limits), encoding="utf-8")
+        os.chmod(limits_file, 0o644)
         await self.bridge.start()
         try:
             await self._launch()

@@ -498,12 +498,14 @@ class EditSandbox(Sandbox):
     def __init__(self, context: str, complete: Complete, *, workspace: Workspace, image: EditImage,
                  limits: SandboxLimits | None = None, run_id: str = "adhoc", docker: str = "docker",
                  root: Path | None = None, max_subcalls: int = bridge.EDIT_LIMITS.max_subcalls,
-                 messages: bridge.CellMessages | None = None, cache: Path | None = None):
+                 messages: bridge.CellMessages | None = None, cache: Path | None = None,
+                 subcall_max_chars: int = bridge.SUBCALL_MAX_CHARS, subcall_oversize: str = "truncate"):
         limits = limits or edit_sandbox_limits()
         messages = messages or bridge.cell_messages(limits=dataclasses.replace(
             bridge.EDIT_LIMITS, cell_timeout_s=int(limits.cell_timeout_s)), edit=True)
         super().__init__(context, complete, limits=limits, image=image.tag, run_id=run_id, docker=docker, root=root,
-                         max_subcalls=max_subcalls, messages=messages)
+                         max_subcalls=max_subcalls, messages=messages, subcall_max_chars=subcall_max_chars,
+                         subcall_oversize=subcall_oversize)
         self.edit_image = image
         self.workspace = workspace
         self.cache = cache

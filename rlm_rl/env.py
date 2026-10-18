@@ -232,7 +232,7 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                       sandbox_factory: Callable[..., Any] = Sandbox, prompt_version: str = bridge.PROMPT_VERSION,
                       edit_sandbox_factory: Callable[..., Any] | None = None, edit_sandbox_kwargs: dict | None = None,
                       grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, resample_broken: int = 0,
-                      **sandbox_kwargs) -> Episode:
+                      limits_override: dict | None = None, **sandbox_kwargs) -> Episode:
     """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
 
     A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
@@ -248,6 +248,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     grader that fails is an infra error, like a sandbox that fails.
     """
     lim = bridge.limits(task.family, prompt_version)
+    if limits_override:  # e.g. the pilot's no-sub-call arm (max_subcalls=0), scripts/pilot.py
+        lim = dataclasses.replace(lim, **limits_override)
     edit = bridge.is_edit(task.family)
     task_limits = {}
     if edit and (task.edit or {}).get("cell_timeout_s"):  # a task whose own tests need longer cells (spec §12.3)
@@ -263,7 +265,10 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     ep.messages = bridge.initial_messages(task.question, task.context, prompt_version, lim,
                                           edit=task.edit if edit else None)
     subcall_failures: list[RequestFailed] = []
-    serve = client.subcaller(ep.usage)
+    serve = client.subcaller(ep.usage, max_tokens=lim.subcall_max_tokens, thinking=lim.subcall_thinking)
+    subcall_kwargs = {}
+    if prompt_version == "v4":  # older prompts keep the sandboxes' defaults (24,000 characters, cut silently)
+        subcall_kwargs = {"subcall_max_chars": lim.subcall_max_chars, "subcall_oversize": lim.subcall_oversize}
 
     async def complete(prompt: str) -> str:
         try:
@@ -279,10 +284,12 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
         if edit:
             factory = edit_sandbox_factory or _default_edit_sandbox
             box = factory(task.context, complete, task=task, run_id=run_id, max_subcalls=lim.max_subcalls,
-                          messages=messages, **task_limits, **(edit_sandbox_kwargs or {}))
+                          messages=messages, **task_limits, **subcall_kwargs, **(edit_sandbox_kwargs or {}))
         else:
             if prompt_version != bridge.PROMPT_VERSION:
                 sandbox_kwargs = {"messages": messages, **sandbox_kwargs}
+            if subcall_kwargs:
+                sandbox_kwargs = {"max_subcalls": lim.max_subcalls, **subcall_kwargs, **sandbox_kwargs}
             box = sandbox_factory(task.context, complete, run_id=run_id, **sandbox_kwargs)
         async with box:
             for index in range(lim.max_turns):

@@ -43,8 +43,9 @@ class ControllerTest(unittest.TestCase):
 
     def test_stays_inside_the_band_and_at_the_edges(self):
         ctl = DifficultyController({"a": 5}, levels={"a": 3})
-        moves = self.run_steps(ctl, [0.7, 0.7, 0.7, 0.2, 0.2, 0.2, 0.5, 0.25, 0.65], total=10)
-        self.assertEqual((sum(map(len, moves)), ctl.level("a")), (0, 3))  # 70% and 20% exactly don't move
+        moves = self.run_steps(ctl, [0.7, 0.7, 0.7, 0.3, 0.3, 0.3, 0.5, 0.35, 0.65], total=10)
+        self.assertEqual((sum(map(len, moves)), ctl.level("a")), (0, 3))  # 70% and 30% exactly don't move
+        self.assertEqual((controller.UP_ABOVE, controller.DOWN_BELOW), (0.70, 0.30))
 
     def test_the_rate_is_over_the_window_not_the_last_step(self):
         ctl = DifficultyController({"a": 5})
@@ -70,6 +71,13 @@ class ControllerTest(unittest.TestCase):
         ctl.update(5, episodes("a", 2, 15, total=16))  # 94%: back to waiting for 3 steps
         self.assertEqual(ctl.level("a"), 2)
         self.assertTrue(controller.settings()["unanimous_moves_at_once"])
+
+    def test_a_mix_change_adds_and_drops_families(self):
+        ctl = DifficultyController({"a": 5, "b": 3}, levels={"a": 4})
+        ctl.set_families({"a": 5, "c": 4})
+        self.assertEqual(ctl.levels(), {"a": 4, "c": 1})  # a keeps its level, c starts at 1, b is gone
+        again = DifficultyController.from_state(ctl.state_dict())
+        self.assertEqual(again.levels(), {"a": 4, "c": 1})
 
     def test_waits_three_steps_after_a_move(self):
         ctl = DifficultyController({"a": 5})

@@ -35,3 +35,31 @@ class SeedTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SoloRetirementTest(unittest.TestCase):
+    """Step-12 task shift: a task of a sub-call family that's solved without any sub-call retires."""
+
+    def test_solved_without_sub_calls_retires(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from rlm_rl import tasks as rtasks
+
+        def ep(correct, subcalls, task="t1", family="fam"):
+            return SimpleNamespace(task_id=task, family=family, infra_error=None, reward=float(correct),
+                                   correct=correct, subcalls_used=subcalls)
+
+        with mock.patch.object(rtasks, "RETIRABLE", ("fam",)), mock.patch.object(rtasks, "SOLO_RETIRABLE", ("fam",)):
+            r = rtasks.Retirement()
+            self.assertEqual(r.update(1, [[ep(True, 3), ep(True, 0), ep(False, 0), ep(False, 2)]]), [])  # one delegated
+            self.assertEqual(r.update(2, [[ep(True, 0, "t2"), ep(True, 0, "t2"), ep(False, 1, "t2"),
+                                           ep(False, 0, "t2")]]), ["t2"])
+            self.assertEqual(r.retired["t2"]["why"], "solved without sub-calls")
+            self.assertEqual(r.update(3, [[ep(True, 0, "t3"), ep(False, 0, "t3"), ep(False, 0, "t3"),
+                                           ep(False, 0, "t3")]]), [])  # under half right: not retired
+            self.assertEqual(r.update(4, [[ep(True, 1, "t4"), ep(True, 1, "t4")]]), ["t4"])  # all-1 still retires
+            self.assertEqual(r.retired["t4"]["why"], "all-1")
+        with mock.patch.object(rtasks, "RETIRABLE", ("fam",)):
+            r = rtasks.Retirement()  # outside SOLO_RETIRABLE nothing changes
+            self.assertEqual(r.update(1, [[ep(True, 0), ep(True, 0), ep(False, 0)]]), [])

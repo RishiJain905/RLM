@@ -199,7 +199,8 @@ REQUEST_KEYS = ("attempts", "retries", "rate_limited", "server_errors", "timeout
                 "paced_s")
 TOKEN_KEYS = ("root_prompt_tokens", "root_completion_tokens", "subcall_prompt_tokens", "subcall_completion_tokens",
               "root_calls", "subcalls")
-FAMILY_KEYS = ("level", "episodes", "scored", "pass_rate", "mean_reward", "window_pass_rate")
+FAMILY_KEYS = ("level", "episodes", "scored", "pass_rate", "mean_reward", "window_pass_rate", "subcalls_per_episode",
+               "delegated_share", "correct_delegated_share", "solo_task_share")
 # spec §12.9, over the step's edit episodes; by_language is read separately
 EDIT_KEYS = ("episodes", "resolved", "f2p_pass", "p2p_broken", "empty_diff", "submitted", "tested_before_submit",
              "test_runs", "edit_cycles", "turns_to_first_edit", "diff_lines", "files_changed", "subcall_read_share",

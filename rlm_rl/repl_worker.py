@@ -63,6 +63,7 @@ SUBMIT_MAX_BYTES = 100_000
 EPISODE_DIR = "/episode"
 CONTEXT_PATH = "/episode/context.txt"
 SOCKET_PATH = "/episode/bridge.sock"
+SUBCALLS_PATH = "/episode/subcalls.json"  # the episode's sub-call limits (prompt v4); absent: v1-v3's cut at 24,000
 SCRATCH_DIR = "/scratch"
 WORKER_DIR = "/opt/rlm"
 EDIT_REPO = "/work/repo"
@@ -130,14 +131,34 @@ def _bridge_call(op: str, prompts: list) -> list:
     return reply["outputs"]
 
 
+_SUBCALLS = {"max_chars": SUBCALL_MAX_CHARS, "oversize": "truncate"}
+
+
+def _load_subcall_limits(path: str = SUBCALLS_PATH) -> None:
+    """Read the episode's sub-call limits, written by the host next to the context."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return
+    if isinstance(data.get("max_chars"), int) and data["max_chars"] > 0:
+        _SUBCALLS["max_chars"] = data["max_chars"]
+    if data.get("oversize") in ("truncate", "error"):
+        _SUBCALLS["oversize"] = data["oversize"]
+
+
 def _truncate(prompt: str) -> str:
-    if len(prompt) > SUBCALL_MAX_CHARS:
-        return prompt[:SUBCALL_MAX_CHARS] + "\n" + SUBCALL_TRUNCATION_MARK
+    limit = _SUBCALLS["max_chars"]
+    if len(prompt) > limit:
+        if _SUBCALLS["oversize"] == "error":
+            raise ValueError(f"sub-call prompt is {len(prompt):,} characters; one sub-call reads at most {limit:,}. "
+                             "Split the input into smaller prompts (llm_batch runs them in parallel).")
+        return prompt[:limit] + "\n" + SUBCALL_TRUNCATION_MARK
     return prompt
 
 
 def llm(prompt: str) -> str:
-    """Ask a language model one question. It can read about 20,000 characters per call."""
+    """Ask a language model one question. The task's prompt says how much it reads per call."""
     return _bridge("llm", [_truncate(str(prompt))])[0]
 
 
@@ -769,6 +790,7 @@ def repl_main(argv: list | None = None) -> None:
     global _audit_fd, WRITE_PREFIXES
     argv = sys.argv[1:] if argv is None else argv
     edit, writable = parse_mode(argv)
+    _load_subcall_limits()
     # The protocol moves to private descriptors. Model code that reads stdin gets EOF, and raw writes
     # to fd 1 land in the container log instead of corrupting a result.
     proto_in = os.fdopen(os.dup(0), "rb")

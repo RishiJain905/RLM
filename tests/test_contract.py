@@ -17,6 +17,9 @@ from pathlib import Path
 
 import openai
 
+import json
+import tempfile
+
 from rlm_rl import bridge, repl_tools, repl_worker, sandbox
 from tests.fake_model import AsyncCase
 
@@ -74,6 +77,24 @@ class OneSystemPromptTest(unittest.TestCase):
             for path in (ROOT / folder).rglob("*.py"):
                 if "archive" not in path.relative_to(ROOT).parts:
                     yield path
+
+    def test_the_worker_reads_the_episode_sub_call_limits(self):
+        """Prompt v4: the host writes subcalls.json next to the context; without it the worker keeps v1-v3's cut."""
+        saved = dict(repl_worker._SUBCALLS)
+        try:
+            self.assertEqual(repl_worker._truncate("a" * 30_000)[-len(bridge.SUBCALL_TRUNCATION_MARK):],
+                             bridge.SUBCALL_TRUNCATION_MARK)
+            with tempfile.TemporaryDirectory() as tmp:
+                path = f"{tmp}/subcalls.json"
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump({"max_chars": 60_000, "oversize": "error"}, f)
+                repl_worker._load_subcall_limits(path)
+            self.assertEqual(len(repl_worker._truncate("a" * 50_000)), 50_000)
+            with self.assertRaises(ValueError):
+                repl_worker._truncate("a" * 60_001)
+        finally:
+            repl_worker._SUBCALLS.clear()
+            repl_worker._SUBCALLS.update(saved)
 
     def test_prompt_text_is_defined_only_in_the_bridge(self):
         for path in self._production_sources():

@@ -512,6 +512,50 @@ class MixChangeTest(LoopCase):
         self.assertEqual(train_cli.parse_mix("edit_real=0.35, edit_synth=0.05"), {"edit_real": 0.35, "edit_synth": 0.05})
 
 
+class TaskShiftTest(LoopCase):
+    async def test_a_resume_can_shift_families_prompt_and_group_shape(self):
+        """The step-12 task shift: new families, prompt v4 and 6 x 6 groups, applied once at a resume."""
+        from unittest import mock
+
+        shift = {"mix": {"tickets_all": 1.0}, "prompt_version": "v4", "tasks_per_step": 2, "rollouts": 6}
+        st = await self.run_("ts", cfg=second_seed("ts", 4), stop_after=1).start()
+        with mock.patch.dict(config.TASK_SHIFTS, {"t": shift}):
+            with self.assertRaises(ValueError):
+                await self.run_("ts").resume(task_shift="nope")
+            st = await self.run_("ts", stop_after=2).resume(task_shift="t")
+            self.assertEqual((st["config"]["mix"], st["config"]["prompt_version"]), ({"tickets_all": 1.0}, "v4"))
+            self.assertEqual([s["name"] for s in st["task_shifts"]], ["t"])
+            self.assertEqual(st["task_shifts"][0]["before"]["rollouts"], 4)
+            self.assertEqual(st["steps"][-1]["families"]["tickets_all"]["episodes"], 12)  # 2 tasks x 6 rollouts
+            self.assertNotIn("tickets_customer", st["controller"]["families"])
+            self.assertTrue(any(n["kind"] == "mix" and "task shift t" in n["text"] for n in st["notices"]))
+            st = await self.run_("ts", stop_after=3).resume(task_shift="t")  # already applied: nothing changes
+            self.assertEqual(len(st["task_shifts"]), 1)
+
+
+class DelegationBonusTest(unittest.TestCase):
+    def test_only_right_answers_that_delegated_on_bonus_steps(self):
+        from types import SimpleNamespace
+
+        def ep(correct, outputs, hacks=()):
+            return SimpleNamespace(infra_error=None, correct=correct, hacks=list(hacks), reward=float(correct),
+                                   reward_components={}, subcalls=[{"output": o} for o in outputs])
+
+        notes = []
+        run = SimpleNamespace(cfg=config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed",
+                                                   delegation_bonus=0.2),
+                              _notice=lambda kind, text: notes.append(text))
+        group = [ep(True, ["a"]), ep(True, []), ep(False, ["a"]), ep(True, [""]), ep(True, ["a"], hacks=["x"])]
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 5, [group]), 1)
+        self.assertEqual([e.reward for e in group], [1.2, 1.0, 0.0, 1.0, 1.0])
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 6, [[ep(True, ["a"])]]), 0)  # not a bonus step
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 55, [[ep(True, ["a"])]]), 0)  # annealed away
+        run.cfg = config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed")
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 5, [[ep(True, ["a"])]]), 0)  # off by default
+        with self.assertRaises(ValueError):
+            config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed", delegation_bonus=0.5)
+
+
 class WarmupTest(LoopCase):
     async def test_each_step_wakes_its_checkpoint_before_the_rollouts(self):
         """prod-v1 steps 16-18: W&B answered 500 while loading a fresh checkpoint, longer than the episodes' retries."""

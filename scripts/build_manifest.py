@@ -24,7 +24,8 @@ from rlm_rl import capability_set, config, data, evals, tasks  # noqa: E402
 
 OUT = ROOT / "manifests" / "dataset-manifest.json"
 DERIVED = ["derived/lca/index-train.jsonl.gz", "derived/lca/index-test.jsonl.gz", f"derived/{data.ARXIV_POOL}",
-           f"derived/capability/{capability_set.VERSION}.jsonl"]
+           f"derived/capability/{capability_set.VERSION}.jsonl",
+           *(f"derived/{rel}" for rel in data.RESEARCH_POOLS.values())]  # the research family (step-12 task shift)
 
 
 def sha256(path: Path) -> str:

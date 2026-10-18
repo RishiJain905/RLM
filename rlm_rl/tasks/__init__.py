@@ -29,6 +29,8 @@ GENERATORS = {
     "repo_loc": "repoloc", "repo_loc_select": "repoloc", "repo_loc_test": "repoloc",
     "edit_synth": "editsynth", "edit_synth_heldout": "editsynth",  # spec §12.7
     "edit_real": "editreal", "edit_real_select": "editreal", "edit_real_test": "editreal",
+    # the step-12 task shift (documentation/step-12-multistep-plan.md, 2026-10-18)
+    "research": "research", "research_select": "research", "research_test": "research",
 }
 EVAL_ONLY_SUFFIXES = ("_heldout", "_select", "_test")
 
@@ -206,6 +208,11 @@ def pool_size(family: str) -> int | None:
 RETIRABLE = ("edit_real",)  # fixed pools whose tasks come back; synthetic families never repeat a task
 RETIRE_ALL_ZERO = 2  # a task whose group came back all-0 this many times isn't drawn again
 RETIRE_ALL_ONE = 1  # nor one whose group came back all-1 once
+# Families built to need sub-calls (step-12 task shift, 2026-10-18). A task of theirs that the policy solves without a
+# single sub-call (at least half the group right, and none of the right ones delegated) teaches nothing about
+# delegation, so it retires too (ASearcher's "solved in one tool turn" filter, arXiv 2508.07976).
+SOLO_RETIRABLE: tuple = ()
+RETIRE_SOLO = 1
 # Decision 12b (Rishi, 2026-10-17): ~150 edit_real draws are wanted from 107 training tasks, so retirement can use the
 # pool up. Its slots then go to edit_synth, which generates fresh tasks at its own level, rather than redrawing retired
 # tasks: those came back all-1 (no signal left) or all-0 twice. A rollback restores the retired set, and the pool.
@@ -232,15 +239,23 @@ class Retirement:
             clean = [ep for ep in group if ep.infra_error is None]
             if len(clean) < 2 or clean[0].family not in RETIRABLE:
                 continue
+            task_id, family = clean[0].task_id, clean[0].family
             rewards = {ep.reward for ep in clean}
-            if len(rewards) != 1 or rewards.pop() not in (0.0, 1.0):
+            equal = len(rewards) == 1 and next(iter(rewards)) in (0.0, 1.0)
+            right = [ep for ep in clean if ep.correct]
+            solo = (family in SOLO_RETIRABLE and 2 * len(right) >= len(clean)
+                    and not any(getattr(ep, "subcalls_used", 0) for ep in right))
+            if not equal and not solo:
                 continue
-            task_id, value = clean[0].task_id, clean[0].reward
             row = self.counts.setdefault(task_id, {"zero": 0, "one": 0})
-            row["one" if value == 1.0 else "zero"] += 1
-            if task_id not in self.retired and (row["zero"] >= RETIRE_ALL_ZERO or row["one"] >= RETIRE_ALL_ONE):
-                self.retired[task_id] = {"step": step, "why": "all-1" if row["one"] >= RETIRE_ALL_ONE else "all-0",
-                                         "family": clean[0].family}
+            if equal:
+                row["one" if clean[0].reward == 1.0 else "zero"] += 1
+            if solo:
+                row["solo"] = row.get("solo", 0) + 1
+            why = ("all-1" if row["one"] >= RETIRE_ALL_ONE else "all-0" if row["zero"] >= RETIRE_ALL_ZERO
+                   else "solved without sub-calls" if row.get("solo", 0) >= RETIRE_SOLO else None)
+            if task_id not in self.retired and why:
+                self.retired[task_id] = {"step": step, "why": why, "family": family}
                 newly.append(task_id)
         return newly
 
@@ -249,7 +264,8 @@ class Retirement:
 
     def state_dict(self) -> dict:
         return {"counts": self.counts, "retired": self.retired,
-                "rule": {"all_zero": RETIRE_ALL_ZERO, "all_one": RETIRE_ALL_ONE, "families": list(RETIRABLE)}}
+                "rule": {"all_zero": RETIRE_ALL_ZERO, "all_one": RETIRE_ALL_ONE, "families": list(RETIRABLE),
+                         "solo": RETIRE_SOLO, "solo_families": list(SOLO_RETIRABLE)}}
 
 
 def private_seed_list(name: str, n: int) -> list[int]:

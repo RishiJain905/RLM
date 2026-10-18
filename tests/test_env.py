@@ -141,6 +141,19 @@ class EpisodeTest(EnvCase):
         self.server.policy = lambda messages: next(replies)
         self.assertEqual(len((await self.episode()).turns), 2)
 
+    async def test_prompt_v4_sub_calls(self):
+        """v4: an oversize sub-call prompt is an error the model sees (no budget used), and sub-calls get 4,096 tokens."""
+        big = "x" * 70_000
+        replies = iter([f"```python\nprint(llm({big!r}))\n```", "```python\nprint(llm('short'))\n```",
+                        "```python\nsubmit(len(context.splitlines()))\n```"])
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode(prompt_version="v4", detect=None)
+        self.assertIn("one sub-call reads at most 60,000", ep.messages[3]["content"])
+        self.assertEqual((ep.subcalls_used, ep.correct, ep.limits["max_subcalls"]), (1, True, 80))
+        sub = [b for b in self.server.bodies if not b.get("logprobs") and b.get("prompt_logprobs") is None]
+        self.assertEqual(sub[-1]["max_tokens"], 4096)
+        self.assertEqual(sub[-1]["chat_template_kwargs"], {"enable_thinking": False})
+
     def test_a_reply_cut_at_the_token_cap_is_not_broken(self):
         def turn(reply, finish, code):
             return env.Turn(reply, finish, 10, code, None, None, 0.0, 0.0)

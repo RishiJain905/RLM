@@ -229,6 +229,9 @@ class ResearchFamilyTest(unittest.TestCase):
                 with self.subTest(level=level, question=info["question"]):
                     self.assertLessEqual(set(info["gold_docs"]), naming)
                     self.assertEqual(len(naming), len(info["gold_docs"]) + info["negatives"])
+                    # that search is the blind guess, so it earns nothing unless it is exactly right
+                    grep = blind_score(task)
+                    self.assertEqual(grep.reward, 1.0 if not info["negatives"] else 0.0)
 
     def test_nothing_the_root_sees_holds_ids_gold_flags_or_answers(self):
         for family, level, task, info in self.all_built():
