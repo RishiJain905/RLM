@@ -945,6 +945,8 @@ def stage_index(families: list[str]) -> None:
         cands = {r["id"]: r for r in read_jsonl(v2_path("candidates", f"{fam}.jsonl")) if r["lab"]["ok"]}
         graded = {r["id"]: r for r in read_jsonl(v2_path("graded", f"{fam}.jsonl"))}
         ok = [dict(cands[i], graded=graded[i]) for i in cands if graded.get(i, {}).get("ok")]
+        if fam == "spec":  # fewer hidden tests than functions to write: too thin a check of the implementation
+            ok = [r for r in ok if len(r["tests"]["f2p"]) >= len(r["targets"])]
         tasks = []
         for split, per_level in KEEP.items():
             tasks += balance([r for r in ok if r["split"] == split], per_level, seed=7)
