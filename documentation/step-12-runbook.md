@@ -157,6 +157,27 @@ Step 19, the first with the warm-up, still lost 5 episodes: the warm-up call was
 
 **Mix change at checkpoint 20 (Rishi, 2026-10-18: "Yeah sure please do since it's already been generalized").** Edit synth sat at its top level (5) at 100% for steps 11-20, so its 15% of rollouts were all-solved groups that train nothing. 10 of its 15 points moved to edit real: the mix is now aggregation 25%, callgraph 10%, needle 10%, repo loc 15%, edit real 35%, edit synth 5%. `train.py resume --mix edit_real=0.35,edit_synth=0.05` (`TrainingRun._set_mix`) changes named families' shares, checks they still add up to 1 and that every family's sources pass the licence check, and logs a notice. Harder edit synth tasks (a level 6) remain an option if edit real's pool runs low; the 12b fallback still moves edit real slots to edit synth when it does.
 
+## 7c. The task shift at checkpoint 20 (2026-10-18, Rishi approved [step-12-multistep-plan.md](step-12-multistep-plan.md))
+
+At checkpoint 20 sub-calls were flat (about 0.3 an episode, nearly all in aggregation) and 3-6 of 8 groups a step came back all-solved. The run stopped at checkpoint 20, no rollback, and resumed on new families with `train.py resume prod-v1 --live --task-shift v4 --ceiling-train 142.95 --ceiling-eval 23.72`.
+
+| Change | Where | What it does |
+|---|---|---|
+| Families | `rlm_rl/tasks/research.py`, `aggregation.py` (v4), `editspec.py`, `editbugs.py` | Research: MuSiQue multi-hop chains and QAMPARI lists over 220K-1.3M characters. Context search v4: every question needs 1,500-4,100 lines labelled, even after filtering by user or date. Build from a spec and find and fix: 150 training tasks each, Python, validated against their hidden tests. Needle, repo localization, callgraph, edit real and edit synth leave the mix |
+| Research cleanup | `scripts/closed_book.py`, `scripts/open_book.py` | A question the base model answers with no documents is dropped (12% of MuSiQue, $0.96); so is one it can't answer from its own gold paragraphs (about a third of MuSiQue: wrong supports, ambiguous chains; $2.09). A list task's blind guess is the grep answer, so a search alone earns 0. Dates, numbers with units and country names match fairly |
+| Prompt v4 | `bridge.py`, `client.py`, `repl_worker.py`, `sandbox.py` | An orchestrator prompt; sub-calls read up to 60K characters and write up to 4,096 tokens, 80 an episode; an oversize prompt raises in the REPL; 20 turns for research and context search; coding sub-calls think at low |
+| Group shape and mechanics | `config.TASK_SHIFTS`, `controller.py`, `tasks/__init__.py` | 6 tasks x 6 rollouts. Levels steer to a 30-70% pass rate. A pool task solved by at least half its group with no right answer delegating retires; the two coding pools stand in for each other when one runs dry |
+| Delegation bonus | `training._delegation_bonus`, `training.delegated` | A right answer gets up to +0.2 if it really delegated: sub-calls that read at least a quarter of the context (read families), or two coding sub-calls of at least 1,000 characters each. Wrong or hacked answers get nothing. It fades linearly to 0 at step 50 |
+| Count credit | `reward.score_count` | OOLONG's 0.8 x 0.75^err for a miss, with a unit of error of 1% of the gold above 100, so a whole-log count of 1,300 off by 13 earns 0.6 |
+| Evals | `evals.py` | selection-v4: 47 tasks in the new families, from splits training never sees. The resume re-scores checkpoint 20 on it, and the best checkpoint is picked on it from here on |
+| Dashboard | `dashboard_page.html` | Sub-calls per episode by family, right answers that delegated, tasks solved without sub-calls |
+
+**Pilot** (`scripts/pilot.py`, checkpoint 20 with sub-calls vs a budget of 0, $10.28 of the $11): with the first versions, sub-calls helped nowhere (research level 1 was 100% both ways by grep; context search 33-50% both ways because the root grepped one user's lines). After the rebuild, context search rewarded delegating: 0.34 vs 0.11 at level 1 and 0.35 vs 0 at level 3, with about 20 sub-calls an episode. Research stayed solvable by grep at any size (the questions name their entities), and coding almost never delegated (0-2 sub-calls; find and fix level 1 is 80-100% solo). So the mix is context search 40, research 20, build from a spec 25, find and fix 15, and the bonus nudges the rest.
+
+**Spend outside the run:** $13.33 (the pilot and the two question checks), taken off the run's ceilings (train $146 -> $142.95, eval $34 -> $23.72); the dashboard runs with `--pot-left 177.68`.
+
+**Next lever:** if coding sub-calls stay near 0 after 10 steps, pause at that checkpoint and warm-start: a short SFT on correct, delegating coding attempts (sampling ~$10 of the $15 approved; the SFT on the training credit).
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |
