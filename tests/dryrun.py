@@ -182,7 +182,7 @@ class DryRun:
     """Starts the fake server and backend, and builds TrainingRuns wired to them."""
 
     def __init__(self, results: Path, *, seed: int = 0, oracle: Oracle | None = None, persist: bool = False,
-                 base_logprob: float = -0.8, real_edit: bool = False):
+                 base_logprob: float = -0.6, real_edit: bool = False):
         self.results = Path(results)
         self.seed = seed
         self.oracle = oracle or Oracle(seed)

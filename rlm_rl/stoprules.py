@@ -7,18 +7,27 @@ The five stop rules (research §8.6). Each returns a status for the dashboard ("
 "fired" or "n/a") with one line saying where it stands:
 1. plateau: no new selection-set best for 3 evals in a row, and no family moved up a level in the
    last 30 steps. The run stops and keeps the best checkpoint.
-2. overfitting: training reward rose while the selection set fell, at 2 evals in a row. Stop.
-3. frying: the capability check dropped more than 2 points below checkpoint 0's, or a collapse
-   came back after the one rollback with a lower learning rate. Stop.
+2. overfitting: training reward rose while the selection set fell by more than 5 points, at 2 evals
+   in a row. Stop.
+3. frying: the capability check more than 2 points below checkpoint 0's at 2 checks in a row, or
+   more than 5 points below at one, or a collapse came back after the one rollback with a lower
+   learning rate. Stop.
 4. saturation: every family is at its top level with a pass rate above 70%. Stop.
-5. hacking: a Claude audit found a hack among the wins, or the detectors' hit rate is rising.
-   The run pauses for a fix (Rishi makes the resume call).
+5. hacking: a Claude audit found a hack among the wins, or the detectors' hit rate is rising (blocked
+   file and process attempts left out). The run pauses for a fix (Rishi makes the resume call).
+Rules 2, 3 and 5 got their noise margins on 2026-10-18, after prod-v1's first steps (Rishi: fix what would stop the
+run for nothing).
 
-The collapse check (spec §5.2 step 3) fires on either signal:
-- entropy below 70% of its highest value over the previous 10 steps
-- within-group reward std below half its previous-10-step average for 3 steps in a row
-At 2e-5 the loop rolls back to the last good checkpoint and continues at 1e-5. The thresholds
-are the spec's proposed ones, to be finalized on the second seed's real curves.
+The collapse check (spec §5.2 step 3; changed for production on 2026-10-18, Rishi's call) fires when the trained
+model's entropy has fallen 30% below the base model's, measured on the same tokens: the KL re-score's rollouts, scored
+by both (`matched_entropy_drop`). Raw entropy over a step's samples moves with what was sampled: in prod-v1 it fell
+from 0.48 to 0.31 over steps 1-5 on the same family mix, as episodes got longer and more code-heavy, while KL to base
+stayed near 0.003, so the model itself had barely moved. Raw entropy is only the fallback for a step without a matched
+reading, and then it must stay below 70% of its previous-10-step peak for 3 steps in a row.
+At 2e-5 the loop rolls back to the last good checkpoint and continues at 1e-5.
+
+Within-group reward std below half its previous-10-step average for 3 steps in a row (the Echo Trap) is now a warning
+(`collapse_warning`), logged as a notice: it also falls whenever a step draws families the model finds easy or hard.
 """
 
 from __future__ import annotations
@@ -32,7 +41,9 @@ PLATEAU_EVALS = 3
 PLATEAU_LEVEL_UP_STEPS = 30
 OVERFIT_EVALS = 2
 OVERFIT_WINDOW = 10  # training steps averaged on each side of an eval
-CAPABILITY_DROP = 0.02  # "more than ~2 points"
+OVERFIT_MIN_FALL = 0.05  # a selection-set fall smaller than this is noise (64 tasks: ~6 points either way) *(mine)*
+CAPABILITY_DROP = 0.02  # "more than ~2 points", at two checks in a row (2026-10-18)
+CAPABILITY_DROP_ONCE = 0.05  # or this much at one check *(mine)*
 CAPABILITY_MIN_COMPLETE = 0.9  # a check with more than 10% infra failures isn't compared *(mine)*
 HACK_WINDOW = 10
 HACK_RATE = 0.05  # detector hits as a share of scored episodes over the window *(mine)*
@@ -42,6 +53,8 @@ HACK_MIN_STEPS = 5
 ENTROPY_DROP = 0.30
 ENTROPY_WINDOW = 10
 ENTROPY_MIN_HISTORY = 3
+MATCHED_MIN_TOKENS = 200  # re-scored tokens a step needs before its matched reading counts *(mine)*
+RAW_ENTROPY_STREAK = 3  # without a matched reading, raw entropy must stay under its line this many steps in a row
 STD_DROP = 0.5
 STD_WINDOW = 10
 STD_STREAK = 3
@@ -141,20 +154,22 @@ def train_reward_near(rows: list[dict], checkpoint: int, window: int = OVERFIT_W
 
 
 def overfitting(points: list[tuple[int, float]], rows: list[dict]) -> Status:
-    """Rule 2: training reward up while the selection set fell, at OVERFIT_EVALS evals in a row."""
+    """Rule 2: training reward up while the selection set fell by more than OVERFIT_MIN_FALL, at OVERFIT_EVALS evals in
+    a row. A smaller dip is inside the 64-task set's noise (about 6 points either way)."""
     points = [p for p in points if p[0] > 0]  # checkpoint 0 has no training reward before it
     if len(points) < 2:
         return Status("overfitting", "n/a", "needs two selection evals after training starts")
     bad = []
     for (c0, a0), (c1, a1) in zip(points, points[1:]):
         r0, r1 = train_reward_near(rows, c0), train_reward_near(rows, c1)
-        bad.append(r0 is not None and r1 is not None and r1 > r0 and a1 < a0)
+        bad.append(r0 is not None and r1 is not None and r1 > r0 and a0 - a1 > OVERFIT_MIN_FALL)
     streak = 0
     for flag in reversed(bad):
         if not flag:
             break
         streak += 1
-    text = f"{streak} of {OVERFIT_EVALS} evals with training reward up and the selection set down"
+    text = (f"{streak} of {OVERFIT_EVALS} evals with training reward up and the selection set down more than "
+            f"{OVERFIT_MIN_FALL * 100:.0f} points")
     if streak >= OVERFIT_EVALS:
         return Status("overfitting", "fired", text)
     return Status("overfitting", "watch" if streak else "ok", text)
@@ -167,7 +182,9 @@ def capability_points(evals: Iterable[dict]) -> list[tuple[int, float]]:
 
 
 def frying(evals: Iterable[dict], *, collapse_after_rollback: str | None = None) -> Status:
-    """Rule 3: the capability check fell more than CAPABILITY_DROP below checkpoint 0, or a collapse came back."""
+    """Rule 3: the capability check more than CAPABILITY_DROP below checkpoint 0 at two checks in a row, or more than
+    CAPABILITY_DROP_ONCE below at one; or a collapse came back. One check of 100 prompts moves a few points by chance,
+    so a single 2-point dip isn't enough (2026-10-18)."""
     if collapse_after_rollback:
         return Status("frying", "fired", collapse_after_rollback)
     points = capability_points(evals)
@@ -180,8 +197,14 @@ def frying(evals: Iterable[dict], *, collapse_after_rollback: str | None = None)
     drop = base - latest
     change = f"{abs(drop) * 100:.1f} points {'below' if drop > 0 else 'above'}" if drop else "the same as"
     text = f"capability {latest:.3f} at checkpoint {latest_c}, {change} checkpoint 0's {base:.3f}"
+    previous = [a for c, a in points if 0 < c < latest_c]
+    if drop > CAPABILITY_DROP_ONCE:
+        return Status("frying", "fired", text + f", more than {CAPABILITY_DROP_ONCE * 100:.0f} points at once")
+    if drop > CAPABILITY_DROP and previous and base - previous[-1] > CAPABILITY_DROP:
+        return Status("frying", "fired", text + f", and more than {CAPABILITY_DROP * 100:.0f} points below at the check "
+                                                "before too")
     if drop > CAPABILITY_DROP:
-        return Status("frying", "fired", text)
+        return Status("frying", "watch", text + "; it stops if the next check is this low too")
     return Status("frying", "watch" if drop > 0 else "ok", text)
 
 
@@ -201,8 +224,12 @@ def saturation(controller_summary: dict) -> Status:
 
 
 def _hack_share(rows: list[dict]) -> float | None:
+    """Episodes with a hack that needs looking at, over scored episodes. An escape attempt the sandbox blocked, and that
+    is only a file or process attempt (`hacked_contained`, e.g. a scratch file written to /tmp in a read episode), is
+    left out: its reward is still zeroed, but nothing needs fixing (prod-v1 step 4, 2026-10-18)."""
     scored = sum(_get(r, "infra", "episodes") - _get(r, "infra", "infra") for r in rows)
-    return sum(_get(r, "reward", "hacked") or 0 for r in rows) / scored if scored else None
+    hacked = sum((_get(r, "reward", "hacked") or 0) - (_get(r, "reward", "hacked_contained") or 0) for r in rows)
+    return hacked / scored if scored else None
 
 
 def hacking(rows: list[dict], audit_hacks: list[dict], *, since_step: int = 0) -> Status:
@@ -227,23 +254,59 @@ def hacking(rows: list[dict], audit_hacks: list[dict], *, since_step: int = 0) -
 # ----------------------------------------------------------------------------- collapse and the LR rule
 
 
+def matched_entropy_drop(row: dict) -> float | None:
+    """How much less surprised the trained model is than the base model by the same sampled tokens: 1 - (the policy's
+    mean -logprob) / (the base model's), over the step's KL re-score. Its excess over 0 is KL to base relative to the
+    base's surprise. None when the re-score paired too few tokens."""
+    kl = _get(row, "policy", "kl") or {}
+    policy, base, tokens = kl.get("policy_nll"), kl.get("base_nll"), kl.get("tokens") or 0
+    if policy is None or base is None or base <= 0 or tokens < MATCHED_MIN_TOKENS:
+        return None
+    return 1 - policy / base
+
+
+def _raw_entropy_low(by_step: dict, s: int) -> tuple[float, int, float] | None:
+    """(entropy, peak step, peak) when step s's raw entropy is under 70% of its previous-10-step peak, else None."""
+    ent = _get(by_step.get(s, {}), "policy", "entropy")
+    history = [(p, _get(by_step[p], "policy", "entropy")) for p in range(s - ENTROPY_WINDOW, s) if p in by_step]
+    history = [(p, e) for p, e in history if e is not None]
+    if ent is None or len(history) < ENTROPY_MIN_HISTORY:
+        return None
+    peak_step, peak = max(history, key=lambda p: (p[1], p[0]))
+    return (ent, peak_step, peak) if ent < (1 - ENTROPY_DROP) * peak else None
+
+
 def collapse(rows: list[dict], *, since_step: int = 0) -> Collapse | None:
-    """Spec §5.2 step 3's two signals, checked at the latest step. Only steps after `since_step` can trip it."""
+    """The collapse check, at the latest step (see the module docstring). Only steps after `since_step` can trip it."""
     if not rows or rows[-1]["step"] <= since_step:
         return None
     t = rows[-1]["step"]
     by_step = {r["step"]: r for r in rows}
+    drop = matched_entropy_drop(rows[-1])
+    if drop is not None:
+        if drop > ENTROPY_DROP:
+            return Collapse("entropy", t, t, f"on the same tokens the trained model's surprise is {drop:.0%} below the "
+                                             f"base model's at step {t} (limit {ENTROPY_DROP:.0%})")
+        return None
+    lows = []
+    for s in range(t - RAW_ENTROPY_STREAK + 1, t + 1):
+        low = None if s <= since_step else _raw_entropy_low(by_step, s)
+        if low is None:
+            return None
+        lows.append((s, *low))
+    s0, _, peak_step, peak = lows[0]
+    return Collapse("entropy", t, s0, f"with no matched reading, raw entropy stayed under 70% of its peak of {peak:.3f} "
+                                      f"(step {peak_step}) for {RAW_ENTROPY_STREAK} steps: "
+                                      + ", ".join(f"{e:.3f} at step {s}" for s, e, _, _ in lows))
 
-    ent_t = _get(rows[-1], "policy", "entropy")
-    history = [(s, _get(by_step[s], "policy", "entropy")) for s in range(t - ENTROPY_WINDOW, t) if s in by_step]
-    history = [(s, e) for s, e in history if e is not None]
-    if ent_t is not None and len(history) >= ENTROPY_MIN_HISTORY:
-        peak_step, peak = max(history, key=lambda p: (p[1], p[0]))
-        if ent_t < (1 - ENTROPY_DROP) * peak:
-            return Collapse("entropy", t, peak_step + 1,
-                            f"entropy {ent_t:.3f} at step {t} is {1 - ent_t / peak:.0%} below its peak of {peak:.3f} "
-                            f"at step {peak_step} (limit {ENTROPY_DROP:.0%} within {ENTROPY_WINDOW} steps)")
 
+def collapse_warning(rows: list[dict], *, since_step: int = 0) -> str | None:
+    """The Echo Trap warning: within-group reward std below half its previous-10-step average for 3 steps in a row.
+    Logged, never a rollback (module docstring)."""
+    if not rows or rows[-1]["step"] <= since_step:
+        return None
+    t = rows[-1]["step"]
+    by_step = {r["step"]: r for r in rows}
     streak = []
     for s in range(t - STD_STREAK + 1, t + 1):
         std = _get(by_step.get(s, {}), "policy", "reward_std")
@@ -255,9 +318,8 @@ def collapse(rows: list[dict], *, since_step: int = 0) -> Collapse | None:
         if not std < STD_DROP * average:
             return None
         streak.append(f"{std:.3f} vs {average:.3f}")
-    return Collapse("reward_std", t, t - STD_STREAK + 1,
-                    f"within-group reward std below half its 10-step average for {STD_STREAK} steps "
-                    f"(steps {t - STD_STREAK + 1}-{t}: {'; '.join(streak)})")
+    return (f"within-group reward std below half its 10-step average for {STD_STREAK} steps "
+            f"(steps {t - STD_STREAK + 1}-{t}: {'; '.join(streak)})")
 
 
 def last_good_checkpoint(first_bad_step: int, kept: Iterable[int]) -> int:

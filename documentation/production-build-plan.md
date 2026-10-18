@@ -675,6 +675,8 @@ The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5
 
 **It keeps going while** the selection set has reached a new best in one of the last 3 evals, or a family has moved up a level in the last 30 steps.
 
+*The rules below got noise margins and a matched collapse signal on 2026-10-18, after prod-v1's first steps: see [step-12-runbook.md](step-12-runbook.md) §7.*
+
 **It stops early, keeping the best checkpoint, on any of these:**
 1. **Plateau:** no new best for 3 evals (30 steps), and no level-up.
 2. **Overfitting:** training reward rises while the selection set falls, two evals in a row.

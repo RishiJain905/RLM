@@ -85,7 +85,23 @@ The step 10 and step 11 pages are never published to again.
 
 Tests, in WSL with Docker, all passing: 136 in the training loop, edit environment, grader, evals and audit, dashboard and data-family modules, then 137 in the grader, dashboard, detector, edit environment, edit sandbox and evals modules again after the last grader and dashboard changes.
 
-## 7. What changed for step 12 ($0, tested)
+## 7. Stop-rule changes after the first steps (2026-10-18, Rishi: "fix what would stop the run for nothing")
+
+After step 5 the collapse rule was about to roll the whole run back to checkpoint 0 and halve the learning rate. Raw entropy had fallen 0.48, 0.40, 0.38, 0.40, 0.31 on the same family mix while KL to base stayed near 0.003: the model had barely moved, and the drop came from longer, code-heavier episodes. The run was stopped mid-training (Ctrl-C twice, Rishi's yes) with step 5's batch saved, and every rule was reviewed for false stops:
+
+| Rule | Before | Now | Why |
+|---|---|---|---|
+| Collapse (LR fallback) | raw entropy under 70% of its 10-step peak, or reward std under half its mean for 3 steps | the trained model 30% less surprised than the base model by the same re-scored tokens (`stoprules.matched_entropy_drop`); raw entropy only without that reading, and then 3 steps in a row | raw entropy moves with what was sampled; comparing on the same tokens doesn't |
+| Reward std (Echo Trap) | part of the collapse rule | a warning notice | it falls whenever a step draws easy or hard families |
+| 3. Frying | capability more than 2 points below checkpoint 0 once | twice in a row, or more than 5 points once | 100 prompts move a few points by chance |
+| 2. Overfitting | any selection-set fall, twice, with training reward rising | a fall of more than 5 points, twice | 64 tasks move about 6 points by chance |
+| 5. Hacking (pause) | every detector hit | blocked escape attempts that are only file or process attempts are left out (`detectors.contained`); they still score 0 | step 4's three were scratch files to /tmp and a `find`; nothing to fix |
+| Controller | a level move waited for 3 steps in its window | a unanimous window (every episode right, or every one wrong, on 8 or more) moves at once | edit synth went 20 of 20 over its first 4 steps, all groups that teach nothing |
+| Train call | one failure crashed the run until someone resumed | waits up to 15 minutes for the checkpoint to land, accepts it if it did, else sends the batch again (2 more tries) | one W&B hiccup mustn't stop a 2-day run |
+
+The dashboard's Policy health panel gained "Entropy against the base model (collapse signal)", and the chart guide explains each change.
+
+## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |
 |---|---|---|

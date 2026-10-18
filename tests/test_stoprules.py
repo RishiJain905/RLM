@@ -8,9 +8,14 @@ import unittest
 from rlm_rl import stoprules as sr
 
 
-def row(step, *, entropy=0.6, reward_std=0.3, reward=0.5, hacked=0, episodes=32, infra=0, grad=0.7, corr=0.997):
-    return {"step": step, "policy": {"entropy": entropy, "reward_std": reward_std, "grad_norm": grad, "probs_corr": corr},
-            "reward": {"mean": reward, "hacked": hacked}, "infra": {"episodes": episodes, "infra": infra}}
+def row(step, *, entropy=0.6, reward_std=0.3, reward=0.5, hacked=0, episodes=32, infra=0, grad=0.7, corr=0.997,
+        matched=None, kl_tokens=8000, contained=0):
+    """`matched` is (policy_nll, base_nll) from the step's KL re-score; None leaves the step without a matched reading."""
+    kl = {"policy_nll": matched[0], "base_nll": matched[1], "tokens": kl_tokens} if matched else {}
+    return {"step": step, "policy": {"entropy": entropy, "reward_std": reward_std, "grad_norm": grad, "probs_corr": corr,
+                                     "kl": kl},
+            "reward": {"mean": reward, "hacked": hacked, "hacked_contained": contained},
+            "infra": {"episodes": episodes, "infra": infra}}
 
 
 def sel(checkpoint, accuracy, name="sel"):
@@ -45,14 +50,28 @@ class EvalRulesTest(unittest.TestCase):
 
     def test_overfitting_needs_two_evals_in_a_row(self):
         rows = [row(s, reward=0.3 + 0.01 * s) for s in range(1, 41)]  # training reward keeps rising
-        points = [(0, 0.5), (10, 0.6), (20, 0.62), (30, 0.58), (40, 0.55)]
+        points = [(0, 0.5), (10, 0.6), (20, 0.68), (30, 0.62), (40, 0.55)]
         self.assertTrue(sr.overfitting(points, rows).fired)
         self.assertFalse(sr.overfitting(points[:-1], rows).fired)
         flat = [row(s, reward=0.5) for s in range(1, 41)]  # selection falls but training reward doesn't rise
         self.assertFalse(sr.overfitting(points, flat).fired)
 
+    def test_overfitting_ignores_dips_inside_the_noise(self):
+        """64 tasks move about 6 points either way by chance: two 3-point dips aren't overfitting."""
+        rows = [row(s, reward=0.3 + 0.01 * s) for s in range(1, 41)]
+        points = [(0, 0.5), (10, 0.6), (20, 0.62), (30, 0.59), (40, 0.56)]
+        status = sr.overfitting(points, rows)
+        self.assertFalse(status.fired, status.text)
+        self.assertIn("more than 5 points", status.text)
+
     def test_frying_on_a_capability_drop(self):
-        self.assertTrue(sr.frying([cap(0, 0.80), cap(10, 0.79), cap(20, 0.77)]).fired)  # 3 points
+        self.assertTrue(sr.frying([cap(0, 0.80), cap(10, 0.77), cap(20, 0.77)]).fired)  # 3 points, twice in a row
+        status = sr.frying([cap(0, 0.80), cap(10, 0.79), cap(20, 0.77)])  # 3 points once: inside one check's noise
+        self.assertFalse(status.fired)
+        self.assertEqual(status.state, "watch")
+        self.assertIn("stops if the next check is this low too", status.text)
+        self.assertTrue(sr.frying([cap(0, 0.80), cap(10, 0.79), cap(20, 0.74)]).fired)  # 6 points at once
+        self.assertFalse(sr.frying([cap(0, 0.80), cap(10, 0.77), cap(20, 0.79)]).fired)  # recovered
         status = sr.frying([cap(0, 0.80), cap(10, 0.79)])
         self.assertFalse(status.fired)
         self.assertIn("1.0 points below", status.text)
@@ -85,25 +104,58 @@ class HackingTest(unittest.TestCase):
         rows = [row(s, hacked=2, episodes=32, infra=30) for s in range(1, 6)]
         self.assertTrue(sr.hacking(rows, []).fired)  # 2 of 2 scored episodes each step
 
+    def test_blocked_file_and_process_attempts_dont_pause(self):
+        """prod-v1 step 4: scratch files written to /tmp and a `find` in read episodes. Zeroed, but nothing to fix."""
+        rows = [row(s, hacked=0) for s in range(1, 11)] + [row(s, hacked=3, contained=3) for s in range(11, 21)]
+        status = sr.hacking(rows, [])
+        self.assertFalse(status.fired, status.text)
+        self.assertIn("0.0% of episodes", status.text)
+        mixed = rows[:10] + [row(s, hacked=3, contained=1) for s in range(11, 21)]
+        self.assertTrue(sr.hacking(mixed, []).fired)  # 20 of 320 still need a look
+
 
 class CollapseTest(unittest.TestCase):
-    def test_entropy_drop(self):
-        rows = [row(s, entropy=0.6) for s in range(1, 14)] + [row(14, entropy=0.40)]
+    def test_a_matched_entropy_drop_fires(self):
+        """The trained model 30% less surprised than the base model by the same tokens is a collapse."""
+        rows = [row(s, matched=(0.40, 0.41)) for s in range(1, 14)] + [row(14, matched=(0.25, 0.40))]
         signal = sr.collapse(rows)
         self.assertEqual((signal.kind, signal.step, signal.first_bad_step), ("entropy", 14, 14))
-        self.assertIsNone(sr.collapse(rows[:-1] + [row(14, entropy=0.45)]))  # 25% is inside the limit
+        self.assertIn("38% below", signal.text)
+        self.assertIsNone(sr.collapse(rows[:-1] + [row(14, matched=(0.30, 0.40))]))  # 25% is inside the limit
         self.assertIsNone(sr.collapse(rows, since_step=14))
+        self.assertAlmostEqual(sr.matched_entropy_drop(rows[-1]), 0.375)
+        self.assertIsNone(sr.matched_entropy_drop(row(1, matched=(0.2, 0.4), kl_tokens=100)))  # too few tokens
+
+    def test_raw_entropy_falling_with_the_samples_is_not_a_collapse(self):
+        """prod-v1, steps 1-5: raw entropy 0.48 to 0.31 on the same family mix, KL to base ~0.003. With a matched
+        reading the raw drop is ignored."""
+        entropies = [0.482, 0.397, 0.384, 0.400, 0.314]
+        rows = [row(s, entropy=e, matched=(0.40, 0.401)) for s, e in enumerate(entropies, 1)]
+        self.assertIsNone(sr.collapse(rows))
+
+    def test_without_a_matched_reading_raw_entropy_needs_three_low_steps(self):
+        rows = [row(s, entropy=0.6) for s in range(1, 14)] + [row(14, entropy=0.40)]
+        self.assertIsNone(sr.collapse(rows))  # one low step
+        rows += [row(15, entropy=0.40)]
+        self.assertIsNone(sr.collapse(rows))  # two
+        rows += [row(16, entropy=0.38)]
+        signal = sr.collapse(rows)
+        self.assertEqual((signal.kind, signal.step, signal.first_bad_step), ("entropy", 16, 14))
+        self.assertIsNone(sr.collapse(rows[:-1] + [row(16, entropy=0.45)]))  # 25% is inside the limit
+        self.assertIsNone(sr.collapse(rows, since_step=14))  # only steps after since_step count
+        self.assertIsNone(sr.collapse(rows[:-1] + [row(16, entropy=0.30, matched=(0.39, 0.40))]))  # matched says fine
 
     def test_entropy_needs_some_history(self):
         self.assertIsNone(sr.collapse([row(1, entropy=0.6), row(2, entropy=0.6), row(3, entropy=0.1)]))
 
-    def test_reward_std_streak(self):
+    def test_reward_std_streak_is_a_warning_not_a_collapse(self):
         rows = [row(s, reward_std=0.30) for s in range(1, 11)]
         rows += [row(11, reward_std=0.10), row(12, reward_std=0.10)]
-        self.assertIsNone(sr.collapse(rows))  # 2 steps in a row is not 3
-        signal = sr.collapse(rows + [row(13, reward_std=0.08)])
-        self.assertEqual((signal.kind, signal.first_bad_step), ("reward_std", 11))
-        self.assertIsNone(sr.collapse(rows + [row(13, reward_std=0.25)]))
+        self.assertIsNone(sr.collapse_warning(rows))  # 2 steps in a row is not 3
+        rows += [row(13, reward_std=0.08)]
+        self.assertIn("steps 11-13", sr.collapse_warning(rows))
+        self.assertIsNone(sr.collapse(rows))  # it never rolls back by itself
+        self.assertIsNone(sr.collapse_warning(rows[:-1] + [row(13, reward_std=0.25)]))
 
     def test_last_good_checkpoint(self):
         self.assertEqual(sr.last_good_checkpoint(14, [0, 5, 10, 15]), 10)

@@ -222,7 +222,7 @@ footer p { margin: 0; max-width: 92ch; }
     </section>
 
     <section class="panel" id="pass" data-comment-target>
-      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p id="pass-sub">Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
+      <div class="phead"><div><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p id="pass-sub">Each step draws 8 tasks at the controller's levels and runs 4 rollouts of each. A family moves up a level above a 70% pass rate over its last 3 steps and down below 20%, or at once when at least 8 of its episodes in a row were all right or all wrong.</p></div><button class="flag" type="button" hidden>Flag this</button></div>
       <div class="grid" id="pass-charts"></div>
       <div class="grid wide" id="pass-extra"></div>
     </section>
@@ -783,8 +783,11 @@ footer p { margin: 0; max-width: 92ch; }
     }
     return out;
   }
-  chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "collapse line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks() });
-  chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks() });
+  // the collapse signal (stoprules.collapse): the trained model's surprise against the base model's on the same re-scored tokens
+  function matchedDrop(r) { var p = get(r, ["policy", "kl_policy_nll"]), b = get(r, ["policy", "kl_base_nll"]), n = get(r, ["policy", "kl_tokens"]); return isNum(p) && isNum(b) && b > 0 && isNum(n) && n >= 200 ? 1 - p / b : null; }
+  chart(po, { title: "Entropy against the base model (collapse signal)", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.35, series: [series("drop on the same tokens", "var(--c1)", matchedDrop, { area: true })].concat(ghosts(matchedDrop)), refs: [{ y: 0.30, label: "collapse line 30%" }], xmarks: rollbackMarks(), note: "How much less surprised the trained model is than the base model by the same sampled tokens, from the KL re-score. Above 30% it rolls back. Raw entropy, below, also moves with what was sampled." });
+  chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "fallback line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks(), note: "Moves with what each step samples (longer, code-heavy episodes read lower). Counts toward a rollback only when a step has no matched reading, and then only after 3 steps in a row under the line." });
+  chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "warning line: half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks(), note: "3 steps in a row under the line logs a warning. It also falls when a step draws families the model finds easy or hard." });
   var klLast = steps.length ? steps[steps.length - 1] : null;
   var klReq = klLast ? get(klLast, ["policy", "kl_requests"]) : null;
   var klBad = (klLast && get(klLast, ["policy", "kl_misaligned"])) || 0, klFail = (klLast && get(klLast, ["policy", "kl_failed"])) || 0;
@@ -998,7 +1001,7 @@ footer p { margin: 0; max-width: 92ch; }
     });
     var lr = D.lr || {}, row = el("div", "rule"), nm = el("div", "nm", "Learning-rate rule"); nm.appendChild(el("small", null, lr.rule === "fallback" ? "rolls back once, then rule 3" : "fixed")); row.appendChild(nm);
     var tx = el("div", "tx"), ok = !lr.fallback_used, p = el("span", "pill " + (ok ? "t-good" : "t-warn")); p.appendChild(el("span", "ic", ok ? "✓" : "!")); p.appendChild(document.createTextNode(ok ? "No collapse" : "Fell back")); tx.appendChild(p);
-    tx.appendChild(el("span", null, ok ? "At " + F.lr(lr.current) + ". An entropy drop below 70% of its 10-step peak, or reward std under half its 10-step mean for 3 steps, " + (lr.current > lr.floor ? "rolls back to the last good checkpoint and continues at " + F.lr(lr.floor) + "." : "pauses the run for Rishi.") : "Collapse (" + (lr.fallback && lr.fallback.signal) + ") at step " + (lr.fallback && lr.fallback.at_step) + "; rolled back to checkpoint " + (lr.fallback && lr.fallback.to_checkpoint) + " at " + F.lr(lr.current) + ". Another collapse fires rule 3."));
+    tx.appendChild(el("span", null, ok ? "At " + F.lr(lr.current) + ". The trained model 30% less surprised than the base model by the same re-scored tokens (or, without that reading, raw entropy under 70% of its 10-step peak for 3 steps) " + (lr.current > lr.floor ? "rolls back to the last good checkpoint and continues at " + F.lr(lr.floor) + "." : "pauses the run for Rishi.") : "Collapse (" + (lr.fallback && lr.fallback.signal) + ") at step " + (lr.fallback && lr.fallback.at_step) + "; rolled back to checkpoint " + (lr.fallback && lr.fallback.to_checkpoint) + " at " + F.lr(lr.current) + ". Another collapse fires rule 3."));
     row.appendChild(tx); host.appendChild(row);
     if (lr.decision) {
       var drow = el("div", "rule"), dn = el("div", "nm", "Production's learning rate"); dn.appendChild(el("small", null, "decided by this run")); drow.appendChild(dn);

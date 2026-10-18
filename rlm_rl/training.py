@@ -72,6 +72,12 @@ REPO = Path(__file__).resolve().parents[1]
 RESULTS = REPO / "results"
 STATE_FORMAT = 1
 HEARTBEAT_S = 15.0
+# A failed train call (a dropped connection, a W&B hiccup) may still train on the server, so the loop waits up to
+# TRAIN_SETTLE_S for a new checkpoint, polling every TRAIN_POLL_S, before sending the batch again, at most
+# TRAIN_RETRIES times; only then does the failure stop the run (2026-10-18: one hiccup mustn't stop a 2-day run).
+TRAIN_RETRIES = 2
+TRAIN_SETTLE_S = 900.0
+TRAIN_POLL_S = 30.0
 AUDIT_EVERY = 10  # the Claude audit's checkpoints (decision 5a)
 STOP_FILE = "STOP"
 LIVE_GUARD_S = 120.0  # a "running" state written this recently may belong to a process that is still running it
@@ -123,7 +129,9 @@ class TrainingRun:
                  draw: Callable[..., list] = rtasks.draw, eval_sets: Callable[[str], tuple] = eval_set,
                  capability_items: list | None = None, prune: bool = True, stop_after: int | None = None,
                  rng: random.Random | None = None, retry: RetryPolicy | None = None, pacer: Any = None,
-                 clear_containers: Callable[[str], dict] | None = None, log: Callable[[str], None] = print):
+                 clear_containers: Callable[[str], dict] | None = None,
+                 train_retry: tuple[int, float, float] = (TRAIN_RETRIES, TRAIN_SETTLE_S, TRAIN_POLL_S),
+                 log: Callable[[str], None] = print):
         self.run = run
         self.cfg = cfg
         self.backend = backend
@@ -140,6 +148,7 @@ class TrainingRun:
         self.retry = retry or RetryPolicy()
         self.pacer = pacer
         self.clear_containers = clear_containers  # sandbox.clear_for_run on a real run (scripts/train.py)
+        self.train_retry = train_retry  # (retries, settle seconds, poll seconds) for a failed train call
         self.say = log
         self.state: dict = {}
         self.ctl: DifficultyController | None = None
@@ -475,11 +484,11 @@ class TrainingRun:
             self._commit_row(row)
         else:
             train_groups = self._trajectory_groups(step_filter.groups)
-            latest_before = await self.backend.latest_step(self._branch)
+            latest_before = await self._backend_latest()
             self._write_pending(n, row, train_groups, latest_before, controller_before, retirement_before)
             self._live(n, "training")
             t2 = time.monotonic()
-            backend_step, train_metrics = await self.backend.train(self._branch, train_groups, **cfg.train_args(lr))
+            backend_step, train_metrics = await self._train(n, train_groups, lr, latest_before)
             self._commit_row(self._trained(row, backend_step, train_metrics, time.monotonic() - t2))
         await self._log_step(n, groups)
 
@@ -506,6 +515,55 @@ class TrainingRun:
         self.say(f"[{self.run}] step {row['step']} {row['status']}: pass {_pct(p['rate'])}, trainable "
                  f"{p['trainable_groups']}/{p['groups']}, entropy {_num(pol['entropy'])}, KL {_num(pol['kl_to_base'])}, "
                  f"${row['cost']['step_usd']:.3f} (train ${self.state['spend']['train_usd']:.2f})")
+
+    async def _backend_latest(self) -> int:
+        """The branch's newest backend checkpoint, tried 3 times: a W&B hiccup here mustn't stop the run."""
+        poll = self.train_retry[2]
+        for attempt in range(3):
+            try:
+                return await self.backend.latest_step(self._branch)
+            except Exception as exc:
+                if attempt == 2:
+                    raise
+                self._notice("backend", f"reading the latest checkpoint failed ({exc!r}"[:200] + "); trying again")
+                await asyncio.sleep(poll)
+        raise AssertionError("unreachable")
+
+    async def _train(self, n: int, groups: list, lr: float, latest_before: int) -> tuple[int, dict | None]:
+        """Step n's train call, kept going through a failed call (TRAIN_SETTLE_S above): a failure that trained anyway
+        is accepted without its metrics; one that didn't is sent again. The last failure is raised, and resume decides
+        (--retrain-pending or --discard-pending)."""
+        retries, settle_s, poll_s = self.train_retry
+        for attempt in range(retries + 1):
+            try:
+                return await self.backend.train(self._branch, groups, **self.cfg.train_args(lr))
+            except Exception as exc:
+                if attempt == retries:
+                    raise
+                self._notice("training", f"step {n}'s train call failed ({exc!r}"[:200]
+                             + "); waiting to see whether it trained anyway")
+                landed = await self._wait_for_checkpoint(latest_before, settle_s, poll_s)
+                if landed is not None:
+                    self._notice("training", f"step {n} trained anyway (backend step {landed}); its training "
+                                             "metrics weren't recorded")
+                    return landed, None
+                self._notice("training", f"no new checkpoint after {settle_s / 60:.0f} minutes, so step {n}'s batch "
+                                         f"is sent again (try {attempt + 2} of {retries + 1})")
+        raise AssertionError("unreachable")
+
+    async def _wait_for_checkpoint(self, latest_before: int, settle_s: float, poll_s: float) -> int | None:
+        """The branch's new backend step once one past `latest_before` shows up, or None after `settle_s`."""
+        deadline = time.monotonic() + settle_s
+        while True:
+            try:
+                latest = await self.backend.latest_step(self._branch)
+                if latest > latest_before:
+                    return latest
+            except Exception:  # keep polling through a hiccup; the deadline still holds
+                pass
+            if time.monotonic() >= deadline:
+                return None
+            await asyncio.sleep(poll_s)
 
     def _fallback_slots(self, n: int, batch: list) -> dict:
         """A fixed pool's slots that went to its fallback family because too few of its tasks were left (12b)."""
@@ -910,6 +968,9 @@ class TrainingRun:
                                                       "lowest rate the LR rule allows, so the next move is your call"))
             else:
                 self._notice("collapse", f"{signal.text} (logged only: the second seed's curves decide production's LR)")
+        warning = stoprules.collapse_warning(rows, since_step=st["collapse_since"])
+        if warning and not stoprules.collapse_warning(rows[:-1], since_step=st["collapse_since"]):  # once a stretch
+            self._notice("collapse", f"warning, no rollback: {warning}")
 
         audit_hacks = self._audit_hacks()
         points = stoprules.eval_points(st["evals"], cfg.selection or "")

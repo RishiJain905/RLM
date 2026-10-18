@@ -395,6 +395,7 @@ class StepFilter:
     skip_train: str | None  # why this step's train call is skipped, if it is
     hacks: dict = field(default_factory=dict)  # detector hits by rule over the step's scored episodes
     hacked_episodes: int = 0
+    hacked_contained: int = 0  # of those, the ones whose only hit was a blocked file or process attempt (detectors.contained)
 
     @property
     def infra_rate(self) -> float:
@@ -406,7 +407,7 @@ class StepFilter:
                 "trained_episodes": sum(map(len, self.groups)), "dropped_small": self.dropped_small,
                 "dropped_all_zero": self.dropped_all_zero, "dropped_all_one": self.dropped_all_one,
                 "dropped_equal_other": self.dropped_equal_other, "skip_train": self.skip_train,
-                "hacks": self.hacks, "hacked_episodes": self.hacked_episodes}
+                "hacks": self.hacks, "hacked_episodes": self.hacked_episodes, "hacked_contained": self.hacked_contained}
 
 
 def filter_step(groups: list[list[Episode]]) -> StepFilter:
@@ -433,7 +434,8 @@ def filter_step(groups: list[list[Episode]]) -> StepFilter:
         skip = f"only {len(kept)} trainable group{'s' if len(kept) != 1 else ''} (need {MIN_GROUPS})"
     scored = [ep for group in groups for ep in group if ep.infra_error is None]
     return StepFilter(kept, episodes, sum(kinds.values()), dict(kinds), small, zero, one, equal, skip,
-                      detectors.counts(scored), sum(bool(ep.hacks) for ep in scored))
+                      detectors.counts(scored), sum(bool(ep.hacks) for ep in scored),
+                      sum(detectors.contained(ep) for ep in scored))
 
 
 class InfraPause:

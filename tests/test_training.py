@@ -58,6 +58,7 @@ class LoopCase(AsyncCase):
 
     def run_(self, name, **kw):
         kw.setdefault("retry", FAST)
+        kw.setdefault("train_retry", (2, 0.3, 0.05))  # a failed train call: 2 more tries, after 0.3 s of waiting
         kw.setdefault("log", lambda line: None)
         return self.dry.training_run(name, **kw)
 
@@ -289,7 +290,7 @@ class StopSwitchTest(LoopCase):
 
 class CrashTest(LoopCase):
     async def test_a_failed_train_call_waits_for_the_operator_then_retrains_the_saved_batch(self):
-        run = self.run_("cr", cfg=second_seed("cr", 4))
+        run = self.run_("cr", cfg=second_seed("cr", 4), train_retry=(0, 0, 0))  # no in-process retry: the operator's path
         self.hook_draw(run, 3, lambda: setattr(self.dry.backend, "fail_next_train", RuntimeError("Training job failed")))
         with self.assertRaises(RuntimeError):
             await run.start()
@@ -307,7 +308,7 @@ class CrashTest(LoopCase):
         self.assertFalse((self.results / "cr" / "pending").exists())
 
     async def test_training_that_finished_while_the_script_was_down_is_accepted(self):
-        run = self.run_("cr2", cfg=second_seed("cr2", 4))
+        run = self.run_("cr2", cfg=second_seed("cr2", 4), train_retry=(0, 0, 0))
         self.hook_draw(run, 2, lambda: setattr(self.dry.backend, "fail_after_next_train", ConnectionError("lost")))
         with self.assertRaises(ConnectionError):
             await run.start()
@@ -318,7 +319,7 @@ class CrashTest(LoopCase):
         self.assertEqual([t["step"] for t in self.dry.backend.trained], [1, 2, 3, 4])  # step 2 was never trained twice
 
     async def test_a_discarded_step_is_redone_from_new_rollouts(self):
-        run = self.run_("cr3", cfg=second_seed("cr3", 3))
+        run = self.run_("cr3", cfg=second_seed("cr3", 3), train_retry=(0, 0, 0))
         self.hook_draw(run, 2, lambda: setattr(self.dry.backend, "fail_next_train", RuntimeError("boom")))
         with self.assertRaises(RuntimeError):
             await run.start()
@@ -352,6 +353,48 @@ class CrashTest(LoopCase):
         moved = list((self.results / "int" / "abandoned" / "interrupted").glob("step0003-*.jsonl"))
         self.assertEqual(len(moved), 1)  # the first attempt's transcripts, kept apart
         self.assertEqual(len(TranscriptLog(transcript_path(self.results / "int", "train", 3)).records()), 32)
+
+
+class TrainRetryTest(LoopCase):
+    """A W&B hiccup on the train call doesn't stop the run (2026-10-18)."""
+
+    async def test_a_train_call_that_failed_before_training_is_sent_again(self):
+        run = self.run_("tr1", cfg=second_seed("tr1", 3), stop_after=3)
+        self.hook_draw(run, 2, lambda: setattr(self.dry.backend, "fail_next_train", RuntimeError("Training job failed")))
+        st = await run.start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 3))
+        self.assertEqual([t["step"] for t in self.dry.backend.trained], [1, 2, 3])  # step 2 trained once, on the retry
+        texts = [n["text"] for n in st["notices"] if n["kind"] == "training"]
+        self.assertTrue(any("train call failed" in t for t in texts) and any("sent again" in t for t in texts), texts)
+        self.assertIsNotNone(st["steps"][1]["train_metrics"])
+
+    async def test_a_train_call_that_trained_anyway_is_accepted_not_repeated(self):
+        run = self.run_("tr2", cfg=second_seed("tr2", 3), stop_after=3)
+        self.hook_draw(run, 2, lambda: setattr(self.dry.backend, "fail_after_next_train", ConnectionError("lost")))
+        st = await run.start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 3))
+        self.assertEqual([t["step"] for t in self.dry.backend.trained], [1, 2, 3])  # never trained twice
+        self.assertIsNone(st["steps"][1]["train_metrics"])
+        self.assertTrue(any("trained anyway" in n["text"] for n in st["notices"]))
+
+    async def test_a_train_call_that_keeps_failing_still_stops_for_the_operator(self):
+        run = self.run_("tr3", cfg=second_seed("tr3", 3), train_retry=(1, 0.1, 0.05))
+
+        class Always:
+            def __get__(self, obj, objtype=None):
+                return RuntimeError("down")
+
+            def __set__(self, obj, value):
+                pass
+
+        self.hook_draw(run, 2, lambda: setattr(type(self.dry.backend), "fail_next_train", Always()))
+        try:
+            with self.assertRaises(RuntimeError):
+                await run.start()
+        finally:
+            del type(self.dry.backend).fail_next_train
+        st = load_state(self.results, "tr3")
+        self.assertEqual((st["status"], st["pending"]["step"]), ("crashed", 2))
 
 
 class RollbackTest(LoopCase):

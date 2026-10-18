@@ -102,6 +102,11 @@ class SignalsTest(MonitorCase):
         tagged = ep.messages[:2] + [{"role": "assistant", "content": f"<think>\n{turn.reasoning}\n</think>\n\n{turn.reply}"}]
         self.assertIsNone(monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
             tagged, model=BASE, thinking="medium", continue_final=True)))
+        # a turn cut off at the token cap isn't picked: its think block never closed
+        for e in episodes:
+            e.choices[0].finish_reason = "length"
+        kl = await monitor.kl_to_base(self.client, episodes, base_model=BASE, n=3, rng=random.Random(0))
+        self.assertEqual((kl["requests"], kl["misaligned_turns"]), (3, 0))  # one whole turn left in each
         # a turn whose thinking was recorded wrongly no longer lines up, and is counted
         ep.turns[0].reasoning = "something else"
         self.assertIsNone(monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(

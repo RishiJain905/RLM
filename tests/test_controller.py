@@ -48,14 +48,28 @@ class ControllerTest(unittest.TestCase):
 
     def test_the_rate_is_over_the_window_not_the_last_step(self):
         ctl = DifficultyController({"a": 5})
-        self.run_steps(ctl, [1.0, 1.0, 0.0])  # 2/3 over three steps
+        self.run_steps(ctl, [0.94, 0.94, 0.0])  # 15/16, 15/16, 0/16: 63% over three steps (not unanimous)
         self.assertEqual(ctl.level("a"), 1)
-        self.run_steps(ctl, [1.0], start=4)  # now 1.0, 0.0, 1.0: 2/3 again
+        self.run_steps(ctl, [0.94], start=4)  # now 15, 0, 15: 63% again
         self.assertEqual(ctl.level("a"), 1)
-        self.run_steps(ctl, [1.0], start=5)  # 0.0, 1.0, 1.0
+        self.run_steps(ctl, [0.94], start=5)  # 0, 15, 15
         self.assertEqual(ctl.level("a"), 1)
-        self.run_steps(ctl, [1.0], start=6)  # 1.0, 1.0, 1.0
+        self.run_steps(ctl, [0.94], start=6)  # 15, 15, 15: 94%
         self.assertEqual(ctl.level("a"), 2)
+
+    def test_a_unanimous_window_moves_at_once(self):
+        """Every episode right (or wrong) on at least 8 episodes moves without waiting for 3 steps (prod-v1, edit synth)."""
+        ctl = DifficultyController({"a": 5})
+        self.assertEqual(len(ctl.update(1, episodes("a", 1, 4, total=4))), 0)  # 4 episodes: too few
+        moves = ctl.update(2, episodes("a", 1, 4, total=4))  # 8 of 8
+        self.assertEqual([(m.from_level, m.to_level) for m in moves], [(1, 2)])
+        moves = ctl.update(3, episodes("a", 2, 16, total=16))  # 16 of 16 in one step
+        self.assertEqual(ctl.level("a"), 3)
+        moves = ctl.update(4, episodes("a", 3, 0, total=16))  # 0 of 16: down at once
+        self.assertEqual((moves[0].direction, ctl.level("a")), ("down", 2))
+        ctl.update(5, episodes("a", 2, 15, total=16))  # 94%: back to waiting for 3 steps
+        self.assertEqual(ctl.level("a"), 2)
+        self.assertTrue(controller.settings()["unanimous_moves_at_once"])
 
     def test_waits_three_steps_after_a_move(self):
         ctl = DifficultyController({"a": 5})

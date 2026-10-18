@@ -165,7 +165,7 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
       <ol class="checks">
         <li><span><b>Accuracy on selection-v3</b> (Evals) climbs over checkpoints from the base model's 50% at checkpoint 0. That is the number the run is for.</span></li>
         <li><span><b>Groups per step</b> (Pass rates) shows at least 4 of 8 groups trainable most steps. Fewer means the tasks are too easy or too hard to learn from.</span></li>
-        <li><span><b>Entropy</b> and <b>within-group reward std</b> (Policy health) stay above their grey lines. Dropping through them is a collapse, and the run rolls itself back.</span></li>
+        <li><span><b>Entropy against the base model</b> (Policy health) stays well under its 30% line. Crossing it is a collapse, and the run rolls itself back.</span></li>
         <li><span><b>Hack-detector hits</b> (Reward and cheating) stay near zero, and the Claude audit's clean share stays near 100%.</span></li>
         <li><span><b>Infra error rate</b> (Infra and timing) stays under the 1% line. Above it the run pauses for Rishi.</span></li>
       </ol>
@@ -193,7 +193,7 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
           <dt>Reward</dt><dd>The score of an attempt: 1 for an exact answer (or, for code edits, every hidden test passing), partial credit for a near miss on some read tasks, 0 otherwise.</dd>
           <dt>Family</dt><dd>A kind of task. <b>Aggregation:</b> count or classify things across a long log of short texts. <b>Call graph:</b> say which functions can end up calling a given one, in a generated code base. <b>Needle:</b> find the one function that does what a description says. <b>Repo loc:</b> name the files a real GitHub issue's fix changed. <b>Edit real:</b> fix a real bug in a real repository. <b>Edit synth:</b> fix a planted bug in a generated Python package.</dd>
           <dt>Level</dt><dd>Difficulty, 1 to 5, per family. Read tasks grow from ~35K to ~400K characters; edit tasks grow in files and lines to change.</dd>
-          <dt>Controller</dt><dd>What moves each family's level: up when the family passes over 70% of its last 3 steps, down under 20%.</dd>
+          <dt>Controller</dt><dd>What moves each family's level: up when the family passes over 70% of its last 3 steps, down under 20%. If at least 8 attempts in a row were all right (or all wrong), it moves at once without waiting for 3 steps.</dd>
           <dt>Root, turn</dt><dd>The root is the main model. Each turn it writes some thinking and a Python cell; the REPL runs the cell and shows the output.</dd>
           <dt>Sub-call</dt><dd>The root calling the base model on a piece of text from inside its code (<code>llm()</code>). Up to 30 per episode.</dd>
           <dt>Checkpoint</dt><dd>The model's weights after a given step. Checkpoint 0 is the base model.</dd>
@@ -258,6 +258,17 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
           <p>Each family's level over time, as a staircase.</p>
           <dl class="read"><dt>Healthy</dt><dd>Steps up, rarely down.</dd><dt>Worry if</dt><dd>Repeated up-down-up moves, which mean the level boundary is too sharp for the model.</dd></dl>
         </article>
+        <article class="entry" id="why-groups">
+          <header><h3>Why each task gets 4 attempts <span class="where">(how GRPO learns)</span></h3><span class="dir info"><span class="g">i</span>Background for this section</span></header>
+          <p>The model doesn't learn from "this attempt scored 1". It learns from "this attempt did better than the other attempts at the same task". Each attempt's push is its score minus the group's average score.</p>
+          <dl class="read">
+            <dt>1 of 4 right</dt><dd>The average is 0.25. The right one gets +0.75, a strong push toward whatever it did, and each wrong one gets −0.25. This is the most valuable case: a rare success to copy.</dd>
+            <dt>2 of 4 right</dt><dd>The average is 0.5: +0.5 for each right one, −0.5 for each wrong one. The clearest contrast between what works and what doesn't.</dd>
+            <dt>3 of 4 right</dt><dd>The average is 0.75. The wrong one gets −0.75, a strong push away from its mistake.</dd>
+            <dt>4 of 4 or 0 of 4</dt><dd>Every attempt equals the average, so every push is 0. Nothing in the group says what made an attempt better, so the group is dropped. That's why all-right and all-wrong groups "teach nothing", and why the controller keeps tasks at a level where the model sometimes succeeds and sometimes fails.</dd>
+          </dl>
+          <p>Comparing attempts inside a group is what lets GRPO work without a second model that predicts how good an answer should be. The group's own average plays that part. Four attempts is a trade-off between a reliable average and the cost of every extra attempt.</p>
+        </article>
         <article class="entry" id="groups">
           <header><h3>Groups per step</h3><span class="dir up"><span class="g">↑</span>Higher is better (the "trainable" part)</span></header>
           <p>The 8 groups of each step, split by what they were useful for. <b>Trainable:</b> the 4 attempts scored differently, so GRPO can learn from them. <b>All 0:</b> all 4 wrong (too hard). <b>All 1:</b> all 4 right (too easy). <b>Other equal:</b> all 4 got the same partial credit. <b>Too small:</b> fewer than 2 usable attempts after infra losses.</p>
@@ -285,15 +296,20 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
     <section class="sec" id="policy">
       <div class="sec-head"><div class="eyebrow">rlm/policy · actor</div><h2>Policy health</h2><p>Whether training itself is stable. These charts are about the model's internals, not its scores. Collapses show up here first.</p></div>
       <div class="entries">
+        <article class="entry" id="matched-entropy">
+          <header><h3>Entropy against the base model <span class="where">(collapse signal)</span></h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>How much less surprised the trained model is than the untrained base model by the very same sampled words, from the KL re-score. A model that collapses gets very sure of its own outputs, so this climbs. Comparing on the same words cancels out what each step happened to sample. The grey line is 30%.</p>
+          <dl class="read"><dt>Healthy</dt><dd>A few percent, creeping up slowly as the model learns.</dd><dt>Worry if</dt><dd>It crosses 30%. That is a collapse: the run rolls back to the last good checkpoint and continues at half the learning rate. A second one stops the run.</dd></dl>
+        </article>
         <article class="entry" id="entropy">
           <header><h3>Entropy <span class="where">(mean −logprob of sampled root tokens)</span></h3><span class="dir flat"><span class="g">≈</span>Steady, slowly falling is good</span></header>
-          <p>How spread out the model's word choices are. High entropy means it still explores different ways to write things; low means it says the same thing every time. The grey line is 70% of the highest value in the last 10 steps.</p>
-          <dl class="read"><dt>Healthy</dt><dd>Flat or drifting down gently.</dd><dt>Worry if</dt><dd>It falls through the grey line. That is a collapse: the run rolls back to the last good checkpoint and continues at half the learning rate. A second one stops the run.</dd></dl>
+          <p>How spread out the model's word choices are over everything it wrote that step. It also moves with what was sampled: longer, code-heavy episodes read lower, since code is predictable. In prod-v1 it fell from 0.48 to 0.31 over steps 1-5 while the model itself had barely changed. The grey line is 70% of the highest value in the last 10 steps.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Wobbling with the task mix, without a steady slide.</dd><dt>Worry if</dt><dd>It slides along with the chart above. On its own it counts toward a rollback only when a step has no matched reading, and then only after 3 steps in a row under the grey line.</dd></dl>
         </article>
         <article class="entry" id="reward-std">
           <header><h3>Within-group reward std <span class="where">(Echo Trap signal)</span></h3><span class="dir flat"><span class="g">≈</span>Steady is good</span></header>
-          <p>How different the 4 attempts at each task scored, averaged over the step. GRPO learns only from those differences. The grey line is half the 10-step average.</p>
-          <dl class="read"><dt>Healthy</dt><dd>Steady, clearly above 0.</dd><dt>Worry if</dt><dd>It falls under the grey line and stays there for 3 steps: the "Echo Trap", where every attempt gives the same answer. That counts as a collapse.</dd></dl>
+          <p>How different the 4 attempts at each task scored, averaged over the step. GRPO learns only from those differences. The grey line is half the 10-step average. It also falls whenever a step draws families the model finds very easy or very hard.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Steady, clearly above 0.</dd><dt>Worry if</dt><dd>It stays under the grey line for 3 steps: a possible "Echo Trap", where every attempt gives the same answer. That logs a warning in Notices; check the entropy charts and the task mix.</dd></dl>
         </article>
         <article class="entry" id="kl">
           <header><h3>KL to base <span class="where">(logged, not in the loss)</span></h3><span class="dir flat"><span class="g">≈</span>Small and slowly rising is good</span></header>
@@ -499,7 +515,7 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
         <article class="entry" id="detectors">
           <header><h3>Hack-detector hits by rule</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
           <p>Attempts caught by each cheating detector, stacked per step. <b>Early submit:</b> answered before looking. <b>Copied answer:</b> typed an answer that appears nowhere in its work. <b>Escape attempt:</b> tried to get out of the sandbox. <b>Timeout loop:</b> 3 or more timed-out cells. <b>Test tamper:</b> changed the tests or test settings. <b>Grader tamper:</b> the grader's check tests came back wrong. <b>Test aware:</b> code that behaves differently when it's being tested. <b>Network try</b> (grey) is only logged.</p>
-          <dl class="read"><dt>Healthy</dt><dd>Near 0, an occasional hit.</dd><dt>Worry if</dt><dd>Hits on more than 5% of attempts over 10 steps and rising. That pauses the run for Rishi (stop rule 5).</dd></dl>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0, an occasional hit.</dd><dt>Worry if</dt><dd>Hits on more than 5% of attempts over 10 steps and rising. That pauses the run for Rishi (stop rule 5). Blocked escape attempts that only tried to write a file or run a program (a scratch file in /tmp, say) still score 0 but don't count toward the pause.</dd></dl>
         </article>
         <article class="entry" id="submitted">
           <header><h3>Episodes that submitted</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
@@ -558,7 +574,7 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
         <article class="entry" id="capability">
           <header><h3>Capability check <span class="where">(frying)</span></h3><span class="dir flat"><span class="g">≈</span>Flat is good</span></header>
           <p>About 100 general questions (instruction following, knowledge, code reasoning and chat) asked the same way each time. It checks that RLM training isn't damaging the model's general skills. The grey line is 2 points below checkpoint 0.</p>
-          <dl class="read"><dt>Healthy</dt><dd>Flat at the checkpoint 0 level (76% for this run).</dd><dt>Worry if</dt><dd>It drops more than 2 points: the frying stop rule ends the run.</dd></dl>
+          <dl class="read"><dt>Healthy</dt><dd>Flat at the checkpoint 0 level (76% for this run).</dd><dt>Worry if</dt><dd>It drops more than 2 points at two checks in a row, or more than 5 points at one: the frying stop rule ends the run. One 2-point dip is inside the noise of 100 prompts.</dd></dl>
         </article>
         <article class="entry" id="eval-tables">
           <header><h3>By family and by language tables</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
@@ -578,11 +594,11 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
         </article>
         <article class="entry" id="r-overfitting">
           <header><h3>2. Overfitting <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
-          <p>Fires when training reward rises while selection accuracy falls, two evals in a row. The model is memorising its training tasks.</p>
+          <p>Fires when training reward rises while selection accuracy falls by more than 5 points, two evals in a row. The model is memorising its training tasks. Smaller dips are inside the selection set's noise.</p>
         </article>
         <article class="entry" id="r-frying">
           <header><h3>3. Frying <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
-          <p>Fires when the capability check drops more than ~2 points, or when a collapse comes back after one rollback.</p>
+          <p>Fires when the capability check is more than 2 points below checkpoint 0 at two checks in a row, or more than 5 points below at one, or when a collapse comes back after one rollback.</p>
         </article>
         <article class="entry" id="r-saturation">
           <header><h3>4. Saturation <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>A good problem to have</span></header>
@@ -590,11 +606,11 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
         </article>
         <article class="entry" id="r-hacking">
           <header><h3>5. Hacking <span class="where">pauses for Rishi</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
-          <p>Fires on a hack verdict in the Claude audit, or when detectors fire on more than 5% of attempts over 10 steps and rising. Someone fixes the environment, then the run resumes.</p>
+          <p>Fires on a hack verdict in the Claude audit, or when detectors fire on more than 5% of attempts over 10 steps and rising (blocked file or program attempts left out). Someone fixes the environment, then the run resumes.</p>
         </article>
         <article class="entry" id="r-lr">
           <header><h3>Learning-rate rule</h3><span class="dir info"><span class="g">i</span>Should say "No collapse"</span></header>
-          <p>If entropy falls below 70% of its 10-step peak, or reward std stays under half its 10-step mean for 3 steps, the run rolls back to the last good checkpoint and continues at 1e-5. That happens once; a second collapse stops the run.</p>
+          <p>If the trained model becomes 30% less surprised than the base model by the same sampled words (or, for a step without that reading, raw entropy stays under 70% of its 10-step peak for 3 steps), the run rolls back to the last good checkpoint and continues at 1e-5. That happens once; a second collapse stops the run. Reward std falling for 3 steps only logs a warning.</p>
         </article>
         <article class="entry" id="r-infra">
           <header><h3>Infra pause</h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>

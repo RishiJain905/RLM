@@ -154,8 +154,10 @@ async def kl_to_base(client: ModelClient, episodes: list[Episode], *, base_model
     jobs = []  # (episode, turn index or None for the whole conversation)
     for ep in picked:
         if thinking:
-            turns = min(len(ep.choices), len(ep.turns))
-            jobs += [(ep, k) for k in sorted(rng.sample(range(turns), min(KL_TURNS_PER_THINKING_EPISODE, turns)))]
+            # a turn cut off at the token cap never closed its think block, so it can't be re-rendered as sampled
+            whole = [k for k in range(min(len(ep.choices), len(ep.turns)))
+                     if getattr(ep.choices[k], "finish_reason", None) != "length"]
+            jobs += [(ep, k) for k in sorted(rng.sample(whole, min(KL_TURNS_PER_THINKING_EPISODE, len(whole))))]
         else:
             jobs.append((ep, None))
 
@@ -184,7 +186,9 @@ async def kl_to_base(client: ModelClient, episodes: list[Episode], *, base_model
     diffs = [p - b for p, b in pairs]
     # k3 = E[exp(r) - 1 - r] with r = base - policy: never negative and lower variance than k1 (logged beside it)
     k3 = [math.exp(-d) - 1 + d for d in diffs]
-    return {"kl": _round(_mean(diffs)), "kl_k3": _round(_mean(k3)), "tokens": len(diffs), "rollouts": len(picked),
+    # each model's mean surprise (-logprob) on the same sampled tokens, for the matched collapse check (stoprules)
+    nll = {"policy_nll": _round(_mean([-p for p, _ in pairs])), "base_nll": _round(_mean([-b for _, b in pairs]))}
+    return {"kl": _round(_mean(diffs)), "kl_k3": _round(_mean(k3)), **nll, "tokens": len(diffs), "rollouts": len(picked),
             "requests": len(jobs), "failed": failed, "misaligned_turns": misaligned,
             "cost_usd": round(client.spend["kl"].cost_usd() - usage_before, 6)}
 
@@ -274,6 +278,7 @@ def step_metrics(groups: list[list[Episode]], step_filter: StepFilter, *, contro
                    "applied": mv.applied} for mv in (moves or [])],
         "reward": {"mean": _round(_mean([ep.reward for ep in clean])), "exact": _round(correct / n if n else None), "partial": m("partial"),
                    "near_blind": m("near_blind"), "submitted": m("submitted"), "hacked": step_filter.hacked_episodes,
+                   "hacked_contained": step_filter.hacked_contained,
                    "hacks": step_filter.hacks or dict.fromkeys(detectors.RULES, 0)},
         "policy": {"entropy": _round(ent), "entropy_tokens": ent_tokens, "reward_std": _round(reward_std(groups)),
                    "kl_to_base": (kl or {}).get("kl"), "kl_k3": (kl or {}).get("kl_k3"), "kl": kl or {}, **train},

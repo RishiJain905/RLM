@@ -7,7 +7,9 @@ last 3 steps at the current level:
 - otherwise: stay
 
 A move clears the family's window, so it waits 3 steps at the new level before it can move again,
-and its pass rate is never mixed across levels. A step in which a family drew no tasks, or only
+and its pass rate is never mixed across levels. A window that is unanimous (every episode right, or
+every one wrong) on at least 8 scored episodes moves at once, without waiting for 3 steps: all of
+those groups teach GRPO nothing (prod-v1, 2026-10-18: edit synth went 20 of 20 over its first 4 steps). A step in which a family drew no tasks, or only
 infra-error episodes, doesn't count toward its window *(mine)*. Neither does a window with fewer
 than 8 scored episodes *(mine)*, so a rarely drawn family isn't moved on a handful of episodes.
 
@@ -35,7 +37,7 @@ FIRST_LEVEL = 1
 def settings() -> dict:
     """The pinned controller rule, for the run's config.json (spec §8)."""
     return {"up_above": UP_ABOVE, "down_below": DOWN_BELOW, "window_steps": WINDOW_STEPS,
-            "min_episodes": MIN_EPISODES, "first_level": FIRST_LEVEL}
+            "min_episodes": MIN_EPISODES, "first_level": FIRST_LEVEL, "unanimous_moves_at_once": True}
 
 
 @dataclass
@@ -105,7 +107,8 @@ class DifficultyController:
                 state.window = state.window[-WINDOW_STEPS:]
             rate, n = state.pass_rate()
             state.saturated = False
-            if len(state.window) < WINDOW_STEPS or n < MIN_EPISODES:
+            unanimous = n >= MIN_EPISODES and rate in (0.0, 1.0)  # moves at once (module docstring)
+            if (len(state.window) < WINDOW_STEPS and not unanimous) or n < MIN_EPISODES:
                 continue
             target = state.level
             if rate > UP_ABOVE:
