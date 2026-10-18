@@ -31,6 +31,8 @@ GENERATORS = {
     "edit_real": "editreal", "edit_real_select": "editreal", "edit_real_test": "editreal",
     # the step-12 task shift (documentation/step-12-multistep-plan.md, 2026-10-18)
     "research": "research", "research_select": "research", "research_test": "research",
+    "edit_spec": "editspec", "edit_spec_select": "editspec", "edit_spec_test": "editspec",
+    "edit_bugs": "editbugs", "edit_bugs_select": "editbugs", "edit_bugs_test": "editbugs",
 }
 EVAL_ONLY_SUFFIXES = ("_heldout", "_select", "_test")
 
@@ -186,7 +188,11 @@ def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None
                 sub = FALLBACK.get(family)
                 if sub not in levels:
                     raise
-                out.append(make_task(sub, levels[sub]))
+                if sub in RETIRABLE:  # another pool: skip its retired tasks and this step's draws of it too
+                    task = make_task(sub, levels[sub], exclude=taken | {t.task_id for t in out if t.family == sub})
+                else:
+                    task = make_task(sub, levels[sub])
+                out.append(task)
                 continue
             taken.add(task.task_id)
             out.append(task)
@@ -205,18 +211,19 @@ def pool_size(family: str) -> int | None:
 
 # ----------------------------------------------------------------------------- task retirement (spec §12.7)
 
-RETIRABLE = ("edit_real",)  # fixed pools whose tasks come back; synthetic families never repeat a task
+RETIRABLE = ("edit_real", "edit_spec", "edit_bugs")  # fixed pools whose tasks come back; generators never repeat one
 RETIRE_ALL_ZERO = 2  # a task whose group came back all-0 this many times isn't drawn again
 RETIRE_ALL_ONE = 1  # nor one whose group came back all-1 once
 # Families built to need sub-calls (step-12 task shift, 2026-10-18). A task of theirs that the policy solves without a
 # single sub-call (at least half the group right, and none of the right ones delegated) teaches nothing about
 # delegation, so it retires too (ASearcher's "solved in one tool turn" filter, arXiv 2508.07976).
-SOLO_RETIRABLE: tuple = ()
+SOLO_RETIRABLE: tuple = ("edit_spec", "edit_bugs")
 RETIRE_SOLO = 1
 # Decision 12b (Rishi, 2026-10-17): ~150 edit_real draws are wanted from 107 training tasks, so retirement can use the
 # pool up. Its slots then go to edit_synth, which generates fresh tasks at its own level, rather than redrawing retired
 # tasks: those came back all-1 (no signal left) or all-0 twice. A rollback restores the retired set, and the pool.
-FALLBACK = {"edit_real": "edit_synth"}
+# The task shift's two coding pools (150 training tasks each) stand in for each other when one runs dry.
+FALLBACK = {"edit_real": "edit_synth", "edit_spec": "edit_bugs", "edit_bugs": "edit_spec"}
 
 
 class PoolEmpty(ValueError):

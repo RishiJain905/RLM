@@ -63,3 +63,30 @@ class SoloRetirementTest(unittest.TestCase):
         with mock.patch.object(rtasks, "RETIRABLE", ("fam",)):
             r = rtasks.Retirement()  # outside SOLO_RETIRABLE nothing changes
             self.assertEqual(r.update(1, [[ep(True, 0), ep(True, 0), ep(False, 0)]]), [])
+
+
+class PoolFallbackTest(unittest.TestCase):
+    """Step-12 task shift: edit_spec's and edit_bugs's pools stand in for each other when one runs dry."""
+
+    def test_a_dry_pool_draws_from_its_partner_without_retired_tasks(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from rlm_rl import tasks as rtasks
+
+        seen = []
+
+        def fake(family, level, seed=None, task_id=None, exclude=None):
+            seen.append((family, set(exclude or ())))
+            if family == "edit_spec":
+                raise rtasks.PoolEmpty("edit_spec has no task left")
+            return SimpleNamespace(family=family, task_id=f"{family}-{len(seen)}")
+
+        with mock.patch.object(rtasks, "make_task", fake):
+            out = rtasks.draw(3, {"edit_spec": 1.0}, {"edit_spec": 2, "edit_bugs": 4}, exclude={"old"})
+        self.assertEqual([t.family for t in out], ["edit_bugs"] * 3)
+        bug_draws = [ex for fam, ex in seen if fam == "edit_bugs"]
+        self.assertTrue(all("old" in ex for ex in bug_draws))  # retired tasks stay out
+        self.assertEqual(len(bug_draws[-1] - {"old"}), 2)  # and so do this step's earlier draws
+        with mock.patch.object(rtasks, "make_task", fake), self.assertRaises(rtasks.PoolEmpty):
+            rtasks.draw(1, {"edit_spec": 1.0}, {"edit_spec": 2})  # no partner in the run

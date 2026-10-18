@@ -164,7 +164,7 @@ class TrainingRun:
         self.say = log
         self.state: dict = {}
         self.ctl: DifficultyController | None = None
-        self.retirement = rtasks.Retirement()  # edit_real tasks that keep coming back all-0 or all-1 (spec §12.7)
+        self.retirement = rtasks.Retirement()  # pool tasks that keep coming back all-0 or all-1, or solved solo (§12.7)
         self.client: ModelClient | None = None
         self.pause: InfraPause | None = None
         self.stop_requested: str | None = None  # set by the operator (Ctrl-C) while running
@@ -503,7 +503,10 @@ class TrainingRun:
         row["fallback"] = fallback
         if newly_retired:
             left = row["retired"]["left"]
-            self._notice("retired", f"step {n}: {len(newly_retired)} edit_real task(s) retired (all-0 twice or all-1 once); "
+            why = collections.Counter(f"{self.retirement.retired[t]['family']} {self.retirement.retired[t]['why']}"
+                                      for t in newly_retired)
+            self._notice("retired", f"step {n}: {len(newly_retired)} pool task(s) retired "
+                                     f"({', '.join(f'{k} x{v}' for k, v in why.items())}); "
                                      f"{len(self.retirement.retired)} retired so far"
                                      + (f", {left} left to draw" if left is not None else ""))
         previous = st["steps"][-1].get("fallback") if st["steps"] else None
