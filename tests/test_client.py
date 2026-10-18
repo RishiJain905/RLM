@@ -161,12 +161,12 @@ class LimiterTest(AsyncCase):
                          (24, 20, 12))
         self.assertEqual(rclient.SUBCALL_START_GAP_S, 0.25)
         policy = RetryPolicy()
-        self.assertEqual((policy.tries, policy.base_s, policy.max_s, policy.jitter), (8, 4.0, 120.0, 0.5))
-        # The 7 waits between 8 tries come to about 6 minutes before jitter (step 10 §6).
-        self.assertEqual(sum(RetryPolicy(jitter=0).delay(a, random.Random(0)) for a in range(7)), 364)
+        self.assertEqual((policy.tries, policy.base_s, policy.max_s, policy.jitter), (12, 4.0, 120.0, 0.5))
+        # The 11 waits between 12 tries come to about 14 minutes before jitter (prod-v1, 2026-10-18).
+        self.assertEqual(sum(RetryPolicy(jitter=0).delay(a, random.Random(0)) for a in range(11)), 844)
         self.assertEqual(rclient.settings(), {"max_in_flight": 24, "per_model": 20, "subcall_in_flight": 12,
                                               "subcall_start_gap_s": 0.25,
-                                              "retry": {"tries": 8, "base_s": 4.0, "max_s": 120.0, "jitter": 0.5,
+                                              "retry": {"tries": 12, "base_s": 4.0, "max_s": 120.0, "jitter": 0.5,
                                                         "timeout_s": 600.0}})
         self.assertFalse(rclient.ENABLE_THINKING)
 

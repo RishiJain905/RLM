@@ -153,6 +153,8 @@ The run stopped after branch 2's step 13 (stop switch) and resumed on the same b
 
 **W&B errors on fresh checkpoints, and a warm-up call (after branch 2's step 18).** W&B answered HTTP 500 on 20-27% of requests through step 15 of branch 0 and the first steps of branch 2 (the client's retries absorb that). From branch 2's step 13 it climbed to 36%, 47% and 49%, and steps 16, 17 and 18 lost 13, 6 and 9 of 32 episodes to requests that failed all 8 tries (about 6 minutes); the infra pause stopped the run after each, as it should. Tiny probes showed the base model and older checkpoints answering at once while the newest checkpoint failed most calls or took ~10 s each; a checkpoint that failed one hour answered the next. The failed episodes broke on their first few turns at every context size: 32 episodes reaching a checkpoint W&B is still loading. Each step now first sends one tiny call to the checkpoint it samples from (`training._warm`, up to `WARM_TRIES` = 3 calls with the client's own retries), and only then starts its rollouts; if the checkpoint never answers, the rollouts go ahead and a notice says so.
 
+Step 19, the first with the warm-up, still lost 5 episodes: the warm-up call was answered, but some of the step's first requests kept failing for about 6 minutes (every failed episode died 6-12 minutes into its step, at its first turns). So the retry window is now 12 tries, about 14 minutes (`client.RetryPolicy`), and a request rides that out instead of costing its episode.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |

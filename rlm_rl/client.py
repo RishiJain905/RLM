@@ -13,8 +13,8 @@
   step, which samples from `:step0`. The KL rescoring against base shares the sub-call model's 12
   and its gap.
 - A 429, a 5xx, a timeout or a dropped connection is retried with jittered exponential backoff,
-  up to 8 tries starting at 4 s and capped at 120 s, which rides out about 6 minutes of
-  throttling. A Retry-After header is honoured up to the cap. A request gives its slot back while
+  up to 12 tries starting at 4 s and capped at 120 s, which rides out about 14 minutes of
+  errors. A Retry-After header is honoured up to the cap. A request gives its slot back while
   it waits. When the tries run out it raises RequestFailed, an InfraError: the episode is flagged
   infra_error and never reaches training, and the model is never shown a fake answer.
 - Why the cap for sub-calls, the pacing and the longer retries (step 10 §6, 2026-10-16): at 30 in
@@ -89,12 +89,13 @@ SUBCALL_REJECT_STATUSES = frozenset({400, 413, 422})  # the model's prompt was r
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    """Jittered exponential backoff. The defaults wait 4, 8, 16, 32, 64, 120 and 120 s between 8 tries,
-    364 s before jitter, so a request rides out about 6 minutes of throttling. They were 6 tries from
-    2 s, capped at 60 s, which covered about a minute and ran out on 7 requests in step 10's last step
-    (step 10 §6, 2026-10-16). Defaults to tune *(mine)*."""
+    """Jittered exponential backoff. The defaults wait 4, 8, 16, 32, 64 s and then 120 s six times between 12 tries,
+    844 s before jitter, so a request rides out about 14 minutes of errors. They were 6 tries from 2 s, capped at
+    60 s, which covered about a minute and ran out on 7 requests in step 10's last step (step 10 §6, 2026-10-16); then
+    8 tries (about 6 minutes), which ran out on 5-13 episodes a step in prod-v1 steps 16-19 (2026-10-18), when W&B
+    answered 500 for several minutes after each new checkpoint. Defaults to tune *(mine)*."""
 
-    tries: int = 8
+    tries: int = 12
     base_s: float = 4.0
     max_s: float = 120.0  # also caps a Retry-After header
     jitter: float = 0.5  # each wait is scaled by a random factor in [1 - jitter, 1 + jitter]
