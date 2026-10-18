@@ -116,15 +116,45 @@ class HackingTest(unittest.TestCase):
 
 class CollapseTest(unittest.TestCase):
     def test_a_matched_entropy_drop_fires(self):
-        """The trained model 30% less surprised than the base model by the same tokens is a collapse."""
-        rows = [row(s, matched=(0.40, 0.41)) for s in range(1, 14)] + [row(14, matched=(0.25, 0.40))]
+        """The trained model 30% less surprised than the base model by the same tokens, pooled over 3 steps, is a
+        collapse."""
+        rows = [row(s, matched=(0.40, 0.41)) for s in range(1, 12)] + [row(s, matched=(0.25, 0.40)) for s in (12, 13, 14)]
         signal = sr.collapse(rows)
-        self.assertEqual((signal.kind, signal.step, signal.first_bad_step), ("entropy", 14, 14))
-        self.assertIn("38% below", signal.text)
-        self.assertIsNone(sr.collapse(rows[:-1] + [row(14, matched=(0.30, 0.40))]))  # 25% is inside the limit
+        self.assertEqual((signal.kind, signal.step, signal.first_bad_step), ("entropy", 14, 12))
+        self.assertIn("38% below the base model's over steps 12-14", signal.text)
         self.assertIsNone(sr.collapse(rows, since_step=14))
         self.assertAlmostEqual(sr.matched_entropy_drop(rows[-1]), 0.375)
         self.assertIsNone(sr.matched_entropy_drop(row(1, matched=(0.2, 0.4), kl_tokens=100)))  # too few tokens
+
+    def test_one_step_of_predictable_tokens_is_not_a_collapse(self):
+        """prod-v1 steps 6-8: step 8 re-scored mostly code (base surprise 0.083), so its own reading was 10.5% while KL
+        barely moved. Pooled with steps 6-7 it reads ~3%; a one-step spike past 30% doesn't fire either."""
+        rows = [row(6, matched=(0.232443, 0.23572), kl_tokens=4247), row(7, matched=(0.232574, 0.240249), kl_tokens=2474),
+                row(8, matched=(0.074571, 0.083327), kl_tokens=2133)]
+        self.assertAlmostEqual(sr.matched_entropy_drop(rows[-1]), 0.105, places=3)
+        drop, first, tokens = sr.pooled_entropy_drop(rows)
+        self.assertLess(drop, 0.04)
+        self.assertEqual((first, tokens), (6, 8854))
+        self.assertIsNone(sr.collapse(rows))
+        spike = rows[:2] + [row(8, matched=(0.04, 0.083327), kl_tokens=2133)]  # 52% in one step
+        self.assertIsNone(sr.collapse(spike))
+
+    def test_short_re_scores_pool_further_back(self):
+        """300 tokens a step: 3 steps fall short of the token floor, so the pool reaches back to 5 steps, never past 6."""
+        rows = [row(s, matched=(0.6, 0.6), kl_tokens=300) for s in range(1, 11)] +                [row(s, matched=(0.1, 0.6), kl_tokens=300) for s in (11, 12)]
+        drop, first, tokens = sr.pooled_entropy_drop(rows)
+        self.assertEqual((first, tokens), (8, 1500))
+        self.assertAlmostEqual(drop, 1 - 2.0 / 3.0)
+        signal = sr.collapse(rows)
+        self.assertEqual((signal.step, signal.first_bad_step), (12, 11))  # dated from the first reading past 30%
+        self.assertIn("over steps 8-12", signal.text)
+        self.assertIsNone(sr.pooled_entropy_drop([row(s, matched=(0.6, 0.6), kl_tokens=240) for s in range(1, 11)]))
+        self.assertIsNone(sr.pooled_entropy_drop(rows[-4:]))  # the rows run out first
+
+    def test_a_lone_matched_reading_is_not_pooled(self):
+        rows = [row(s, entropy=0.6) for s in range(1, 13)] + [row(13, entropy=0.2, matched=(0.1, 0.4))]
+        self.assertIsNone(sr.pooled_entropy_drop(rows))  # one reading
+        self.assertIsNone(sr.collapse(rows))  # and its presence keeps raw entropy out of it
 
     def test_raw_entropy_falling_with_the_samples_is_not_a_collapse(self):
         """prod-v1, steps 1-5: raw entropy 0.48 to 0.31 on the same family mix, KL to base ~0.003. With a matched

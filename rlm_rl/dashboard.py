@@ -40,7 +40,10 @@ DATA_MARK = "/*__DASHBOARD_DATA__*/null"
 # (Rishi, 2026-10-17) $191.01 was left, split like config.PRODUCTION_CEILINGS: production ceiling 146, evals 34,
 # reserve 10, and ~1 of margin for the run's estimates against the bill. The second seed and the baselines are spent.
 POT = {"inference_usd": 250.0, "inference_left_usd": 191.01, "production_usd": 146.0, "evals_usd": 34.0,
-       "reserve_usd": 10.0, "margin_usd": 1.01, "gpu_usd": 1000.0, "gpu_left_usd": 992.0, "as_of": "2026-10-17"}
+       "reserve_usd": 10.0, "margin_usd": 1.01, "gpu_usd": 1000.0, "gpu_left_usd": 992.0, "as_of": "2026-10-17",
+       # W&B's training pot read during prod-v1 (Rishi, 2026-10-18: $12.43 used after 6 trained steps, when the run's own
+       # estimate was 6 x $0.16): the meter shows that read plus the run's estimate for the steps since
+       "gpu_used_usd": 12.43, "gpu_used_at_est_usd": 0.96, "gpu_as_of": "2026-10-18"}
 
 # The 20-step run (documentation/archive/rlsd-vs-grpo-20-step-results.md): held-out accuracy over
 # 100 episodes on the ticket tasks, the second seed's comparison.

@@ -165,7 +165,7 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
       <ol class="checks">
         <li><span><b>Accuracy on selection-v3</b> (Evals) climbs over checkpoints from the base model's 50% at checkpoint 0. That is the number the run is for.</span></li>
         <li><span><b>Groups per step</b> (Pass rates) shows at least 4 of 8 groups trainable most steps. Fewer means the tasks are too easy or too hard to learn from.</span></li>
-        <li><span><b>Entropy against the base model</b> (Policy health) stays well under its 30% line. Crossing it is a collapse, and the run rolls itself back.</span></li>
+        <li><span><b>Entropy against the base model</b> (Policy health): the pooled line stays well under its 30% line. Crossing it is a collapse, and the run rolls itself back.</span></li>
         <li><span><b>Hack-detector hits</b> (Reward and cheating) stay near zero, and the Claude audit's clean share stays near 100%.</span></li>
         <li><span><b>Infra error rate</b> (Infra and timing) stays under the 1% line. Above it the run pauses for Rishi.</span></li>
       </ol>
@@ -298,8 +298,8 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
       <div class="entries">
         <article class="entry" id="matched-entropy">
           <header><h3>Entropy against the base model <span class="where">(collapse signal)</span></h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
-          <p>How much less surprised the trained model is than the untrained base model by the very same sampled words, from the KL re-score. A model that collapses gets very sure of its own outputs, so this climbs. Comparing on the same words cancels out what each step happened to sample. The grey line is 30%.</p>
-          <dl class="read"><dt>Healthy</dt><dd>A few percent, creeping up slowly as the model learns.</dd><dt>Worry if</dt><dd>It crosses 30%. That is a collapse: the run rolls back to the last good checkpoint and continues at half the learning rate. A second one stops the run.</dd></dl>
+          <p>How much less surprised the trained model is than the untrained base model by the very same sampled words, from the KL re-score. A model that collapses gets very sure of its own outputs, so this climbs. Comparing on the same words cancels out what each step happened to sample. Two lines: the solid one pools the last 3 steps' words together, and is what the rule reads; the thin one is each step on its own. One step re-scores only a few thousand words, so its own reading swings with how predictable they were: prod-v1's step 8 read 10.5% on mostly code while the pooled line stayed under 4%. The grey line is 30%.</p>
+          <dl class="read"><dt>Healthy</dt><dd>The pooled line at a few percent, creeping up slowly as the model learns. Single steps jumping around it are normal.</dd><dt>Worry if</dt><dd>The pooled line crosses 30%. That is a collapse: the run rolls back to the last checkpoint from before it began and continues at half the learning rate. A second one stops the run.</dd></dl>
         </article>
         <article class="entry" id="entropy">
           <header><h3>Entropy <span class="where">(mean −logprob of sampled root tokens)</span></h3><span class="dir flat"><span class="g">≈</span>Steady, slowly falling is good</span></header>

@@ -91,7 +91,7 @@ After step 5 the collapse rule was about to roll the whole run back to checkpoin
 
 | Rule | Before | Now | Why |
 |---|---|---|---|
-| Collapse (LR fallback) | raw entropy under 70% of its 10-step peak, or reward std under half its mean for 3 steps | the trained model 30% less surprised than the base model by the same re-scored tokens (`stoprules.matched_entropy_drop`); raw entropy only without that reading, and then 3 steps in a row | raw entropy moves with what was sampled; comparing on the same tokens doesn't |
+| Collapse (LR fallback) | raw entropy under 70% of its 10-step peak, or reward std under half its mean for 3 steps | the trained model 30% less surprised than the base model by the same re-scored tokens, pooled over the last 3 steps (`stoprules.pooled_entropy_drop`, see below); raw entropy only without that reading, and then 3 steps in a row | raw entropy moves with what was sampled; comparing on the same tokens doesn't |
 | Reward std (Echo Trap) | part of the collapse rule | a warning notice | it falls whenever a step draws easy or hard families |
 | 3. Frying | capability more than 2 points below checkpoint 0 once | twice in a row, or more than 5 points once | 100 prompts move a few points by chance |
 | 2. Overfitting | any selection-set fall, twice, with training reward rising | a fall of more than 5 points, twice | 64 tasks move about 6 points by chance |
@@ -100,6 +100,8 @@ After step 5 the collapse rule was about to roll the whole run back to checkpoin
 | Train call | one failure crashed the run until someone resumed | waits up to 15 minutes for the checkpoint to land, accepts it if it did, else sends the batch again (2 more tries) | one W&B hiccup mustn't stop a 2-day run |
 
 The dashboard's Policy health panel gained "Entropy against the base model (collapse signal)", and the chart guide explains each change.
+
+**Pooling the matched signal (after step 8, 2026-10-18).** Step 8's own reading was 10.5% while KL barely moved: it re-scored 2,133 tokens, mostly code, which both models find predictable (base surprise 0.083 against ~0.24 on steps 6-7). One step's few thousand tokens swing with their content, so the rule now reads the readings of the last 3 steps pooled, token-weighted (`stoprules.pooled_entropy_drop`; steps 6-8 pool to under 4%). It needs 2 readings and 1,500 tokens; short of that it reaches back a step at a time to 6 steps, so short re-scores can't leave it blind. A real collapse persists, so it still crosses within a step or two. The rollback target is dated from the first pooled step whose own reading is past 30%, not the pool's start, so checkpoints sampled before the collapse aren't thrown away. The run was stopped after step 8 with the stop switch for this change.
 
 ## 8. What changed for step 12 ($0, tested)
 

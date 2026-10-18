@@ -434,12 +434,15 @@ class RollbackTest(LoopCase):
 
 class LearningRateFallbackTest(LoopCase):
     async def test_a_collapse_at_2e5_rolls_back_to_1e5_and_a_second_one_stops_the_run(self):
-        self.dry.server.completion_logprob = lambda model: -0.1 if Oracle.step_of(model) >= 13 else -0.6
+        # entropy collapses from checkpoint 13 on, and again on the branch the rollback starts (its own steps 1, 2, ...)
+        self.dry.server.completion_logprob = lambda model: -0.1 if Oracle.step_of(model) >= 13 or "-b1:" in model else -0.6
         st = await self.run_("lrf", cfg=config.production("lrf", 2e-5, tasks_from="tickets")).start()
         self.assertEqual((st["status"], st["stop"]["rule"]), ("stopped", "frying"), st["stop"])
         self.assertIn("came back", st["stop"]["reason"])
         fallback = st["lr"]["fallback"]
-        self.assertEqual((fallback["signal"], fallback["to_checkpoint"], fallback["at_step"]), ("entropy", 10, 14))
+        # the fake re-scores 300 tokens a step, so the pool reaches back 5 steps and crosses 30% at step 15; the collapse
+        # dates from step 14 (sampled from checkpoint 13), so the last good kept checkpoint is 10
+        self.assertEqual((fallback["signal"], fallback["to_checkpoint"], fallback["at_step"]), ("entropy", 10, 15))
         self.assertEqual(st["lr"]["current"], 1e-5)
         rates = {(t["model"], t["kwargs"]["learning_rate"]) for t in self.dry.backend.trained}
         self.assertEqual(rates, {("lrf", 2e-5), ("lrf-b1", 1e-5)})

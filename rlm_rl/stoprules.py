@@ -54,6 +54,9 @@ ENTROPY_DROP = 0.30
 ENTROPY_WINDOW = 10
 ENTROPY_MIN_HISTORY = 3
 MATCHED_MIN_TOKENS = 200  # re-scored tokens a step needs before its matched reading counts *(mine)*
+MATCHED_POOL_STEPS = 3  # the matched check pools the readings of this many latest steps
+MATCHED_POOL_MIN_TOKENS = 1500  # and needs this many re-scored tokens among them *(mine)*
+MATCHED_POOL_MAX_STEPS = 6  # short of tokens, the pool reaches back this far before giving up *(mine)*
 RAW_ENTROPY_STREAK = 3  # without a matched reading, raw entropy must stay under its line this many steps in a row
 STD_DROP = 0.5
 STD_WINDOW = 10
@@ -254,15 +257,41 @@ def hacking(rows: list[dict], audit_hacks: list[dict], *, since_step: int = 0) -
 # ----------------------------------------------------------------------------- collapse and the LR rule
 
 
-def matched_entropy_drop(row: dict) -> float | None:
-    """How much less surprised the trained model is than the base model by the same sampled tokens: 1 - (the policy's
-    mean -logprob) / (the base model's), over the step's KL re-score. Its excess over 0 is KL to base relative to the
-    base's surprise. None when the re-score paired too few tokens."""
+def _matched_reading(row: dict) -> tuple[float, float, int] | None:
+    """(policy mean -logprob, base mean -logprob, tokens) from one step's KL re-score, or None with too few tokens."""
     kl = _get(row, "policy", "kl") or {}
     policy, base, tokens = kl.get("policy_nll"), kl.get("base_nll"), kl.get("tokens") or 0
     if policy is None or base is None or base <= 0 or tokens < MATCHED_MIN_TOKENS:
         return None
-    return 1 - policy / base
+    return policy, base, tokens
+
+
+def matched_entropy_drop(row: dict) -> float | None:
+    """One step's reading: how much less surprised the trained model is than the base model by the same sampled tokens,
+    1 - (the policy's mean -logprob) / (the base model's). Its excess over 0 is KL to base relative to the base's surprise.
+    A single step re-scores only a few thousand tokens, so this swings with how predictable they were (prod-v1 step 8:
+    10.5% from code-heavy tokens while KL barely moved); the check uses `pooled_entropy_drop`."""
+    reading = _matched_reading(row)
+    return None if reading is None else 1 - reading[0] / reading[1]
+
+
+def pooled_entropy_drop(rows: list[dict]) -> tuple[float, int, int] | None:
+    """The matched drop pooled, token-weighted, over the readings of the last MATCHED_POOL_STEPS rows:
+    (drop, first step pooled, tokens). Short of 2 readings or MATCHED_POOL_MIN_TOKENS tokens, the pool reaches back a
+    row at a time up to MATCHED_POOL_MAX_STEPS rows, so a stretch of short re-scores can't leave the check blind;
+    None if even that falls short."""
+    for n in range(MATCHED_POOL_STEPS, MATCHED_POOL_MAX_STEPS + 1):
+        readings = [(r["step"], m) for r in rows[-n:] if (m := _matched_reading(r)) is not None]
+        tokens = sum(m[2] for _, m in readings)
+        if len(readings) >= 2 and tokens >= MATCHED_POOL_MIN_TOKENS:
+            break
+        if n >= len(rows):
+            return None
+    else:
+        return None
+    policy = sum(m[0] * m[2] for _, m in readings)
+    base = sum(m[1] * m[2] for _, m in readings)
+    return 1 - policy / base, readings[0][0], tokens
 
 
 def _raw_entropy_low(by_step: dict, s: int) -> tuple[float, int, float] | None:
@@ -282,12 +311,20 @@ def collapse(rows: list[dict], *, since_step: int = 0) -> Collapse | None:
         return None
     t = rows[-1]["step"]
     by_step = {r["step"]: r for r in rows}
-    drop = matched_entropy_drop(rows[-1])
-    if drop is not None:
+    pooled = pooled_entropy_drop([r for r in rows if r["step"] > since_step])
+    if pooled is not None:
+        drop, first, tokens = pooled
         if drop > ENTROPY_DROP:
-            return Collapse("entropy", t, t, f"on the same tokens the trained model's surprise is {drop:.0%} below the "
-                                             f"base model's at step {t} (limit {ENTROPY_DROP:.0%})")
+            # the rollback target comes from the first pooled step whose own reading is past the line: dating the
+            # collapse from the pool's start would throw away checkpoints sampled before it began
+            onset = next((r["step"] for r in rows if first <= r["step"] <= t
+                          and (d := matched_entropy_drop(r)) is not None and d > ENTROPY_DROP), first)
+            return Collapse("entropy", t, onset, f"on the same tokens the trained model's surprise is {drop:.0%} below the "
+                                                 f"base model's over steps {first}-{t} ({tokens:,} tokens; limit "
+                                                 f"{ENTROPY_DROP:.0%})")
         return None
+    if _matched_reading(rows[-1]) is not None:
+        return None  # a matched reading too young to pool yet says the model hasn't collapsed
     lows = []
     for s in range(t - RAW_ENTROPY_STREAK + 1, t + 1):
         low = None if s <= since_step else _raw_entropy_low(by_step, s)

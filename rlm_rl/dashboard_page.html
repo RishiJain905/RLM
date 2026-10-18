@@ -701,7 +701,9 @@ footer p { margin: 0; max-width: 92ch; }
         "About " + F.usd(pot.inference_left_usd) + " was left on " + pot.as_of + ", before this run, so about " + F.usd(Math.max(0, (pot.inference_left_usd || 0) - (sp.total_usd || 0))) + " is left now. " +
         "It is split: " + [["second seed", pot.second_seed_usd], ["baselines", pot.baselines_usd], ["production ceiling", pot.production_usd], ["evals", pot.evals_usd], ["reserve", pot.reserve_usd], ["margin for the bill", pot.margin_usd]].filter(function (p) { return isNum(p[1]); }).map(function (p) { return p[0] + " " + F.usd0(p[1]); }).join(", ") + ". " +
         (overSplit ? "This run's ceilings are above their split, so the " + F.usd0(pot.reserve_usd) + " reserve is in use." : "The " + F.usd0(pot.reserve_usd) + " reserve is untouched; spending it is Rishi's call."));
-  meter("Training GPU pot used (estimate)", (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0), pot.gpu_usd, "This run: " + F.usd(sp.training_gpu_usd_est || 0) + " at ~$0.16 a step. A separate pot, and not a constraint.");
+  var gpuRead = isNum(pot.gpu_used_usd) && isNum(pot.gpu_used_at_est_usd) && run.kind === "production";  // a billing read taken during this run
+  var gpuUsed = gpuRead ? pot.gpu_used_usd + Math.max(0, (sp.training_gpu_usd_est || 0) - pot.gpu_used_at_est_usd) : (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0);
+  meter("Training GPU pot used (estimate)", gpuUsed, pot.gpu_usd, (gpuRead ? "W&B's billing page read " + F.usd(pot.gpu_used_usd) + " on " + pot.gpu_as_of + "; since then " : "This run: ") + "~$0.16 a step is added. A separate pot, and not a constraint.");
   var cc = $("cost-charts");
   chart(cc, { title: "Cost per step", kind: "bar", fmt: F.usd3, series: [series("rollouts and sub-calls", "var(--c1)", function (r) { return isNum(get(r, ["cost", "step_usd"])) ? r.cost.step_usd - (get(r, ["cost", "kl_usd"]) || 0) : null; }), series("KL re-score", "var(--c2)", function (r) { return get(r, ["cost", "kl_usd"]); })], stacked: true, headline: last ? F.usd3(get(last, ["cost", "step_usd"])) : null });
   var cum = [], accum = 0; steps.forEach(function (r) { accum += get(r, ["cost", "step_usd"]) || 0; cum.push([r.step, accum]); });
@@ -783,9 +785,20 @@ footer p { margin: 0; max-width: 92ch; }
     }
     return out;
   }
-  // the collapse signal (stoprules.collapse): the trained model's surprise against the base model's on the same re-scored tokens
-  function matchedDrop(r) { var p = get(r, ["policy", "kl_policy_nll"]), b = get(r, ["policy", "kl_base_nll"]), n = get(r, ["policy", "kl_tokens"]); return isNum(p) && isNum(b) && b > 0 && isNum(n) && n >= 200 ? 1 - p / b : null; }
-  chart(po, { title: "Entropy against the base model (collapse signal)", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.35, series: [series("drop on the same tokens", "var(--c1)", matchedDrop, { area: true })].concat(ghosts(matchedDrop)), refs: [{ y: 0.30, label: "collapse line 30%" }], xmarks: rollbackMarks(), note: "How much less surprised the trained model is than the base model by the same sampled tokens, from the KL re-score. Above 30% it rolls back. Raw entropy, below, also moves with what was sampled." });
+  // the collapse signal (stoprules.pooled_entropy_drop): the trained model's surprise against the base model's on the same re-scored tokens, pooled over the last 3 steps (reaching back to 6 when short of tokens)
+  function reading(r) { var p = get(r, ["policy", "kl_policy_nll"]), b = get(r, ["policy", "kl_base_nll"]), n = get(r, ["policy", "kl_tokens"]); return isNum(p) && isNum(b) && b > 0 && isNum(n) && n >= 200 ? [p, b, n] : null; }
+  function matchedDrop(r) { var m = reading(r); return m ? 1 - m[0] / m[1] : null; }
+  function pooledDrop(r) {
+    var i = steps.indexOf(r);
+    for (var k = 3; k <= 6; k++) {
+      var win = steps.slice(Math.max(0, i + 1 - k), i + 1).map(reading).filter(Boolean), n = 0, p = 0, b = 0;
+      win.forEach(function (m) { n += m[2]; p += m[0] * m[2]; b += m[1] * m[2]; });
+      if (win.length >= 2 && n >= 1500) return 1 - p / b;
+      if (k >= i + 1) break;
+    }
+    return null;
+  }
+  chart(po, { title: "Entropy against the base model (collapse signal)", fmt: F.pct, yMin: 0, yMaxAtLeast: 0.35, endLabels: true, series: [series("pooled over 3 steps", "var(--c1)", pooledDrop, { area: true }), series("single step", "var(--c4)", matchedDrop)].concat(ghosts(pooledDrop)), refs: [{ y: 0.30, label: "collapse line 30%" }], xmarks: rollbackMarks(), note: "How much less surprised the trained model is than the base model by the same sampled tokens, from the KL re-score. The pooled line is what the rule reads: above 30% it rolls back. One step re-scores only a few thousand tokens, so its own reading swings with how predictable they were." });
   chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "fallback line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks(), note: "Moves with what each step samples (longer, code-heavy episodes read lower). Counts toward a rollback only when a step has no matched reading, and then only after 3 steps in a row under the line." });
   chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "warning line: half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks(), note: "3 steps in a row under the line logs a warning. It also falls when a step draws families the model finds easy or hard." });
   var klLast = steps.length ? steps[steps.length - 1] : null;
