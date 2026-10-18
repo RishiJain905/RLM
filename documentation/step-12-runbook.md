@@ -149,6 +149,8 @@ Branch 1's step 11 (~$1.85) is kept under `abandoned/b1-after10`.
 
 The run stopped after branch 2's step 13 (stop switch) and resumed on the same branch with `--resample-broken 2`; no rollback, since branch 2 never trained on a broken reply. Each extra draw is one more root call, so a step costs a little more while broken replies are common. If drawn-again replies keep climbing, the next lever is a lower learning rate.
 
+**Two false pauses fixed (after branch 2's step 15).** (1) The infra pause cleared its 10-step window on every resume, so one W&B server error in the first step after a resume was 1 of 32 (3.1% > 1%) and paused the run; it paused after step 15 on 2 server errors in 64 episodes. A window that isn't full is now measured against a full window's episodes (`InfraPause.update`): 4 errors in 320 still pause, and a burst (half a step) still pauses at once. (2) The dashboard check blocked the page because a sampled rollout showed a repository's `api_key` variable; rollouts whose shown text names a key are no longer sampled (`dashboard.shows_key_text`), so the check stays strict everywhere else.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |

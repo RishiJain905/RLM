@@ -476,6 +476,9 @@ def update_samples(cache: dict, state: dict, run_dir: Path) -> list[dict]:
             continue
         path = Path(run_dir) / "transcripts" / "train" / f"step{step:04d}.jsonl"
         records = [r for r in _read_jsonl(path) if r.get("split") == "train"]
+        # a rollout whose shown text names a key (a repository's `api_key` variable, say) is never sampled, so the
+        # page check can stay strict about key names everywhere else (prod-v1 step 15)
+        records = [r for r in records if not shows_key_text(sample_record(r, "win"))]
         for rec, why in pick_samples(records):
             samples.append({**sample_record(rec, why), "branch": branch})
         sampled.add((step, branch))
@@ -489,6 +492,12 @@ def update_samples(cache: dict, state: dict, run_dir: Path) -> list[dict]:
 
 
 # ----------------------------------------------------------------------------- rendering
+
+
+def shows_key_text(sample: dict) -> bool:
+    """Whether a sample's shown text matches any of check()'s key patterns."""
+    text = json.dumps(sample, ensure_ascii=False)
+    return any(pattern.search(text) for pattern in KEY_PATTERNS.values())
 
 
 def render(data: dict, template: str | None = None) -> str:

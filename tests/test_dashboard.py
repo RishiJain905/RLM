@@ -145,6 +145,20 @@ class PageTest(DryRunCase):
 
 
 class CheckTest(DryRunCase):
+    def test_a_sample_that_shows_a_key_name_is_never_picked(self):
+        """prod-v1 step 15: a repository's `api_key` variable in a sampled rollout blocked the page. Such rollouts are
+        skipped when sampling, so the check stays strict."""
+        self.assertTrue(dashboard.shows_key_text({"turns": [{"code": "client = Client(api_key=key)"}]}))
+        self.assertFalse(dashboard.shows_key_text({"turns": [{"code": "print(len(context))"}]}))
+        run_dir = self.results / RUN
+        path = run_dir / "transcripts" / "train" / "step0001.jsonl"
+        records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        for rec in records:
+            rec["turns"][0]["code"] = "token = settings.ACCESS_TOKEN"
+        path.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+        samples = dashboard.update_samples({}, self.state(), run_dir)
+        self.assertFalse(any(s["step"] == 1 for s in samples))
+
     def page_with(self, mutate) -> str:
         state = self.state()
         mutate(state)

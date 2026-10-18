@@ -361,6 +361,13 @@ class FilterTest(unittest.TestCase):
         self.assertIsNone(windowed.update(one_bad))
         self.assertIsNone(windowed.update(one_bad))
         self.assertIsNotNone(windowed.update(one_bad))  # 4 of 320
+        fresh = InfraPause(window_steps=10)  # a resume clears the window: its first steps count against a full one
+        self.assertIsNone(fresh.update(one_bad))  # 1 of 32 so far is 1 of 320
+        self.assertIsNone(fresh.update(one_bad))
+        self.assertIsNone(fresh.update(one_bad))
+        self.assertIn("4 of 128 episodes over the last 4 step(s)", fresh.update(one_bad))  # 4 of 320 is over 1%
+        self.assertIsNotNone(InfraPause(window_steps=10).update(
+            filter_step([[fake_episode(1), fake_episode(infra="x")] * 2] * 8)))  # half a step's worth pauses at once
 
     def test_pause_rule_per_run(self):
         """Rishi, 2026-10-11: per step for the second seed, a 10-step window in production."""

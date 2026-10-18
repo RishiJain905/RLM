@@ -485,14 +485,21 @@ class InfraPause:
         return cls(window_steps=PAUSE_WINDOW_STEPS[kind])
 
     def update(self, step_filter: StepFilter) -> str | None:
-        """Record one step. Returns why the run must pause, or None."""
+        """Record one step. Returns why the run must pause, or None.
+
+        A window that isn't full yet (the first steps of a run, or after a resume clears it) is measured against a full
+        window's episodes, counting the steps it hasn't seen as clean: otherwise one server error in the first step
+        after a resume is 1 of 32 and pauses a 10-step production window (prod-v1, 2026-10-18).
+        """
         self.window.append((step_filter.episodes, step_filter.infra))
         episodes = sum(e for e, _ in self.window)
         infra = sum(i for _, i in self.window)
-        if episodes and infra / episodes > self.max_rate:
+        full = round(episodes / len(self.window) * self.window.maxlen) if self.window.maxlen else episodes
+        if episodes and infra / max(episodes, full) > self.max_rate:
             kinds = ", ".join(f"{k} {n}" for k, n in sorted(step_filter.infra_kinds.items())) or "none this step"
             return (f"{infra} of {episodes} episodes over the last {len(self.window)} step(s) were infra errors "
-                    f"({infra / episodes:.1%} > {self.max_rate:.0%}; this step: {kinds})")
+                    f"({infra / max(episodes, full):.1%} of a {self.window.maxlen}-step window > {self.max_rate:.0%}; "
+                    f"this step: {kinds})")
         return None
 
 
