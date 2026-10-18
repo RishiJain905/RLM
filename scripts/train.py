@@ -90,13 +90,23 @@ async def run_dry(args, cfg) -> dict:
         return await go(run, args, cfg)
 
 
+def parse_mix(text: str | None) -> dict | None:
+    """`family=share,family=share` -> {family: share}."""
+    if not text:
+        return None
+    pairs = [part.split("=", 1) for part in text.split(",") if part.strip()]
+    if any(len(p) != 2 for p in pairs):
+        raise SystemExit(f"--mix wants family=share pairs, not {text!r}")
+    return {family.strip(): float(share) for family, share in pairs}
+
+
 async def go(run: training.TrainingRun, args, cfg) -> dict:
     if args.command == "start":
         return await run.start()
     ceilings = {k: v for k, v in (("train", args.ceiling_train), ("eval", args.ceiling_eval)) if v is not None}
     return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, format_penalty=args.format_penalty,
                             mask_broken=args.mask_broken, resample_broken=args.resample_broken,
-                            retrain_pending=args.retrain_pending,
+                            mix=parse_mix(args.mix), retrain_pending=args.retrain_pending,
                             discard_pending=args.discard_pending, ceilings=ceilings or None)
 
 
@@ -177,6 +187,8 @@ def main() -> int:
                            help="reward taken off per broken reply in the rollouts from here on (0 is off)")
             p.add_argument("--mask-broken", action=argparse.BooleanOptionalAction, default=None,
                            help="broken replies take no gradient from here on (production's default)")
+            p.add_argument("--mix", help="new shares for some families, e.g. edit_real=0.35,edit_synth=0.05 "
+                                         "(the shares must still add up to 1)")
             p.add_argument("--resample-broken", type=int,
                            help="times a broken reply is drawn again in the rollouts from here on (production: 2; 0 is off)")
     p = sub.add_parser("stop", help="stop a running run after the step it's on")

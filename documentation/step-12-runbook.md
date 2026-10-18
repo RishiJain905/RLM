@@ -155,6 +155,8 @@ The run stopped after branch 2's step 13 (stop switch) and resumed on the same b
 
 Step 19, the first with the warm-up, still lost 5 episodes: the warm-up call was answered, but some of the step's first requests kept failing for about 6 minutes (every failed episode died 6-12 minutes into its step, at its first turns). So the retry window is now 12 tries, about 14 minutes (`client.RetryPolicy`), and a request rides that out instead of costing its episode.
 
+**Mix change at checkpoint 20 (Rishi, 2026-10-18: "Yeah sure please do since it's already been generalized").** Edit synth sat at its top level (5) at 100% for steps 11-20, so its 15% of rollouts were all-solved groups that train nothing. 10 of its 15 points moved to edit real: the mix is now aggregation 25%, callgraph 10%, needle 10%, repo loc 15%, edit real 35%, edit synth 5%. `train.py resume --mix edit_real=0.35,edit_synth=0.05` (`TrainingRun._set_mix`) changes named families' shares, checks they still add up to 1 and that every family's sources pass the licence check, and logs a notice. Harder edit synth tasks (a level 6) remain an option if edit real's pool runs low; the 12b fallback still moves edit real slots to edit synth when it does.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |

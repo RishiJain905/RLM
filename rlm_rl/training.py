@@ -191,11 +191,13 @@ class TrainingRun:
     async def resume(self, *, from_checkpoint: str | int | None = None, lr: float | None = None,
                      retrain_pending: bool = False, discard_pending: bool = False,
                      ceilings: dict | None = None, format_penalty: float | None = None,
-                     mask_broken: bool | None = None, resample_broken: int | None = None) -> dict:
+                     mask_broken: bool | None = None, resample_broken: int | None = None,
+                     mix: dict | None = None) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
         `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
         `mask_broken` whether broken replies take a gradient; `resample_broken` how many times a broken reply is drawn
-        again in the rollouts."""
+        again in the rollouts. `mix` sets the shares of the families it names (the run's own families only; the
+        shares must still add up to 1)."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -228,6 +230,8 @@ class TrainingRun:
             self.state["config"]["mask_broken"] = mask_broken
             self._notice("format", "broken replies " + ("take no gradient from here on (masked)" if mask_broken
                                                         else "are trained on again (not masked)"))
+        if mix:
+            self._set_mix(mix)
         if resample_broken is not None and resample_broken != self.cfg.resample_broken:
             self.cfg = RunConfig.from_dict({**self.cfg.as_dict(), "resample_broken": resample_broken})  # validates it
             self.state["config"]["resample_broken"] = resample_broken
@@ -617,6 +621,23 @@ class TrainingRun:
         if not families or None in sizes:
             return None
         return sum(sizes) - sum(v.get("family") in families for v in self.retirement.retired.values())
+
+    def _set_mix(self, change: dict) -> None:
+        """Change some families' shares of the training mix (an operator's call at a resume, e.g. prod-v1's
+        checkpoint 20: edit_synth saturated at its top level, so 10 of its 15 points went to edit_real)."""
+        unknown = sorted(set(change) - set(self.cfg.mix))
+        if unknown:
+            raise ValueError(f"{unknown} aren't in this run's mix {sorted(self.cfg.mix)}")
+        new = {f: float(change.get(f, w)) for f, w in self.cfg.mix.items()}
+        if any(w < 0 for w in new.values()) or abs(sum(new.values()) - 1.0) > 1e-6:
+            raise ValueError(f"the mix must be non-negative and add up to 1, not {sum(new.values()):g}: {new}")
+        if self.cfg.kind == "production":
+            rtasks.check_mix(new)
+        before = dict(self.cfg.mix)
+        self.cfg.mix = new
+        self.state["config"]["mix"] = dict(new)
+        moved = ", ".join(f"{f} {before[f]:.0%} -> {new[f]:.0%}" for f in new if abs(new[f] - before[f]) > 1e-9)
+        self._notice("mix", f"training mix set by the operator: {moved}")
 
     async def _warm(self, model: str, n: int) -> None:
         """Wake the checkpoint step n samples from with one tiny call before its episodes start (WARM_TRIES)."""

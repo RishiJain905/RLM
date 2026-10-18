@@ -492,6 +492,26 @@ class LearningRateFallbackTest(LoopCase):
         self.assertLess(kinds.index("lr_fallback"), kinds.index("rollback"))
 
 
+class MixChangeTest(LoopCase):
+    async def test_a_resume_can_move_share_between_families(self):
+        """prod-v1 checkpoint 20 (Rishi, 2026-10-18): edit_synth saturated, so 10 of its 15 points went to edit_real."""
+        st = await self.run_("mx", cfg=second_seed("mx", 4), stop_after=1).start()
+        for bad in ({"nope": 0.5}, {"tickets_all": 0.7}, {"tickets_all": -0.1, "tickets_customer": 1.1}):
+            with self.assertRaises(ValueError):
+                await self.run_("mx").resume(mix=bad)
+        st = await self.run_("mx", stop_after=3).resume(mix={"tickets_all": 0.75, "tickets_customer": 0.25})
+        self.assertEqual(st["config"]["mix"], {"tickets_all": 0.75, "tickets_customer": 0.25})
+        self.assertTrue(any(n["kind"] == "mix" and "tickets_all 50% -> 75%" in n["text"] for n in st["notices"]))
+        drawn = [r["families"]["tickets_all"]["episodes"] for r in st["steps"][1:]]
+        self.assertEqual(sum(drawn), 12 * 4)  # 12 of steps 2-3's 16 tasks, 4 rollouts each
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("rlm_train_cli", Path(__file__).resolve().parents[1] / "scripts" / "train.py")
+        train_cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(train_cli)
+        self.assertEqual(train_cli.parse_mix("edit_real=0.35, edit_synth=0.05"), {"edit_real": 0.35, "edit_synth": 0.05})
+
+
 class WarmupTest(LoopCase):
     async def test_each_step_wakes_its_checkpoint_before_the_rollouts(self):
         """prod-v1 steps 16-18: W&B answered 500 while loading a fresh checkpoint, longer than the episodes' retries."""
