@@ -103,6 +103,27 @@ The dashboard's Policy health panel gained "Entropy against the base model (coll
 
 **Pooling the matched signal (after step 8, 2026-10-18).** Step 8's own reading was 10.5% while KL barely moved: it re-scored 2,133 tokens, mostly code, which both models find predictable (base surprise 0.083 against ~0.24 on steps 6-7). One step's few thousand tokens swing with their content, so the rule now reads the readings of the last 3 steps pooled, token-weighted (`stoprules.pooled_entropy_drop`; steps 6-8 pool to under 4%). It needs 2 readings and 1,500 tokens; short of that it reaches back a step at a time to 6 steps, so short re-scores can't leave it blind. A real collapse persists, so it still crosses within a step or two. The rollback target is dated from the first pooled step whose own reading is past 30%, not the pool's start, so checkpoints sampled before the collapse aren't thrown away. The run was stopped after step 8 with the stop switch for this change.
 
+## 7b. Overnight changes (2026-10-18, Claude, with Rishi's go-ahead to stop, fix and resume while he slept)
+
+**Learning rate to 1e-5 after checkpoint 10.** Steps 9 and 10 failed spec §5.2's own gate for 2e-5: `probs_corr` 0.969 and 0.975 (needs above 0.98) and grad norm 3.06 (above 3x its median). W&B's trainer takes one optimizer step per ~14K-token packed sequence, so a production step makes 30-100 updates (the second seed made 7-21) and the policy drifts within a step. The run stopped after checkpoint 10's evals (selection 53.1%, capability 76%, audit 24 of 24 wins clean) and resumed at 1e-5 with no rollback. Steps 11-15 then read 0.992-0.997.
+
+**Broken replies, and a format penalty, with a rollback to checkpoint 10.** From step 11 a growing share of replies ended on their own mid-code (`r1 = read_file("`), empty, or as a bare `<tool_call>`, with `finish_reason` stop and the token counts matching what was written, so the policy itself was emitting its end-of-turn early. By step 16 it was 125 of 494 turns (25%; at most about 6% a step through step 11), 21 of 32 episodes had at least one, and they snowballed inside an episode (one edit episode: 23 of 30 turns). The pass rate fell to 28% and half the edit episodes never submitted. Neither collapse signal saw it (pooled matched drop 3.7%). The cause on the reward side: the outcome reward never told a win with broken replies from a clean win, and in steps 6, 8, 9, 12, 13 and 14 the episodes with broken replies had a positive mean advantage, so wins kept reinforcing them. The fix, per research §4.1 ("small process penalties only once the logs show the need"):
+
+| Change | Where | What it does |
+|---|---|---|
+| Format penalty | `reward.broken_replies`, `reward.format_penalty`, `env.run_episode(format_penalty=)` | 0.1 off the reward per broken reply (a turn that ended on its own with no runnable code; a reply cut at the token cap doesn't count), at most 0.3 an episode, before the detectors (a hack is still exactly 0). A wrong answer can go below 0. Training rollouts only; evals are unchanged |
+| Config | `RunConfig.format_penalty`, `config.production` | New production runs get 0.1. prod-v1 started before it existed, so the resume turns it on |
+| Resume switch | `train.py resume --format-penalty 0.1`, `TrainingRun.resume(format_penalty=)` | Sets it in the run's config with a notice |
+| Dashboard | `monitor`, `dashboard.SHAPE_KEYS`, Trouble per episode chart | Broken replies per episode, and the penalty taken |
+
+The run stopped during step 17's rollouts (Ctrl-C twice, nothing trained on them) and resumed from checkpoint 10 (its samples at step 11 had 4% broken replies) on branch 1 at 1e-5 with the penalty on:
+
+```bash
+.venv-linux/bin/python scripts/train.py resume prod-v1 --live --from 10 --lr 1e-5 --format-penalty 0.1
+```
+
+Steps 11-16 of branch 0 (~$8.40) are kept under `results/prod-v1/abandoned/`. Watch broken replies on the Trouble chart: they should fall within a few steps. If they don't, the next lever is ending an episode after a run of broken replies.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |

@@ -58,7 +58,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from . import capability, config as rconfig, monitor, stoprules, tasks as rtasks
+from . import capability, config as rconfig, monitor, reward, stoprules, tasks as rtasks
 from .bridge import InfraError
 from .client import ModelClient, RetryPolicy
 from .config import RunConfig
@@ -182,8 +182,9 @@ class TrainingRun:
 
     async def resume(self, *, from_checkpoint: str | int | None = None, lr: float | None = None,
                      retrain_pending: bool = False, discard_pending: bool = False,
-                     ceilings: dict | None = None) -> dict:
-        """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint)."""
+                     ceilings: dict | None = None, format_penalty: float | None = None) -> dict:
+        """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
+        `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off)."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -205,6 +206,12 @@ class TrainingRun:
             self.state["config"]["ceilings"] = dict(self.cfg.ceilings)
             self.state["spend"]["ceilings"] = dict(self.cfg.ceilings)
             self._notice("ceiling", f"inference ceilings set by the operator: {self._ceilings_text()}")
+        if format_penalty is not None and format_penalty != self.cfg.format_penalty:
+            before = self.cfg.format_penalty
+            self.cfg = RunConfig.from_dict({**self.state["config"], "format_penalty": format_penalty})  # validates it
+            self.state["config"]["format_penalty"] = format_penalty
+            self._notice("format", f"format penalty set by the operator: {before:g} -> {format_penalty:g} off the reward "
+                                   f"per broken reply, at most {reward.FORMAT_PENALTY_MAX_REPLIES} an episode")
         target = self._resolve_checkpoint(from_checkpoint)
         if target is not None and target != self._latest():
             await self._rollback(target, reason="resumed by the operator from an earlier checkpoint", new_lr=lr)
@@ -428,7 +435,7 @@ class TrainingRun:
         fallback = self._fallback_slots(n, batch)
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
                                   sandbox_factory=self.sandbox_factory, prompt_version=cfg.prompt_version,
-                                  **self.sandbox_kwargs)
+                                  format_penalty=cfg.format_penalty, **self.sandbox_kwargs)
         t_rollouts = time.monotonic() - t0
         TranscriptLog(path).extend([episode_record(ep, split="train", run=cfg.run, step=n, sample=sample,
                                                    key=f"train/step{n}/{ep.task_id}/{sample}")

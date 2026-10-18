@@ -424,6 +424,31 @@ class RollbackTest(LoopCase):
         self.assertIn(10, self.dry.backend.models["rb"]["steps"])  # the old branch is untouched
         self.assertNotIn("10", st["audits"])
 
+    async def test_a_resume_turns_the_format_penalty_on_for_the_rollouts_after_it(self):
+        """prod-v1 (2026-10-18): a run started before the format penalty existed gets it on resume, with the rollback."""
+        st = await self.run_("fp", cfg=second_seed("fp"), stop_after=6).start()
+        self.assertEqual(st["config"]["format_penalty"], 0.0)
+        oracle = self.dry.server.policy_for
+
+        def broken_first(model, messages):  # every episode opens with a reply cut off mid-code
+            if sum(m["role"] == "assistant" for m in messages) == 0:
+                return "```python\nprint("
+            return oracle(model, messages)
+
+        self.dry.server.policy_for = broken_first
+        with self.assertRaises(ValueError):
+            await self.run_("fp").resume(format_penalty=0.5)
+        st = await self.run_("fp", stop_after=6).resume(from_checkpoint=5, format_penalty=0.1)
+        self.assertEqual((st["latest"], st["branch"], st["config"]["format_penalty"]), (6, 1, 0.1))
+        self.assertTrue(any(n["kind"] == "format" and "0 -> 0.1" in n["text"] for n in st["notices"]))
+        before = TranscriptLog(transcript_path(self.results / "fp", "train", 5)).records()
+        after = TranscriptLog(transcript_path(self.results / "fp", "train", 6)).records()
+        self.assertFalse(any("format_penalty" in r["reward_components"] for r in before))
+        self.assertTrue(after and all(r["reward_components"].get("format_penalty") == 0.1 for r in after
+                                      if r["infra_error"] is None))
+        self.assertGreaterEqual(st["steps"][-1]["shape"]["broken_replies"], 1.0)
+        self.assertEqual(config.production("p", 2e-5).format_penalty, 0.1)
+
     async def test_a_branch_model_that_already_has_checkpoints_stops_the_resume(self):
         await self.run_("rw", cfg=second_seed("rw"), stop_after=6).start()
         self.dry.backend.models["rw-b1"] = {"steps": [1], "next": 2}  # e.g. left by an earlier attempt

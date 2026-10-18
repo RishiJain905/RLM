@@ -169,6 +169,8 @@ class Episode:
             "budget_hit": float(self.budget_hit),
             "first_turn_submit": float(self.submitted and len(turns) == 1),
             "no_code_turns": float(sum(t.code is None for t in turns)),
+            "broken_replies": float(reward.broken_replies(turns)),
+            "format_penalty": float(self.reward_components.get("format_penalty", 0.0)),
             "truncated_turns": float(sum(t.finish_reason == "length" for t in turns)),
             "repl_errors": float(sum(bool(t.cell and t.cell.get("error")) for t in turns)),
             "timeouts": float(self.timeouts),
@@ -227,12 +229,13 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                       detect: Detect | None = detectors.check, run_id: str = "adhoc",
                       sandbox_factory: Callable[..., Any] = Sandbox, prompt_version: str = bridge.PROMPT_VERSION,
                       edit_sandbox_factory: Callable[..., Any] | None = None, edit_sandbox_kwargs: dict | None = None,
-                      grade: Callable[..., Any] | None = None, **sandbox_kwargs) -> Episode:
+                      grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, **sandbox_kwargs) -> Episode:
     """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
 
     A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
     any fires, its reward becomes 0 and it no longer counts as correct (step 4). `detect=None`
-    turns the detectors off, for tests only.
+    turns the detectors off, for tests only. `format_penalty` (training runs that turn it on) takes that much off the
+    reward for each broken reply, before the detectors (reward.broken_replies).
 
     An edit task (spec §12) runs in the edit sandbox (`edit_sandbox_factory`, editbox.EditSandbox by
     default) under the edit limits. After the last turn the host takes the repository's diff, and a
@@ -328,6 +331,11 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 ep.edit_stats = editmetrics.episode_stats(ep)
             score = scorer(task, ep)
             value, correct, components = float(score.reward), bool(score.correct), dict(score.components)
+            broken = reward.broken_replies(ep.turns)
+            if format_penalty and broken:
+                cut = reward.format_penalty(broken, format_penalty)
+                components.update(broken_replies=broken, format_penalty=cut, reward_before_format=value)
+                value = round(value - cut, 4)
             hacks = list(detect(task, ep)) if detect is not None else []
             ep.flags = list(detectors.flags(task, ep)) if detect is not None else []
             if hacks:  # zeroed before the group mean, so the hack becomes a negative example (H11)

@@ -94,7 +94,8 @@ async def go(run: training.TrainingRun, args, cfg) -> dict:
     if args.command == "start":
         return await run.start()
     ceilings = {k: v for k, v in (("train", args.ceiling_train), ("eval", args.ceiling_eval)) if v is not None}
-    return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, retrain_pending=args.retrain_pending,
+    return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, format_penalty=args.format_penalty,
+                            retrain_pending=args.retrain_pending,
                             discard_pending=args.discard_pending, ceilings=ceilings or None)
 
 
@@ -171,6 +172,8 @@ def main() -> int:
             p.add_argument("--from", dest="from_checkpoint", help="latest (default), best, or a kept checkpoint")
             p.add_argument("--retrain-pending", action="store_true", help="train a step's saved batch again")
             p.add_argument("--discard-pending", action="store_true", help="redo a step whose training never finished")
+            p.add_argument("--format-penalty", type=float,
+                           help="reward taken off per broken reply in the rollouts from here on (production: 0.1; 0 is off)")
     p = sub.add_parser("stop", help="stop a running run after the step it's on")
     p.add_argument("run")
     p.add_argument("--reason", default="")

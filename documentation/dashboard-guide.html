@@ -375,8 +375,8 @@ mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inhe
         </article>
         <article class="entry" id="trouble">
           <header><h3>Trouble per episode</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
-          <p>Four kinds of friction, per episode: <b>REPL errors</b> (the code crashed), <b>cell timeouts</b> (a cell ran past 120 s in read tasks or 300 s in edit tasks), <b>turns without code</b> (no runnable code block in the reply), and <b>outputs cut short</b> (it printed more than the output limit).</p>
-          <dl class="read"><dt>Healthy</dt><dd>All four low and falling. Some errors are normal; the model fixes them on the next turn.</dd><dt>Worry if</dt><dd>Turns without code climb (a format problem), or timeouts climb (slow or looping code).</dd></dl>
+          <p>Five kinds of friction, per episode: <b>REPL errors</b> (the code crashed), <b>cell timeouts</b> (a cell ran past 120 s in read tasks or 300 s in edit tasks), <b>turns without code</b> (no runnable code block in the reply), <b>broken replies</b> (the subset that ended on their own: cut off mid-code, empty, or a bare tag) and <b>outputs cut short</b> (it printed more than the output limit). In prod-v1 broken replies grew from about 1% of turns to 25% by step 16 and snowballed inside episodes, so since the restart from checkpoint 10 each one costs 0.1 of the episode's reward, up to 0.3.</p>
+          <dl class="read"><dt>Healthy</dt><dd>All low and falling. Some errors are normal; the model fixes them on the next turn. Broken replies should fall toward zero under the penalty.</dd><dt>Worry if</dt><dd>Broken replies or turns without code climb (a format problem the model is learning), or timeouts climb (slow or looping code).</dd></dl>
         </article>
         <article class="entry" id="transcript">
           <header><h3>Root transcript length (tokens)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>

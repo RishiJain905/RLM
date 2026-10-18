@@ -10,8 +10,10 @@ Every rollout gets one scalar, computed on the host in this order:
                formula with err = 1 - F1 and e_blind = 1 - F1_blind
    - entities: no partial credit
    So the blind guess itself earns only its lucky exact hits.
-4. A hack detector fired: 0 (detectors.py; run_episode applies it before the group mean).
-5. infra_error: not scored at all (env.py).
+4. A run that turns the format penalty on (production; prod-v1 from its restart at checkpoint 10) takes FORMAT_PENALTY off for each
+   broken reply, up to FORMAT_PENALTY_MAX_REPLIES of them (`broken_replies`, applied in run_episode).
+5. A hack detector fired: 0 (detectors.py; run_episode applies it before the group mean).
+6. infra_error: not scored at all (env.py).
 
 The task's generator supplies the blind guess in `task.grading["blind"]`. It is computed on
 the host and never enters the sandbox.
@@ -38,6 +40,12 @@ NEAR_MISS_MAX = 0.8
 # reaches 0 exactly at the blind guess's error (decision 1b, kept by decision 5b on 2026-10-11).
 NEAR_MISS_SLOPE = 1.0
 DECIMAL_TOLERANCE = 0.005
+# A process penalty for broken replies (2026-10-18). In prod-v1 replies that end on their own mid-code, empty or as a
+# bare tag grew from ~1% of turns to 25% by step 16, and they cascade within an episode. The outcome reward never told
+# a win with broken replies from a clean one, so wins kept reinforcing them (research §4.1: small process penalties
+# only once the logs show the need).
+FORMAT_PENALTY = 0.1  # per broken reply *(mine)*
+FORMAT_PENALTY_MAX_REPLIES = 3  # so the most it takes is 0.3 *(mine)*
 
 # A minus sign counts only when it isn't joined to a word, so "host-42" parses as 42.
 _NUMBER_RE = re.compile(r"(?:(?<!\w)-)?\d+(?:\.\d+)?")
@@ -56,7 +64,19 @@ def settings() -> dict:
     """The pinned reward constants, for the run's config.json (spec §8)."""
     return {"exact_reward": EXACT_REWARD, "near_miss_max": NEAR_MISS_MAX, "near_miss_slope": NEAR_MISS_SLOPE,
             "decimal_tolerance": DECIMAL_TOLERANCE, "answer_types": list(ANSWER_TYPES),
-            "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec §12.6, decision E-c)"}
+            "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec §12.6, decision E-c)",
+            "format_penalty_max_replies": FORMAT_PENALTY_MAX_REPLIES}
+
+
+def broken_replies(turns: Any) -> int:
+    """Turns that ended on their own without a runnable code block: empty, prose only, a bare tag or a fence left
+    open. A reply cut at the token cap isn't counted: that's the length limit, not the format."""
+    return sum(t.code is None and t.finish_reason != "length" for t in turns)
+
+
+def format_penalty(broken: int, per_reply: float) -> float:
+    """What `broken` broken replies take off the reward, at `per_reply` each (0 turns it off)."""
+    return round(per_reply * min(broken, FORMAT_PENALTY_MAX_REPLIES), 4)
 
 
 # ----------------------------------------------------------------------------- parsing

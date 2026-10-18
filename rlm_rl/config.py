@@ -91,6 +91,7 @@ class RunConfig:
     eval_episode_estimate_usd: float = 0.03  # before any step has been measured (research §7.2: ~$0.016 at level 1)
     prompt_version: str = bridge.PROMPT_VERSION  # v3 (step 11 fixes on spec §12.2's v2); the second seed ran v1
     root_thinking: str | None = None  # client.ROOT_THINKING_EFFORTS or None (off); production thinks at medium
+    format_penalty: float = 0.0  # reward off per broken reply in training rollouts (reward.FORMAT_PENALTY); 0 is off
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -105,6 +106,8 @@ class RunConfig:
             raise ValueError("edit families need prompt v2 (spec §12.2)")
         if self.root_thinking is not None and self.root_thinking not in client.ROOT_THINKING_EFFORTS:
             raise ValueError(f"root thinking must be None or one of {client.ROOT_THINKING_EFFORTS}")
+        if not 0.0 <= self.format_penalty <= 0.2:
+            raise ValueError("format penalty must be between 0 and 0.2 a reply")
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -151,7 +154,8 @@ def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunCon
     return RunConfig(run=run, kind="production", learning_rate=learning_rate,
                      lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", mix=mix, eval_every=10,
                      eval_at_start=True, selection=selection, capability_set=capability_set,
-                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING)
+                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING,
+                     format_penalty=reward.FORMAT_PENALTY)
 
 
 # ----------------------------------------------------------------------------- pinned values (spec §8)

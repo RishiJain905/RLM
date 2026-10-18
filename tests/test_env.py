@@ -16,7 +16,7 @@ import unittest
 
 import openai
 
-from rlm_rl import bridge, client as rclient, env, sandbox
+from rlm_rl import bridge, client as rclient, env, reward, sandbox
 from rlm_rl.client import Limiter, ModelClient, Pacer, RetryPolicy
 from rlm_rl.env import Episode, InfraPause, Score, Task, filter_step, run_episode, run_groups, to_trajectory
 from tests.fake_model import AsyncCase, FakeModelServer
@@ -87,6 +87,39 @@ class EpisodeTest(EnvCase):
         ep = await self.episode()
         self.assertIn(bridge.NO_CODE_BLOCK_ERROR, ep.messages[3]["content"])
         self.assertEqual((ep.turns[0].code, ep.turns[0].cell, ep.correct), (None, None, True))
+
+    async def test_format_penalty_for_broken_replies(self):
+        """prod-v1 steps 11-16: replies cut off mid-code, empty or a bare tag grew to 25% of turns. With the penalty on,
+        each costs 0.1, at most 3 of them; it comes before the detectors, and a reply cut at the token cap isn't one."""
+        submit = "```python\nsubmit(len(context.splitlines()))\n```"
+        for broken, penalty, expected in ((["", "```python\nprint("], 0.1, 0.8), (["", "<tool_call>"] * 3, 0.1, 0.7),
+                                          (["```python\nr1 = read_file(\""], 0.0, 1.0)):
+            replies = iter(broken + [submit])
+            self.server.policy = lambda messages: next(replies)
+            ep = await self.episode(format_penalty=penalty)
+            self.assertEqual((ep.reward, ep.correct), (expected, True), broken)
+            self.assertEqual(ep.metrics()["broken_replies"], len(broken))
+            if penalty:
+                self.assertEqual(ep.reward_components["format_penalty"], round(1.0 - expected, 4))
+                self.assertEqual(ep.reward_components["reward_before_format"], 1.0)
+            else:
+                self.assertNotIn("format_penalty", ep.reward_components)
+        replies = iter(["", "```python\nsubmit(99)\n```"])  # a wrong answer goes below 0
+        self.server.policy = lambda messages: next(replies)
+        self.assertEqual((await self.episode(format_penalty=0.1, detect=None)).reward, -0.1)
+        replies = iter(["", submit])  # a hack still makes it exactly 0
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode(format_penalty=0.1, detect=lambda task, ep: [{"rule": "early_submit", "detail": "x"}])
+        self.assertEqual((ep.reward, ep.reward_components["reward_before_hack"]), (0.0, 0.9))
+
+    def test_a_reply_cut_at_the_token_cap_is_not_broken(self):
+        def turn(reply, finish, code):
+            return env.Turn(reply, finish, 10, code, None, None, 0.0, 0.0)
+
+        turns = [turn("```python\nprint(", "length", None), turn("```python\nr1", "stop", None),
+                 turn("", "stop", None), turn("```python\nprint(1)\n```", "stop", "print(1)")]
+        self.assertEqual(reward.broken_replies(turns), 2)
+        self.assertEqual([reward.format_penalty(n, 0.1) for n in (0, 1, 3, 7)], [0.0, 0.1, 0.3, 0.3])
 
     async def test_tool_call_code_runs_under_prompt_v3_only(self):
         """Step 11: the base model wrote its code in tool-call tags on 43% of its v2 turns. v3 runs that code, and its
