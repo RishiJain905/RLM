@@ -26,10 +26,11 @@ Families:
 Levels go from the 20-step tasks' size (~35K characters) to ~400K, which ~20 sub-calls of ~20K characters
 cover (spec §6). Each level up also adds labels and users.
 
-Generator versions. `aggregation-v3` (2026-10-18, the step 12 plan's "aggregation v2"; see the v3 section below)
-is what training draws: only kinds that need a semantic label for every line, the denser OOLONG / OOLONG-Pairs
-kinds (pairs of users, first and last dates, a user's top topic), OOLONG's count credit, and no line that names
-a label. `aggregation-v2` is kept unchanged for the eval sets frozen before v3, which rebuild their tasks from
+Generator versions. `aggregation-v4` (2026-10-18, after the step 12 pilot; see the v4 section below) is what
+training draws: v3's rules with every question's must-label scope beyond what the root can read itself (1,500
+lines at level 1 to 4,100 at level 5). `aggregation-v3` (the step 12 plan's "aggregation v2") added kinds that need
+a semantic label for every line, the denser OOLONG / OOLONG-Pairs kinds, OOLONG's count credit, and no line that
+names a label; it stays reachable with `version=`. `aggregation-v2` is kept unchanged for the eval sets frozen before v3, which rebuild their tasks from
 private seeds (`FROZEN_EVAL_SETS`), so their numbers stay comparable. One fix reaches v2 too: user ids no longer
 follow the process's string hash seed (`_user_ids`), so a v2 task is now the same in every process; before, each
 process gave the users other ids (the same task otherwise).
@@ -37,6 +38,7 @@ process gave the users other ids (the same task otherwise).
 
 from __future__ import annotations
 
+import collections
 import datetime as dt
 import hashlib
 import itertools
@@ -51,7 +53,10 @@ from typing import Callable
 from .. import data, reward
 from ..env import Task
 
-GENERATOR_VERSION = "aggregation-v3"  # v3: dense kinds, count credit, re-draws (step 12); v2 added LEDGAR and arXiv (7c)
+# v4: every question's must-label scope exceeds what the root can read itself (step 12 pilot); v3: dense kinds,
+# count credit, re-draws; v2: LEDGAR and arXiv sources added (decision 7c)
+GENERATOR_VERSION = "aggregation-v4"
+V3_VERSION = "aggregation-v3"  # reachable with version=, so the pilot's v3 tasks can be rebuilt
 LEGACY_VERSION = "aggregation-v2"
 # Eval sets built before v3. tasks.fixed_set names their tasks "<set>-<family>-L<level>-<i>", and a task id with one of
 # these prefixes is built by the v2 generator, so selection-v1/v2/v3 and heldout-test-v1/v2 rebuild the same tasks from
@@ -184,7 +189,7 @@ DESCRIPTIONS = {label: desc for src in TRAIN_SET + (HELDOUT,) for label, desc in
 
 # v2's question kinds and how often each is drawn. The last two need no labels, so code alone answers them.
 # The code-only kinds get 30%, so the whole production mix stays near research §3.1's ~20% code-solvable tasks.
-# v3's kinds are KINDS, in the v3 section below.
+# v3's kinds are KINDS_V3 and v4's KINDS_V4 (= KINDS, what training draws), in the sections below.
 KINDS_V2 = {"label_count": 0.22, "user_label_count": 0.12, "labels_over": 0.13, "users_with_label": 0.08,
             "window_label_count": 0.15, "user_window_count": 0.18, "most_active_user": 0.12}
 CODE_ONLY_KINDS = ("user_window_count", "most_active_user")
@@ -265,6 +270,12 @@ TRAIN_TEMPLATES = {
                      "common among the {items} {verb} by user {user}? Answer with the topic name.",
                      "Each line is about one of these topics:\n{labels}\nRank the topics of user {user}'s {items} "
                      "by how many {items} each has. Which topic comes second? Answer with the topic name."],
+    # v4 only
+    "top_topics": ["Every {item} belongs to exactly one of these topics:\n{labels}\nFor each of users {user_list}, "
+                   "which topic are most of their {items} about? Answer with a list of strings, one per user, each "
+                   "the user id and the topic name joined by \"|\".",
+                   "Each line is about one of these topics:\n{labels}\nGive the most common topic of every one of "
+                   "these users: {user_list}. Write one \"user id|topic name\" string per user, as a list."],
 }
 HELDOUT_TEMPLATES = {
     "label_count": ["Classify each headline into one of the following categories:\n{labels}\nWhat is the total "
@@ -304,6 +315,10 @@ HELDOUT_TEMPLATES = {
     "second_topic": ["Classify each headline into one of the following categories:\n{labels}\nFor account {user}, "
                      "which category holds the second largest number of its headlines? Reply with the category "
                      "name."],
+    # v4 only
+    "top_topics": ["Classify each headline into one of the following categories:\n{labels}\nFor every account among "
+                   "{user_list}, name the category holding the largest number of its headlines. Reply comma "
+                   "separated, each entry the account number, a vertical bar, then the category name."],
 }
 
 
@@ -516,9 +531,9 @@ def _question(rng: random.Random, variant: str, source: Source, rows, labels, us
 # - Sizes: a count depends on SCOPE_LINES[level] lines, few enough to label carefully with sub-calls and too many to
 #   eyeball; set questions avoid thresholds that a single mislabelled line would flip (FRAGILE_MAX).
 
-KINDS = {"label_count": 0.12, "user_label_count": 0.12, "window_label_count": 0.08, "labels_over": 0.06,
-         "users_with_label": 0.08, "pairs": 0.26, "timeline": 0.14, "top_topic": 0.14}
-COUNT_KINDS = ("label_count", "user_label_count", "window_label_count")
+KINDS_V3 = {"label_count": 0.12, "user_label_count": 0.12, "window_label_count": 0.08, "labels_over": 0.06,
+            "users_with_label": 0.08, "pairs": 0.26, "timeline": 0.14, "top_topic": 0.14}
+COUNT_KINDS = ("label_count", "user_label_count", "window_label_count")  # v3's
 
 # Labels per level. Level 5 keeps level 4's 7: with the texts that name a label left out, LEDGAR has no 8 compatible
 # labels with enough texts and arXiv's conflict graph has no 8-set, so 8 would leave level 5 to CLINC alone.
@@ -551,14 +566,14 @@ QUESTION_TRIES = 3
 
 
 def version_for(task_id: str | None) -> str:
-    """The generator a task id gets: v2 for the eval sets frozen before v3, v3 for everything else."""
+    """The generator a task id gets: v2 for the eval sets frozen before v3, the current one for everything else."""
     if task_id and any(task_id.startswith(f"{name}-") for name in FROZEN_EVAL_SETS):
         return LEGACY_VERSION
     return GENERATOR_VERSION
 
 
-def _sub_seed(seed: int, tag) -> int:
-    digest = hashlib.sha256(f"{GENERATOR_VERSION}:{seed}:{tag}".encode()).digest()
+def _sub_seed(seed: int, tag, version: str = V3_VERSION) -> int:
+    digest = hashlib.sha256(f"{version}:{seed}:{tag}".encode()).digest()
     return int.from_bytes(digest[:8], "big")
 
 
@@ -585,6 +600,7 @@ def label_pattern(names) -> re.Pattern:
 _MENTIONS: dict[str, dict[str, list]] = {}
 _OWN_SIZE: dict[str, dict[str, int]] = {}
 _OWN_MEDIAN: dict[str, float] = {}
+_OWN_MEAN: dict[str, float] = {}
 
 
 def _mentions(source: Source) -> dict[str, list[tuple[str, frozenset]]]:
@@ -598,6 +614,7 @@ def _mentions(source: Source) -> dict[str, list[tuple[str, frozenset]]]:
                for label, entries in _MENTIONS[source.name].items()}
         _OWN_SIZE[source.name] = {label: len(texts) for label, texts in own.items()}
         _OWN_MEDIAN[source.name] = statistics.median(len(t) for texts in own.values() for t in texts)
+        _OWN_MEAN[source.name] = statistics.fmean(len(t) for texts in own.values() for t in texts)
     return _MENTIONS[source.name]
 
 
@@ -615,6 +632,7 @@ class _Log:
     by_user: dict  # user -> rows, by date
     active: list  # users with a line, most lines first: what code alone can count
     context: str
+    floor: int = 0  # v4: the fewest lines a question may need labelled (`scope_floor`)
 
 
 def _weighted_sample(rng: random.Random, items: list, weights: list, k: int) -> list:
@@ -630,17 +648,44 @@ def _log_v3(rng: random.Random, variant: str, level: int) -> _Log:
     fmt = rng.choice(TRAIN_FORMATS if variant == "train" else HELDOUT_FORMATS)
     budget = rng.randint(*LEVELS[level])
     k = LABELS_V3[level]
+
+    def plan(source: Source, fmt_chars: int):
+        line = fmt_chars + _OWN_MEDIAN[source.name] + 1
+        return int(1.3 * budget / line / k), lambda rows, size: size < budget, USERS_AT[level]
+
+    return _fill_log(rng, variant, fmt, k, TRAIN_SET, plan, _user_topics_v3)
+
+
+def _user_topics_v3(rng: random.Random, labels: list, weight: dict, k: int, span: int) -> tuple:
+    """v3's user: 2-4 topics at rates that follow the topics' weights, minor ones active for part of the log only."""
+    lo, hi = TOPICS_PER_USER[k]
+    topics = _weighted_sample(rng, labels, [weight[name] for name in labels], rng.randint(lo, hi))
+    rates = [weight[name] * rng.uniform(0.5, 2.0) for name in topics]
+    main = max(range(len(topics)), key=lambda i: rates[i])
+    periods = []  # the days each topic is active: the main one all along, others may start late or stop early
+    for i in range(len(topics)):
+        begin = rng.randint(0, int(0.7 * span)) if i != main and rng.random() < LATE_START else 0
+        end = rng.randint(begin + int(0.2 * span), span) if i != main and rng.random() < EARLY_STOP else span
+        periods.append((begin, end))
+    return topics, rates, periods
+
+
+def _fill_log(rng: random.Random, variant: str, fmt: str, k: int, train_sources: tuple, plan: Callable,
+              user_topics: Callable) -> _Log:
+    """A log of labelled lines (v3 and v4). `plan(source, chars of a line's own format)` gives the texts each label
+    needs, when the log is full and how many users write it: (need, more(rows, size) -> bool, (fewest, most)).
+    `user_topics` draws one user's (topics, rates, active periods)."""
     order = [HELDOUT] if variant == "heldout" else []
     if not order:
-        left = list(TRAIN_SET)
+        left = list(train_sources)
         while left:  # a weighted draw without replacement, as in v2
             pick = rng.choices(left, [s.weight for s in left])[0]
             order.append(pick)
             left.remove(pick)
+    fmt_chars = len(_render_line(fmt, dt.date(2024, 9, 28), "12345", ""))
     for source in order:
         _mentions(source)
-        line = len(_render_line(fmt, dt.date(2024, 9, 28), "12345", "")) + _OWN_MEDIAN[source.name] + 1
-        need = int(1.3 * budget / line / k)
+        need, more, users_range = plan(source, fmt_chars)
         blocked = {frozenset(pair) for pair in source.incompatible}
         usable = [label for label in source.labels if _OWN_SIZE[source.name][label] >= need]
         found = None
@@ -662,27 +707,16 @@ def _log_v3(rng: random.Random, variant: str, level: int) -> _Log:
     labels = found
 
     weight = {name: math.exp(rng.gauss(0, LABEL_SPREAD)) for name in labels}
-    users = _user_ids(rng, rng.randint(*USERS_AT[level]))
+    users = _user_ids(rng, rng.randint(*users_range))
     user_w = [1 / (i + 1) ** 0.7 for i in range(len(users))]  # a few heavy users, a long tail
     start = dt.date(2019, 1, 1) + dt.timedelta(days=rng.randint(0, 6 * 365))
     span = rng.randint(120, 540)
-    lo, hi = TOPICS_PER_USER[k]
-    prefs = {}
-    for user in users:
-        topics = _weighted_sample(rng, labels, [weight[name] for name in labels], rng.randint(lo, hi))
-        rates = [weight[name] * rng.uniform(0.5, 2.0) for name in topics]
-        main = max(range(len(topics)), key=lambda i: rates[i])
-        periods = []  # the days each topic is active: the main one all along, others may start late or stop early
-        for i in range(len(topics)):
-            begin = rng.randint(0, int(0.7 * span)) if i != main and rng.random() < LATE_START else 0
-            end = rng.randint(begin + int(0.2 * span), span) if i != main and rng.random() < EARLY_STOP else span
-            periods.append((begin, end))
-        prefs[user] = (topics, rates, periods)
+    prefs = {user: user_topics(rng, labels, weight, k, span) for user in users}
     header = rng.choice(source.headers)
 
     remaining = {name: list(rng.sample(pools[name], len(pools[name]))) for name in labels}
     rows, size = [], len(header) + 1
-    while size < budget:
+    while more(rows, size):
         user = rng.choices(users, user_w)[0]
         day = rng.randint(0, span)
         topics, rates, periods = prefs[user]
@@ -942,36 +976,309 @@ def _ask_top_topic(rng, log, level):
     return None
 
 
-ASKERS = {"label_count": _ask_label_count, "user_label_count": _ask_user_label_count,
-          "window_label_count": _ask_window_label_count, "labels_over": _ask_labels_over,
-          "users_with_label": _ask_users_with_label, "pairs": _ask_pairs, "timeline": _ask_timeline,
-          "top_topic": _ask_top_topic}
+ASKERS_V3 = {"label_count": _ask_label_count, "user_label_count": _ask_user_label_count,
+             "window_label_count": _ask_window_label_count, "labels_over": _ask_labels_over,
+             "users_with_label": _ask_users_with_label, "pairs": _ask_pairs, "timeline": _ask_timeline,
+             "top_topic": _ask_top_topic}
 
 
-def _build_v3(seed: int, family: str, level: int, task_id: str, kind: str | None = None) -> Task:
-    """A v3 task. The kind is drawn once from the seed (so the mix is exactly KINDS); the log and question are
-    re-drawn from deterministic sub-seeds until the question is well posed and no metadata guess scores."""
+# ----------------------------------------------------------------------------- v4: scopes beyond the root's reading
+#
+# Why: the step 12 pilot (checkpoint 20, prompt v4: the root sees 8,000 printed characters a turn for 20 turns, and a
+# sub-call reads 60,000) found no gain from sub-calls on v3, at level 1 or 3. The root without sub-calls filtered by
+# the question's user id or dates (48-165 lines) and read those itself. A scope the root can read over its own turns
+# (~1,000 short lines) never needs delegation.
+#
+# What changes from v3:
+# - Every question's must-label scope holds at least `scope_floor` lines: 1,500 at level 1 up to 4,100 at level 5, or,
+#   for long lines (LEDGAR, HuffPost), as many as fill 157K-431K characters, from about all the ~160K the root can
+#   print in a whole episode to several times it. The scope is the lines that must be labelled, in date order, before the
+#   answer is settled, after every filter by user id or date that could skip lines (`must_label`).
+# - Logs are sized in lines, LOG_STRETCH x the floor, and hold at most MAX_CHARS characters.
+# - Kinds: counts over the whole log (or a date window that still holds the floor), labels_over, users_with_label
+#   over every user, pairs over many users (OOLONG-Pairs) and the top topic of each of many users. The one-user kinds
+#   (user_label_count, timeline, top_topic) go: no user holds a floor's worth of lines.
+# - Sources: CLINC, LEDGAR and arXiv. MASSIVE leaves training: at these sizes too few of its labels have enough
+#   texts to fill a log without repeating them.
+# - Thresholds sit where labelling a sample of the lines won't settle them (labels_over's gap at most 3% of the log,
+#   a top topic's lead at most 20% of the user's lines), while a few mislabelled lines still don't flip them.
+
+KINDS_V4 = {"label_count": 0.14, "labels_over": 0.12, "users_with_label": 0.16, "pairs": 0.34, "top_topics": 0.24}
+KINDS = KINDS_V4  # what training draws now
+TRAIN_SET_V4 = (CLINC, LEDGAR, ARXIV)
+SCOPE_FLOOR_LINES = {1: 1500, 2: 2000, 3: 2700, 4: 3400, 5: 4100}
+# Long lines: as many characters as the line floor's lines of 105 characters (arXiv's), so the line floor binds for
+# short-line sources and LEDGAR needs 157K-431K characters labelled: about the ~160K the root can print in a whole
+# episode at level 1, and several times it at level 5.
+SCOPE_FLOOR_CHARS = {level: 105 * lines for level, lines in SCOPE_FLOOR_LINES.items()}
+LOG_STRETCH = (1.6, 1.9)
+MAX_CHARS = 600_000
+MAX_LINE_CHARS = data.LEDGAR_MAX_CHARS + 100  # the longest text, with its date and user
+LINES_PER_USER_V4, USERS_MIN_V4 = (110, 170), 8  # users scale with the log: one per 110-170 lines, at least 8
+TOP_GAP_V4 = (0.15, 0.4)  # how far a user's second topic's rate runs behind their top one's
+WINDOW_SHARE_V4, WINDOW_SLACK = 0.4, 100  # how often a count is over a date window, which leaves out >= this many lines
+LABELS_OVER_GAP_V4 = (0.01, 0.03)  # the gap at the threshold, as shares of the log (and at least 6 lines)
+TOP_MARGIN_V4 = (0.02, 0.2)  # a listed user's top topic leads by max(3, lo) to hi of their lines
+TOP_MIN_LINES = 20
+LISTED_MIN = 6
+TOP_SHARE_MAX = 0.4  # no topic is the top of more than this share of the listed users
+SAME_TOP_BLIND_F1_MAX = 0.5  # all pairs of the listed users, the strongest metadata guess for pairs_same_top
+PAIR_MEMBERS_V4 = {1: 6, 2: 7, 3: 8, 4: 9, 5: 10}
+PAIR_THRESHOLDS_V4 = (2, 3, 4)
+
+
+def scope_floor(level: int, line_chars: float) -> int:
+    """The fewest lines a level-`level` question may need labelled, for lines of `line_chars` characters."""
+    return min(SCOPE_FLOOR_LINES[level], math.ceil(SCOPE_FLOOR_CHARS[level] / line_chars))
+
+
+def _log_v4(rng: random.Random, variant: str, level: int) -> _Log:
+    fmt = rng.choice(TRAIN_FORMATS if variant == "train" else HELDOUT_FORMATS)
+    k = LABELS_V3[level]
+    stretch = rng.uniform(*LOG_STRETCH)
+    sizing = {}
+
+    def plan(source: Source, fmt_chars: int):
+        line = fmt_chars + _OWN_MEAN[source.name] + 1
+        floor = scope_floor(level, line)
+        n = min(round(floor * stretch), int(MAX_CHARS / line))
+        sizing["floor"] = floor
+        users = tuple(max(USERS_MIN_V4, round(n / per)) for per in reversed(LINES_PER_USER_V4))
+        # n lines, and never past MAX_CHARS: the chosen labels' texts can run longer than the source's mean
+        return int(1.3 * n / k), lambda rows, size: len(rows) < n and size < MAX_CHARS - MAX_LINE_CHARS, users
+
+    log = _fill_log(rng, variant, fmt, k, TRAIN_SET_V4, plan, _user_topics_v4)
+    log.floor = sizing["floor"]
+    return log
+
+
+def _user_topics_v4(rng: random.Random, labels: list, weight: dict, k: int, span: int) -> tuple:
+    """v4's user: 2-4 topics (picked by the topics' weights), all active all along. Any of them may be the user's top;
+    the second runs TOP_GAP_V4 behind it and the rest further back, so the top leads by a little: enough that a few
+    mislabelled lines don't change it, little enough that settling it takes most of the user's lines."""
+    lo, hi = TOPICS_PER_USER[k]
+    topics = _weighted_sample(rng, labels, [weight[name] for name in labels], rng.randint(lo, hi))
+    rng.shuffle(topics)
+    rates = [1.0, 1.0 - rng.uniform(*TOP_GAP_V4)][:len(topics)]
+    rates += [rates[1] * rng.uniform(0.4, 0.9) for _ in topics[2:]]
+    return topics, rates, [(0, span)] * len(topics)
+
+
+def _settle(rows: list, decided: Callable[[collections.Counter, int], bool]) -> int:
+    """How many of `rows` (in date order) must be labelled before `decided(counts so far, rows left)` holds."""
+    counts: collections.Counter = collections.Counter()
+    for j, row in enumerate(rows):
+        if decided(counts, len(rows) - j):
+            return j
+        counts[row[2]] += 1
+    return len(rows)
+
+
+def _settle_at_least(rows: list, needs: dict) -> int:
+    """Lines to label before it's settled whether each label in `needs` has at least its count."""
+    def decided(counts, left):
+        return all(counts[name] >= t for name, t in needs.items()) or \
+            any(counts[name] + left < t for name, t in needs.items())
+    return _settle(rows, decided)
+
+
+def _settle_top(rows: list) -> int:
+    """Lines to label before the user's top topic can't change: its lead exceeds the lines left."""
+    def decided(counts, left):
+        ranked = counts.most_common(2) + [(None, 0), (None, 0)]
+        return ranked[0][1] - ranked[1][1] > left
+    return _settle(rows, decided)
+
+
+def _settle_over(rows: list, labels: list, threshold: int) -> int:
+    """Lines to label before every label's 'more than threshold' is settled."""
+    def decided(counts, left):
+        return all(counts[name] > threshold or counts[name] + left <= threshold for name in labels)
+    return _settle(rows, decided)
+
+
+def _scoped(grading: dict, scope: int, log: _Log) -> dict | None:
+    if scope < log.floor:
+        return None
+    grading.update(scope_lines=scope, scope_floor=log.floor)
+    return grading
+
+
+def _ask_label_count_v4(rng, log, level):
+    rows, key, fill = log.rows, "label_count", {}
+    if len(rows) - WINDOW_SLACK >= log.floor and rng.random() < WINDOW_SHARE_V4:
+        window = _scope_window(rows, rng, log.floor, len(rows) - WINDOW_SLACK)
+        if not window:
+            return None
+        rows, key = window[2], "window_label_count"
+        fill = {"start": _fmt_date(window[0]), "end": _fmt_date(window[1])}
+    found = _count_question(rng, log, rows)  # an exact count needs every line in scope
+    if not found:
+        return None
+    label, gold, grading = found
+    return key, {**fill, "label": label}, gold, _scoped(grading, len(rows), log)
+
+
+def _ask_labels_over_v4(rng, log, level):
+    n, k = len(log.rows), len(log.labels)
+    counts = {name: sum(r[2] == name for r in log.rows) for name in log.labels}
+    ordered = sorted(counts.values())
+    low, high = max(6, math.ceil(LABELS_OVER_GAP_V4[0] * n)), LABELS_OVER_GAP_V4[1] * n
+    options = [i for i in range(k - 1) if low <= ordered[i + 1] - ordered[i] <= high and 1 <= k - 1 - i <= k // 2]
+    if not options:
+        return None
+    i = rng.choice(options)
+    threshold = (ordered[i] + ordered[i + 1]) // 2
+    answer = sorted(name for name in log.labels if counts[name] > threshold)
+    grading = {"type": "list", "item": "entity", "blind": list(log.labels)}
+    return "labels_over", {"threshold": threshold}, answer, \
+        _scoped(grading, _settle_over(log.rows, log.labels, threshold), log)
+
+
+def _ask_users_with_label_v4(rng, log, level):
+    users = log.active
+    for label in _shuffled(rng, log.labels):
+        per = {u: sum(r[2] == label for r in log.by_user[u]) for u in users}
+        for cut in _shuffled(rng, range(2, max(per.values()) + 1)):
+            answer = sorted(u for u in users if per[u] >= cut)
+            if not 2 <= len(answer) <= max(2, len(users) // 2):
+                continue
+            if sum(per[u] in (cut - 1, cut) for u in users) > FRAGILE_MAX:
+                continue
+            scope = sum(_settle_at_least(log.by_user[u], {label: cut}) for u in users)
+            if scope < log.floor:
+                continue
+            blind, f1 = _best_prefix(users, answer, lambda us: sorted(us))
+            if f1 > LIST_BLIND_F1_MAX:
+                continue
+            grading = {"type": "list", "item": "entity", "blind": blind, "blind_f1": round(f1, 4)}
+            return "users_with_label", {"label": label, "threshold": cut}, answer, _scoped(grading, scope, log)
+    return None
+
+
+def _ask_pairs_both_v4(rng, log, level):
+    users = log.active
+    per = {name: {u: sum(r[2] == name for r in log.by_user[u]) for u in users} for name in log.labels}
+    for x, y in _shuffled(rng, itertools.combinations(log.labels, 2)):
+        for t in _shuffled(rng, PAIR_THRESHOLDS_V4):
+            members = [u for u in users if per[x][u] >= t and per[y][u] >= t]
+            if not 3 <= len(members) <= PAIR_MEMBERS_V4[level]:
+                continue
+            fragile = sum(min(per[x][u], per[y][u]) == t if u in members else
+                          (per[x][u] == t - 1 and per[y][u] >= t) or (per[y][u] == t - 1 and per[x][u] >= t)
+                          for u in users)
+            if fragile > FRAGILE_MAX:
+                continue
+            scope = sum(_settle_at_least(log.by_user[u], {x: t, y: t}) for u in users)
+            if scope < log.floor:
+                continue
+            answer = _pairs_of(members)
+            blind, f1 = _best_prefix(users, answer, _pairs_of)
+            if f1 > LIST_BLIND_F1_MAX:
+                continue
+            first, second = (x, y) if rng.random() < 0.5 else (y, x)
+            grading = {"type": "list", "item": "entity", "blind": blind, "blind_f1": round(f1, 4)}
+            return "pairs_both", {"label": first, "label2": second, "threshold": t}, answer, \
+                _scoped(grading, scope, log)
+    return None
+
+
+def _clear_top_v4(log: _Log, user: str) -> bool:
+    """Enough lines, and a top topic that leads the next by enough that a few mislabelled lines don't change it, but
+    not by so much that labelling a sample of the user's lines would find it."""
+    lines, counts = len(log.by_user[user]), _top_order(log, user)[1]
+    lead = counts[0] - counts[1]
+    return lines >= TOP_MIN_LINES and max(3, TOP_MARGIN_V4[0] * lines) <= lead <= TOP_MARGIN_V4[1] * lines
+
+
+def _listed_users(rng, log, balance: bool) -> list | None:
+    """Users with a clear top topic, in random order, until their lines to label reach the floor (and LISTED_MIN).
+    With `balance`, no topic is the top of more than TOP_SHARE_MAX of them as they're added."""
+    listed, tops, scope = [], collections.Counter(), 0
+    for user in _shuffled(rng, [u for u in log.active if _clear_top_v4(log, u)]):
+        top = _top_order(log, user)[0][0]
+        if balance and tops[top] + 1 > max(1, int(TOP_SHARE_MAX * (len(listed) + 1))):
+            continue
+        listed.append(user)
+        tops[top] += 1
+        scope += _settle_top(log.by_user[user])
+        if scope >= log.floor and len(listed) >= LISTED_MIN:
+            return sorted(listed, key=int)
+    return None
+
+
+def _ask_top_topics(rng, log, level):
+    listed = _listed_users(rng, log, balance=True)
+    if not listed:
+        return None
+    top = {u: _top_order(log, u)[0][0] for u in listed}
+    answer = sorted(f"{u}|{top[u]}" for u in listed)
+    # The strongest metadata guess: one topic for every user (the best one, an oracle pick).
+    guesses = {name: sorted(f"{u}|{name}" for u in listed) for name in log.labels}
+    name = max(log.labels, key=lambda n: (reward.set_f1(set(guesses[n]), set(answer)), n))
+    f1 = reward.set_f1(set(guesses[name]), set(answer))
+    if f1 > TOP_SHARE_MAX:
+        return None
+    scope = sum(_settle_top(log.by_user[u]) for u in listed)
+    grading = {"type": "list", "item": "entity", "blind": guesses[name], "blind_f1": round(f1, 4)}
+    return "top_topics", {"user_list": ", ".join(listed)}, answer, _scoped(grading, scope, log)
+
+
+def _ask_pairs_same_top_v4(rng, log, level):
+    listed = _listed_users(rng, log, balance=False)
+    if not listed:
+        return None
+    top = {u: _top_order(log, u)[0][0] for u in listed}
+    answer = sorted(_pair(a, b) for a, b in itertools.combinations(listed, 2) if top[a] == top[b])
+    if len(answer) < 2:
+        return None
+    blind, f1 = _best_prefix([u for u in log.active if u in top], answer, _pairs_of)
+    if f1 > SAME_TOP_BLIND_F1_MAX:
+        return None
+    scope = sum(_settle_top(log.by_user[u]) for u in listed)
+    grading = {"type": "list", "item": "entity", "blind": blind, "blind_f1": round(f1, 4)}
+    return "pairs_same_top", {"user_list": ", ".join(listed)}, answer, _scoped(grading, scope, log)
+
+
+def _ask_pairs_v4(rng, log, level):
+    for ask in _shuffled(rng, [_ask_pairs_both_v4, _ask_pairs_same_top_v4]):
+        posed = ask(rng, log, level)
+        if posed:
+            return posed
+    return None
+
+
+ASKERS_V4 = {"label_count": _ask_label_count_v4, "labels_over": _ask_labels_over_v4,
+             "users_with_label": _ask_users_with_label_v4, "pairs": _ask_pairs_v4, "top_topics": _ask_top_topics}
+DENSE = {V3_VERSION: (KINDS_V3, ASKERS_V3, _log_v3), GENERATOR_VERSION: (KINDS_V4, ASKERS_V4, _log_v4)}
+
+
+def _build_dense(seed: int, family: str, level: int, task_id: str, kind: str | None, version: str) -> Task:
+    """A v3 or v4 task. The kind is drawn once from the seed (so the mix is exactly the version's kinds); the log and
+    question are re-drawn from deterministic sub-seeds until the question is well posed and no metadata guess
+    scores."""
+    kinds, askers, make_log = DENSE[version]
     variant = _variant(family)
     if level not in LEVELS:
         raise ValueError(f"no aggregation level {level} (levels 1-{MAX_LEVEL})")
     if kind is None:
-        kind = random.Random(_sub_seed(seed, "kind")).choices(list(KINDS), list(KINDS.values()))[0]
-    if kind not in KINDS:
-        raise ValueError(f"no v3 aggregation kind {kind!r}")
+        kind = random.Random(_sub_seed(seed, "kind", version)).choices(list(kinds), list(kinds.values()))[0]
+    if kind not in kinds:
+        raise ValueError(f"no {version} kind {kind!r}")
     templates = TRAIN_TEMPLATES if variant == "train" else HELDOUT_TEMPLATES
     for attempt in range(MAX_DRAWS):
-        rng = random.Random(_sub_seed(seed, attempt))
-        log = _log_v3(rng, variant, level)
+        rng = random.Random(_sub_seed(seed, attempt, version))
+        log = make_log(rng, variant, level)
         for _ in range(QUESTION_TRIES):
-            posed = ASKERS[kind](rng, log, level)
-            if not posed:
+            posed = askers[kind](rng, log, level)
+            if not posed or posed[3] is None:
                 continue
             key, fill, answer, grading = posed
             src = log.source
             question = rng.choice(templates[key]).format(
                 labels=_label_list(log.labels), item=src.item, items=src.items, verb=src.verb,
                 verb_base=src.verb_base, **fill)
-            grading.update(kind=kind, template=key, code_only=False, source=src.name, generator=GENERATOR_VERSION,
+            grading.update(kind=kind, template=key, code_only=False, source=src.name, generator=version,
                            redraws=attempt)
             return Task(task_id, family, question, log.context, answer=answer, level=level, grading=grading)
     raise RuntimeError(f"could not pose a {kind} question in {MAX_DRAWS} draws")
@@ -981,8 +1288,9 @@ def make_task(seed: int, family: str, level: int = 1, task_id: str | None = None
               kind: str | None = None) -> Task:
     """One task from a seed. The task id never contains the seed (H3).
 
-    The generator is v3 unless the task id belongs to an eval set frozen before v3 (`version_for`), or `version`
-    names one. `kind` (v3 only) asks for one kind of question instead of drawing it from KINDS.
+    The generator is the current one (v4) unless the task id belongs to an eval set frozen before v3
+    (`version_for`), or `version` names one (v2, v3 or v4). `kind` (v3 and v4) asks for one kind of question instead
+    of drawing it from the version's kinds.
     """
     task_id = task_id or f"{family}-L{level}-{secrets.token_hex(4)}"
     version = version or version_for(task_id)
@@ -990,6 +1298,6 @@ def make_task(seed: int, family: str, level: int = 1, task_id: str | None = None
         if kind is not None:
             raise ValueError("the v2 generator draws its own kind")
         return _build(random.Random(seed), family, level, task_id)
-    if version != GENERATOR_VERSION:
+    if version not in DENSE:
         raise ValueError(f"unknown aggregation generator {version!r}")
-    return _build_v3(seed, family, level, task_id, kind)
+    return _build_dense(seed, family, level, task_id, kind, version)

@@ -1,5 +1,8 @@
 """aggregation-v3 (step 12): dense kinds, OOLONG count credit, re-draws, label-free lines, and the frozen eval sets.
 
+Since aggregation-v4 (tests/test_aggregation_v4.py) training draws v4; v3 stays reachable with version=, and these
+tests ask for it that way.
+
 The generator tests read the data root (rlm_rl/data.py) and skip without it; the count scorer and template tests
 don't need it.
 
@@ -27,6 +30,7 @@ from tests.test_data_families import FamilyContract, parse_lines, seed_of
 HAVE_DATA = data.available()
 needs_data = unittest.skipUnless(HAVE_DATA, "no data root (rlm_rl/data.py)")
 ROOT = Path(__file__).resolve().parents[1]
+V3 = aggregation.V3_VERSION
 
 V3_TEMPLATES = {"label_count", "window_label_count", "user_label_count", "user_window_label_count", "labels_over",
                 "users_with_label", "pairs_both", "pairs_same_top", "timeline_first", "timeline_last", "top_topic",
@@ -97,14 +101,14 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual(held & train, set())
 
     def test_training_draws_no_code_only_kind(self):
-        self.assertFalse(set(aggregation.KINDS) & set(aggregation.CODE_ONLY_KINDS))
-        self.assertAlmostEqual(sum(aggregation.KINDS.values()), 1.0)
+        self.assertFalse(set(aggregation.KINDS_V3) & set(aggregation.CODE_ONLY_KINDS))
+        self.assertAlmostEqual(sum(aggregation.KINDS_V3.values()), 1.0)
         # The kind comes from its own sub-seed, so the mix is KINDS' weights exactly, whatever the re-draws.
         n, drawn = 6000, collections.Counter()
         for seed in range(n):
             rng = random.Random(aggregation._sub_seed(seed, "kind"))
-            drawn[rng.choices(list(aggregation.KINDS), list(aggregation.KINDS.values()))[0]] += 1
-        for kind, weight in aggregation.KINDS.items():
+            drawn[rng.choices(list(aggregation.KINDS_V3), list(aggregation.KINDS_V3.values()))[0]] += 1
+        for kind, weight in aggregation.KINDS_V3.items():
             self.assertAlmostEqual(drawn[kind] / n, weight, delta=0.02, msg=kind)
 
     def test_frozen_eval_sets_keep_the_v2_generator(self):
@@ -113,8 +117,7 @@ class TemplateTest(unittest.TestCase):
         for task_id in (None, "aggregation-L1-1a2b3c4d", "selection-v4-aggregation-L1-00", "selection-v10-x",
                         "selection-v3-aggregation-L1-00"):
             self.assertEqual(aggregation.version_for(task_id), aggregation.GENERATOR_VERSION, task_id)
-        self.assertEqual(aggregation.GENERATOR_VERSION, "aggregation-v3")
-        self.assertEqual(tasks.versions(["aggregation"]), {"aggregation": "aggregation-v3"})
+        self.assertEqual(aggregation.V3_VERSION, "aggregation-v3")
 
     def test_label_pattern(self):
         p = aggregation.label_pattern(["credit_cards", "Taxes", "FOOD & DRINK", "news", "Base Salary", "work"])
@@ -246,10 +249,10 @@ class AggregationV3Test(FamilyContract, unittest.TestCase):
         rng, cls.specs, cls.sample = random.Random(31), [], []
         for family in aggregation.FAMILIES:
             for level in aggregation.LEVELS:
-                for kind in aggregation.KINDS:
+                for kind in aggregation.KINDS_V3:
                     for _ in range(2):
                         cls.specs.append((seed_of(rng), family, level, kind))
-                        cls.sample.append(aggregation.make_task(*cls.specs[-1][:3], kind=kind))
+                        cls.sample.append(aggregation.make_task(*cls.specs[-1][:3], kind=kind, version=V3))
 
     def test_every_kind_family_and_level(self):
         for task in self.sample:
@@ -259,7 +262,7 @@ class AggregationV3Test(FamilyContract, unittest.TestCase):
                 lo, hi = aggregation.LEVELS[task.level]
                 self.assertTrue(lo * 0.95 <= len(task.context) <= hi * 1.05, len(task.context))
                 self.assertEqual((g["generator"], g["code_only"]), ("aggregation-v3", False))
-                self.assertIn(g["kind"], aggregation.KINDS)
+                self.assertIn(g["kind"], aggregation.KINDS_V3)
                 self.assertIn(g["template"], V3_TEMPLATES)
                 labels = re.findall(r"^- (.+?): ", task.question, re.M)
                 self.assertEqual(len(labels), aggregation.LABELS_V3[task.level])
@@ -307,9 +310,10 @@ class AggregationV3Test(FamilyContract, unittest.TestCase):
         counts, places = [], collections.Counter()
         for level in aggregation.LEVELS:
             for kind in aggregation.COUNT_KINDS:
-                counts += [aggregation.make_task(seed_of(rng), "aggregation", level, kind=kind) for _ in range(12)]
+                counts += [aggregation.make_task(seed_of(rng), "aggregation", level, kind=kind, version=V3)
+                           for _ in range(12)]
             for _ in range(12):
-                task = aggregation.make_task(seed_of(rng), "aggregation", level, kind="timeline")
+                task = aggregation.make_task(seed_of(rng), "aggregation", level, kind="timeline", version=V3)
                 user = re.search(r"user (\d{5})", task.question)[1]
                 dates = sorted({d.isoformat() for d, u, _ in parse_lines(task.context) if u == user})
                 seq = dates if task.grading["template"] == "timeline_first" else dates[::-1]
@@ -337,7 +341,7 @@ class AggregationV3Test(FamilyContract, unittest.TestCase):
         redrawn = [(spec, t) for spec, t in zip(self.specs, self.sample) if t.grading["redraws"] > 0]
         self.assertTrue(redrawn)
         for (seed, family, level, kind), task in redrawn[:4]:
-            again = aggregation.make_task(seed, family, level, task.task_id, kind=kind)
+            again = aggregation.make_task(seed, family, level, task.task_id, kind=kind, version=V3)
             self.assertEqual((again.question, again.context, again.answer, again.grading),
                              (task.question, task.context, task.answer, task.grading))
 
@@ -388,13 +392,13 @@ class AggregationV3Test(FamilyContract, unittest.TestCase):
         for level, sources in by_level.items():
             self.assertGreaterEqual(len(sources), 3, (level, sources))
 
-    def test_default_draw_is_v3_with_a_drawn_kind(self):
+    def test_v3_draws_its_own_kinds(self):
         rng = random.Random(51)
-        drawn = [tasks.make_task("aggregation", rng.choice([1, 3, 5]), seed=seed_of(rng)) for _ in range(16)]
+        drawn = [aggregation.make_task(seed_of(rng), "aggregation", rng.choice([1, 3, 5]), version=V3) for _ in range(16)]
         self.assertTrue(all(t.grading["generator"] == "aggregation-v3" for t in drawn))
         self.assertGreaterEqual(len({t.grading["kind"] for t in drawn}), 4)
         with self.assertRaises(ValueError):
-            aggregation.make_task(1, "aggregation", 1, kind="most_active_user")
+            aggregation.make_task(1, "aggregation", 1, kind="most_active_user", version=V3)
         with self.assertRaises(ValueError):
             aggregation.make_task(1, "aggregation", 1, version=aggregation.LEGACY_VERSION, kind="pairs")
 

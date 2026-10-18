@@ -286,14 +286,20 @@ def recount(task, pools):
 @needs_data
 class AggregationTest(FamilyContract, unittest.TestCase):
     def test_every_family_and_level(self):
+        """Sizes: v2 (the frozen eval sets) by LEVELS' characters; v4 (training) by the lines its questions need
+        labelled, up to MAX_CHARS (tests/test_aggregation_v4.py has the rest)."""
         rng = random.Random(1)
         for family in aggregation.FAMILIES:
             for level in aggregation.LEVELS:
                 task = tasks.make_task(family, level, seed=seed_of(rng))
+                legacy = aggregation.make_task(seed_of(rng), family, level, version=aggregation.LEGACY_VERSION)
                 with self.subTest(family=family, level=level):
                     self.check_task(task, family, level)
+                    self.check_task(legacy, family, level)
                     lo, hi = aggregation.LEVELS[level]
-                    self.assertTrue(lo * 0.95 <= len(task.context) <= hi * 1.05, len(task.context))
+                    self.assertTrue(lo * 0.95 <= len(legacy.context) <= hi * 1.05, len(legacy.context))
+                    self.assertLessEqual(len(task.context), aggregation.MAX_CHARS)
+                    self.assertGreaterEqual(task.grading["scope_lines"], task.grading["scope_floor"])
 
     def test_the_answer_is_what_the_context_says(self):
         """The v2 generator, which the eval sets frozen before v3 still build (tests/test_aggregation_v3.py covers
@@ -321,11 +327,12 @@ class AggregationTest(FamilyContract, unittest.TestCase):
         self.check_deterministic("aggregation", 1)
 
     def test_every_training_source_is_drawn(self):
-        """Decision 7c raised aggregation to 45%, so it draws on four registers, not one (LEDGAR and arXiv added)."""
+        """Decision 7c raised aggregation to 45%, so it draws on several registers, not one (LEDGAR and arXiv added).
+        Since aggregation-v4 training draws three: MASSIVE's labels have too few texts for v4's logs."""
         rng = random.Random(5)
         drawn = {tasks.make_task("aggregation", rng.choice([1, 2, 3]), seed=seed_of(rng)).grading["source"]
-                 for _ in range(60)}
-        self.assertEqual(drawn, {s.name for s in aggregation.TRAIN_SET})
+                 for _ in range(30)}
+        self.assertEqual(drawn, {s.name for s in aggregation.TRAIN_SET_V4})
         names = [label for s in aggregation.TRAIN_SET + (aggregation.HELDOUT,) for label in s.labels]
         self.assertEqual(len(names), len(set(names)))  # no label name is shared between sources
 
