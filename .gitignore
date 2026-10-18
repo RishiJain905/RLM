@@ -21,3 +21,5 @@ results/dashboard/
 results/dashboard-step*/
 results/red-team-fixes/
 .playwright-mcp/
+# the step-12 pilot's task lists hold the tasks' seeds (H3)
+results/pilot-*/
