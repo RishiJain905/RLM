@@ -20,7 +20,7 @@ need more than that:
   the next turn's prompt drops, so the whole conversation no longer lines up. Each re-scored
   rollout then re-scores `KL_TURNS_PER_THINKING_EPISODE` of its turns, picked at random, one
   request each: the conversation up to that turn, with the turn itself as the assistant's
-  unfinished reply, its thinking inside `<think>` tags, under the same thinking setting. That
+  unfinished reply, its thinking in the message's `reasoning_content`, under the same thinking setting. That
   renders exactly the prompt the turn was sampled from plus its sampled tokens, except the final
   end-of-turn token, which isn't scored. Two turns keep the cost near one whole-conversation request.
 """
@@ -134,10 +134,15 @@ def align_turn(choice: Any, prompt_ids: list[int], base_logprobs: list[float | N
 
 
 def thinking_turn_messages(ep: Episode, k: int) -> list[dict]:
-    """The conversation up to turn k, with turn k as the assistant's unfinished reply, its thinking in <think> tags."""
+    """The conversation up to turn k, with turn k as the assistant's unfinished reply and its thinking in the message's
+    `reasoning_content`, which the template renders as the think block the model sampled.
+
+    W&B's template doesn't parse <think> tags inside the content: it adds an empty think block before them, so in
+    prod-v1's first step every re-scored turn misaligned. A probe on 2026-10-18 lined up token for token with the
+    field (the template also evens out the newlines around the block)."""
     turn = ep.turns[k]
-    reply = f"<think>\n{turn.reasoning or ''}\n</think>\n\n{turn.reply}"
-    return ep.messages[:2 + 2 * k] + [{"role": "assistant", "content": reply}]
+    return ep.messages[:2 + 2 * k] + [{"role": "assistant", "content": turn.reply,
+                                       "reasoning_content": turn.reasoning or ""}]
 
 
 async def kl_to_base(client: ModelClient, episodes: list[Episode], *, base_model: str, n: int,

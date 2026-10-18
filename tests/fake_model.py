@@ -63,17 +63,18 @@ def render(messages: list[dict], thinking: bool = False, continue_final: bool = 
     """Prompt token ids as Qwen3.8's template lays them out, with fake ids for the text.
 
     With `continue_final` the last message is the assistant's unfinished reply: no end-of-turn token and no new
-    generation prompt. With thinking on, its thinking (in <think> tags in the content) is rendered as the model
-    sampled it."""
+    generation prompt. With thinking on, its thinking (the message's `reasoning_content` or `reasoning`) is rendered
+    as the model sampled it. Like W&B's real template (prod-v1, 2026-10-18), <think> tags inside the content aren't
+    parsed: the content gets the empty think block in front, so those tokens don't line up."""
     ids = []
     last = len(messages) - 1
     for i, m in enumerate(messages):
         ids += [rclient.IM_START_ID, ROLE_IDS[m["role"]], NEWLINE_ID]
         content = m["content"]
-        if continue_final and i == last and thinking and "</think>" in content:
-            reasoning = content.split("</think>")[0].split("<think>")[-1].strip("\n")
-            ids += [rclient.THINK_START_ID, NEWLINE_ID] + thinking_ids(reasoning)
-            content = content.split("</think>")[-1].lstrip("\n")
+        reasoning = m.get("reasoning_content", m.get("reasoning"))
+        if continue_final and i == last and thinking and reasoning is not None:
+            ids += [rclient.THINK_START_ID, NEWLINE_ID] + thinking_ids(reasoning.strip("\n"))
+            content = content.lstrip("\n")
         elif m["role"] == "assistant":
             ids += THINKING_OFF_TAIL[3:]
         ids += fake_ids(content)

@@ -89,12 +89,19 @@ class SignalsTest(MonitorCase):
             self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": True, "reasoning_effort": "medium"})
             self.assertTrue(body["continue_final_message"])
             self.assertFalse(body["add_generation_prompt"])
-            self.assertIn("<think>", body["messages"][-1]["content"])
+            self.assertNotIn("<think>", body["messages"][-1]["content"])
+            self.assertTrue(body["messages"][-1]["reasoning_content"])  # the thinking in its own field
         # every scored token is a sampled one but the final end-of-turn token of each re-scored turn
         ep = episodes[0]
         pairs = monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
             monitor.thinking_turn_messages(ep, 0), model=BASE, thinking="medium", continue_final=True))
         self.assertEqual(len(pairs), len(ep.choices[0].model_extra["token_ids"]) - 1)
+        # thinking left in <think> tags inside the content gets an empty think block in front, as on W&B (prod-v1
+        # step 1): it doesn't line up
+        turn = ep.turns[0]
+        tagged = ep.messages[:2] + [{"role": "assistant", "content": f"<think>\n{turn.reasoning}\n</think>\n\n{turn.reply}"}]
+        self.assertIsNone(monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
+            tagged, model=BASE, thinking="medium", continue_final=True)))
         # a turn whose thinking was recorded wrongly no longer lines up, and is counted
         ep.turns[0].reasoning = "something else"
         self.assertIsNone(monitor.align_turn(ep.choices[0], *await self.client.prompt_logprobs(
