@@ -11,6 +11,8 @@ Every rollout gets one scalar, computed on the host in this order:
    - entities: no partial credit
    - free text: 0.8 x token-F1 against the best of the answer and its aliases, with the question's own words
                 left out. Free text has no blind guess, and an empty or generic answer ("unknown") earns 0.
+                Equivalent forms are exact: one date in any format, a number with or without its unit, and a
+                country's common or official name.
    So the blind guess itself earns only its lucky exact hits.
 4. A run that turns the format penalty on (off in production: prod-v1's branch 1 got worse under it) takes FORMAT_PENALTY off for each
    broken reply, up to FORMAT_PENALTY_MAX_REPLIES of them (`broken_replies`, applied in run_episode).
@@ -270,14 +272,114 @@ def token_f1(predicted: list[str], gold: list[str], ignore=frozenset()) -> float
     return 2 * precision * recall / (precision + recall)
 
 
+# Equivalent forms (research-v3, 2026-10-18). The pilot scored "Italy" 0 against a gold "Italian Republic" that had
+# no aliases. MuSiQue's golds come in one form each, so a date, a number with a unit and a country name are each
+# compared through a canonical form.
+_MONTH_NAMES = (("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"), ("may",),
+                ("june", "jun"), ("july", "jul"), ("august", "aug"), ("september", "sep", "sept"), ("october", "oct"),
+                ("november", "nov"), ("december", "dec"))
+_MONTHS = {name: month for month, names in enumerate(_MONTH_NAMES, 1) for name in names}
+_DAY_RE = re.compile(r"(\d{1,2})(?:st|nd|rd|th)?")
+# A number alone, or followed by a unit: lowercase words with no digit ("53 member states", "3.5 km", "12%"). A
+# capitalized word after it is a name ("3 Doors Down", "50 Cent"), not a unit.
+_NUMBER_UNIT_RE = re.compile(r"\s*\$?\s*(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(%|[a-z][^\dA-Z]*?)?\s*\.?\s*")
+# A country's common name, then its official and other usual names.
+_COUNTRY_NAMES = (
+    ("italy", "italian republic"), ("france", "french republic"), ("germany", "federal republic of germany"),
+    ("united states", "united states of america", "usa", "us", "u.s.", "u.s.a."),
+    ("united kingdom", "uk", "u.k.", "great britain", "britain",
+     "united kingdom of great britain and northern ireland"),
+    ("china", "people's republic of china", "prc"), ("russia", "russian federation"), ("spain", "kingdom of spain"),
+    ("india", "republic of india"), ("ireland", "republic of ireland", "éire"),
+    ("netherlands", "kingdom of the netherlands", "holland"), ("czech republic", "czechia"),
+    ("iran", "islamic republic of iran"), ("mexico", "united mexican states"),
+    ("brazil", "federative republic of brazil"), ("australia", "commonwealth of australia"),
+    ("soviet union", "ussr", "union of soviet socialist republics"), ("myanmar", "burma"),
+    ("ivory coast", "côte d'ivoire"), ("east timor", "timor-leste"), ("turkey", "türkiye", "republic of turkey"),
+    ("egypt", "arab republic of egypt"), ("philippines", "republic of the philippines"),
+    ("south africa", "republic of south africa"), ("poland", "republic of poland"),
+    ("portugal", "portuguese republic"), ("greece", "hellenic republic"), ("austria", "republic of austria"),
+    ("switzerland", "swiss confederation"), ("sweden", "kingdom of sweden"), ("norway", "kingdom of norway"),
+    ("denmark", "kingdom of denmark"), ("belgium", "kingdom of belgium"), ("argentina", "argentine republic"),
+    ("vietnam", "viet nam", "socialist republic of vietnam"), ("south korea", "republic of korea"),
+    ("north korea", "democratic people's republic of korea", "dprk"), ("japan", "state of japan"),
+    ("saudi arabia", "kingdom of saudi arabia"), ("israel", "state of israel"), ("finland", "republic of finland"),
+    ("indonesia", "republic of indonesia"), ("pakistan", "islamic republic of pakistan"),
+    ("bangladesh", "people's republic of bangladesh"), ("nigeria", "federal republic of nigeria"),
+    ("kenya", "republic of kenya"), ("chile", "republic of chile"), ("colombia", "republic of colombia"),
+    ("peru", "republic of peru"), ("venezuela", "bolivarian republic of venezuela"), ("cuba", "republic of cuba"),
+    ("syria", "syrian arab republic"), ("laos", "lao people's democratic republic"),
+    ("bolivia", "plurinational state of bolivia"), ("tanzania", "united republic of tanzania"),
+    ("united arab emirates", "uae"), ("north macedonia", "macedonia", "republic of macedonia"),
+)
+_COUNTRIES = {normalize_text(name): names[0] for names in _COUNTRY_NAMES for name in names}
+
+
+def _date(norm: str) -> tuple[int, int, int] | None:
+    """A normalized answer that is one whole date, as (year, month, day), day 0 for a month and year:
+    "29 march 2004", "29th of march 2004", "march 29 2004", "2004 03 29" (from 2004-03-29), "march 2004"."""
+    t = norm.split()
+
+    def day(x: str) -> int | None:
+        m = _DAY_RE.fullmatch(x)
+        return int(m.group(1)) if m and 1 <= int(m.group(1)) <= 31 else None
+
+    def year(x: str) -> int | None:
+        return int(x) if re.fullmatch(r"\d{3,4}", x) else None
+
+    if len(t) == 4 and t[1] == "of":
+        t = [t[0], t[2], t[3]]
+    if len(t) == 3:
+        for d, m, y in ((t[0], t[1], t[2]), (t[1], t[0], t[2])):
+            if day(d) and m in _MONTHS and year(y):
+                return year(y), _MONTHS[m], day(d)
+        if re.fullmatch(r"\d{4}", t[0]) and t[1].isdigit() and t[2].isdigit() and 1 <= int(t[1]) <= 12 \
+                and 1 <= int(t[2]) <= 31:
+            return int(t[0]), int(t[1]), int(t[2])
+    if len(t) == 2 and t[0] in _MONTHS and year(t[1]):
+        return year(t[1]), _MONTHS[t[0]], 0
+    return None
+
+
+def _number_unit(value: Any) -> tuple[float, bool] | None:
+    """An answer that is one number, alone or with a unit: (the number, whether a unit follows). None otherwise."""
+    if isinstance(value, bool) or value is None or isinstance(value, (list, dict)):
+        return None
+    if isinstance(value, (int, float)):
+        return (float(value), False) if math.isfinite(value) else None
+    m = _NUMBER_UNIT_RE.fullmatch(str(value))
+    if not m:
+        return None
+    return float(m.group(1).replace(",", "")), bool((m.group(2) or "").strip())
+
+
+def same_answer(answer: Any, gold: Any) -> bool:
+    """Whether two answers are the same in different forms: one date in two formats, a number with and without its
+    unit ("53 member states" and 53), or a country's common and official names ("Italy", "Italian Republic")."""
+    a, g = normalize_text(answer), normalize_text(gold)
+    if a is None or g is None:
+        return False
+    if a == g:
+        return True
+    da, dg = _date(a), _date(g)
+    if da is not None or dg is not None:
+        return da == dg
+    na, ng = _number_unit(answer), _number_unit(gold)
+    if na is not None and ng is not None and na[0] == ng[0] and not (na[1] and ng[1]):
+        return True
+    return _COUNTRIES.get(a) is not None and _COUNTRIES.get(a) == _COUNTRIES.get(g)
+
+
 def score_text(answer: Any, gold: Any, grading: dict) -> Score:
-    """A free-text answer: 1 for a normalized exact match with the gold or an alias, else 0.8 x the best token-F1
-    against them, with the question's own words (grading["ignore"]) left out. An empty or generic answer earns 0."""
+    """A free-text answer: 1 for a normalized exact match with the gold or an alias, or the same answer in another
+    form (`same_answer`), else 0.8 x the best token-F1 against them, with the question's own words
+    (grading["ignore"]) left out. An empty or generic answer earns 0."""
     value = normalize_text(answer)
-    golds = [g for g in (normalize_text(x) for x in [gold, *grading.get("aliases", [])]) if g]
+    forms = [gold, *grading.get("aliases", [])]
+    golds = [g for g in (normalize_text(x) for x in forms) if g]
     if value is None or (value in GENERIC_ANSWERS and value not in golds):
         return Score(0.0, False, dict(_UNPARSED))
-    if value in golds:
+    if value in golds or any(same_answer(answer, x) for x in forms):
         return Score(EXACT_REWARD, True, {"parsed": 1.0, "exact": 1.0, "partial": 0.0, "f1": 1.0})
     ignore = frozenset(grading.get("ignore") or ())
     f1 = max(token_f1(value.split(), g.split(), ignore) for g in golds)

@@ -30,7 +30,7 @@ Families:
 Each split pads only with its own split's text, and no question, MuSiQue sub-question or QAMPARI entity is shared
 across splits.
 
-Levels: 2-hop at ~75K characters (level 1 only), 3-hop from level 2, up to 4-hop at ~700K; list questions grow from
+Levels: 2-hop at ~250K characters (level 1 only), 3-hop from level 2, up to 4-hop at ~1.2M; list questions grow from
 5-6 answers to 10-15 over the same sizes, with more hard negatives.
 
 Research-v2 (Rishi, 2026-10-18: "thorough and complex research questions", nothing the model already knows):
@@ -40,6 +40,15 @@ Research-v2 (Rishi, 2026-10-18: "thorough and complex research questions", nothi
 - Level 2 is 3-hop (2-hop stays at level 1).
 - A list task's blind guess is the grep answer (every document naming the question's entity), so a search alone
   earns nothing and only telling answers from hard negatives does.
+
+Research-v3 (after the pilot, 2026-10-18):
+- Sizes run from ~250K (level 1) to ~1.2M (level 5). At 60-90K the pilot solved level 1 by grep and a few prints.
+- The open-book check (scripts/open_book.py): the base model, given only a question's gold documents (a list: its
+  gold and hard-negative pages), must answer it right (a list: set-F1 >= 0.8). Two of six pilot level-3 tasks were
+  broken (a supporting paragraph about the wrong person). Once its file (OPEN_BOOK) exists, only valid questions are
+  drawn.
+- reward.score_text counts one date in any format, a number with or without its unit, and a country's common or
+  official name as the same answer.
 """
 
 from __future__ import annotations
@@ -55,14 +64,18 @@ from .. import data
 from ..env import Task
 from ..reward import normalize_text
 
-GENERATOR_VERSION = "research-v2"
+GENERATOR_VERSION = "research-v3"
 CLOSED_BOOK = "research/closed-book-v1.json"  # under the data root's derived/; written by scripts/closed_book.py
+OPEN_BOOK = "research/open-book-v1.json"  # under the data root's derived/; written by scripts/open_book.py
 FAMILIES = ("research", "research_select", "research_test")
 SPLIT = {"research": "train", "research_select": "select", "research_test": "test"}
 TRAIN_SOURCES = ("musique", "qampari")
 
-LEVELS = {1: (60_000, 90_000), 2: (120_000, 180_000), 3: (220_000, 300_000), 4: (380_000, 480_000),
-          5: (600_000, 800_000)}
+# Research-v3: the pilot (checkpoint 20, prompt v4) solved every level-1 task at 60-90K with and without sub-calls,
+# by grepping the named entity and printing 2-3 paragraphs. Level 1 now starts at ~250K and level 5 reaches ~1.2M
+# (about x1.48 a level), so no level can be read through by printing.
+LEVELS = {1: (220_000, 280_000), 2: (330_000, 410_000), 3: (490_000, 610_000), 4: (720_000, 900_000),
+          5: (1_060_000, 1_340_000)}
 MAX_LEVEL = max(LEVELS)
 HOPS = {1: (2,), 2: (3,), 3: (3,), 4: (3, 4), 5: (4,)}
 LIST_ANSWERS = {1: (5, 6), 2: (5, 8), 3: (6, 10), 4: (8, 12), 5: (10, 15)}
@@ -70,7 +83,7 @@ LIST_ANSWERS = {1: (5, 6), 2: (5, 8), 3: (6, 10), 4: (8, 12), 5: (10, 15)}
 # used as a distractor in ~3 of 17 sampled), so most research tasks are MuSiQue's multi-hop chains.
 LIST_SHARE = 0.2
 # The share of a context's padding drawn from documents that share a word with the question *(mine)*.
-NEAR_SHARE = {1: 0.25, 2: 0.3, 3: 0.35, 4: 0.4, 5: 0.45}
+NEAR_SHARE = {1: 0.3, 2: 0.35, 3: 0.4, 4: 0.45, 5: 0.5}
 # Hard negatives. A gold document always names the question's entity, and padding never does, so a search for the
 # entity finds the answers plus the hard negatives: a list task needs at least NEG_RATIO x its answer count of them
 # (fewer only when a small eval pool has none such), and holds up to NEG_CAP *(mine)*.
@@ -80,9 +93,6 @@ PAGE_MAX_CHARS = 1_000  # a QAMPARI page document keeps its needed sentences, th
 
 HEADER = "# ===== doc {n}: {title}"
 HEADER_RE = re.compile(r"^# ===== doc (\d+): (.*)$", re.M)
-# Sizes count every header as a 4-digit doc number, so a context is never over its level's top; the shorter numbers
-# of the first 999 documents save up to 1,107 characters, which this margin over the bottom covers.
-HEADER_SLACK = 1_200
 
 TRAIN_HOP = (
     "Answer this question from the documents in `context`:\n\n{question}\n\n`context` is a large collection of "
@@ -181,13 +191,23 @@ def closed_book() -> dict | None:
 
 
 @functools.lru_cache(maxsize=None)
+def open_book() -> dict | None:
+    """The open-book check's results (scripts/open_book.py), or None before it has run."""
+    path = data.derived(OPEN_BOOK)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+@functools.lru_cache(maxsize=None)
 def usable(source: str, split: str) -> frozenset[int] | None:
-    """The question indices a split may draw: checked closed-book and not answered from memory. None: no check for
-    this split yet, so every question."""
+    """The question indices a split may draw: checked closed-book and not answered from memory, and, once the
+    open-book check has run, answerable from the gold documents alone ("valid"). None: no closed-book check for this
+    split yet, so every question."""
     row = ((closed_book() or {}).get("results") or {}).get(source, {}).get(split)
     if row is None:
         return None
-    return frozenset(row["checked"]) - frozenset(row["known"])
+    ok = frozenset(row["checked"]) - frozenset(row["known"])
+    checked = ((open_book() or {}).get("results") or {}).get(source, {}).get(split)
+    return ok if checked is None else ok & frozenset(checked["valid"])
 
 
 @functools.lru_cache(maxsize=None)
@@ -226,8 +246,11 @@ def list_pool(split: str, level: int) -> tuple[int, ...]:
     return tuple(i for i, q in enumerate(questions) if abs(len(q["gold"]) - lo) + abs(len(q["gold"]) - hi) == best)
 
 
-def _doc_len(title: str, text: str) -> int:
-    return len(HEADER.format(n=1000, title=title)) + len(text) + 2  # the header, the text, a newline, a blank line
+def _doc_len(title: str, text: str, n: int) -> int:
+    """The characters document number n adds: its header, a newline, its text and the blank line after it. Numbers
+    run 1..N whatever the order, so counting the k-th document chosen as number k makes a context's size exact (the
+    sum less the last blank line)."""
+    return len(HEADER.format(n=n, title=title)) + 1 + len(text) + 2
 
 
 def _render(docs: list[tuple[str, str]]) -> str:
@@ -257,8 +280,8 @@ def _fill(rng: random.Random, chosen: list, size: int, budget: int, hi: int, can
                 continue
             if pass_near and not near_re.search(text):
                 continue
-            n = _doc_len(title, text)
-            if size + n > hi:
+            n = _doc_len(title, text, len(chosen) + 1)
+            if size + n > hi + 2:
                 continue
             chosen.append(i)
             taken.add(i)
@@ -281,7 +304,7 @@ def _hop_task(rng: random.Random, split: str, level: int, budget: int) -> tuple[
     own_titles = {paras[i][0] for i in own}
     names = _capital_terms(q["q"])
     name_re = _word_re(names)
-    size = sum(_doc_len(*paras[i]) for i in own)
+    size = sum(_doc_len(*paras[i], n) for n, i in enumerate(own, 1))
 
     def skip(i, title, text):
         return not pad_ok[i] or title in own_titles or (name_re is not None and name_re.search(title) is not None)
@@ -322,7 +345,7 @@ def _list_task(rng: random.Random, split: str, level: int, budget: int) -> tuple
     excluded = set(q["exclude"]) | set(gold) | {pid for pid, _ in negs} | _shared_titles(split)
     texts = {pid: _page_text(pages[pid], sents) for pid, sents in list(gold.items()) + negs}
     chosen = list(texts)
-    size = sum(_doc_len(pages[pid][0], texts[pid]) for pid in chosen)
+    size = sum(_doc_len(pages[pid][0], texts[pid], n) for n, pid in enumerate(chosen, 1))
 
     def doc_of(i):
         if i not in texts:
@@ -363,8 +386,7 @@ def build(seed: int, family: str, level: int = 1, task_id: str | None = None) ->
     task_id = task_id or f"{family}-L{level}-{secrets.token_hex(4)}"
     rng = random.Random(seed)
     kind = _kind(rng)
-    lo, hi = LEVELS[level]
-    budget = rng.randint(lo + HEADER_SLACK, hi)
+    budget = rng.randint(*LEVELS[level]) + 2  # sizes count the last document's blank line, which a context lacks
     heldout = family == "research_test"
     if kind == "multihop":
         question, answer, extra, docs, gold_docs = _hop_task(rng, split, level, budget)
@@ -378,8 +400,9 @@ def build(seed: int, family: str, level: int = 1, task_id: str | None = None) ->
         template = rng.choice(HELDOUT_LIST if heldout else TRAIN_LIST)
         grading = {"type": "list", "item": "entity", "blind": extra.pop("grep"), "answers": extra["answers"],
                    "negatives": extra["negatives"], "source": "qampari"}
-    # which closed-book check filtered the pool: a task's seed draws another question once the check changes
-    grading.update(kind=kind, code_only=False, docs=len(docs), closed_book=(closed_book() or {}).get("version"))
+    # which checks filtered the pool: a task's seed draws another question once a check changes
+    grading.update(kind=kind, code_only=False, docs=len(docs), closed_book=(closed_book() or {}).get("version"),
+                   open_book=(open_book() or {}).get("version"))
     task = Task(task_id, family, template.format(question=question), _render(docs), answer=answer, level=level,
                 grading=grading)
     return task, {"gold_docs": gold_docs, "question": question, "kind": kind, **extra}

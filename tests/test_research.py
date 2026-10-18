@@ -98,6 +98,46 @@ class TextGradingTest(unittest.TestCase):
         self.assertIn("text", reward.ANSWER_TYPES)
         self.assertIn("text", reward.settings()["answer_types"])
 
+    def test_one_date_in_any_format_is_exact(self):
+        grading = {"type": "text", "aliases": [], "blind": None}
+        for gold in ("29 March 2004", "March 29, 2004", "2004-03-29"):
+            for answer in ("29 March 2004", "March 29, 2004", "2004-03-29", "29th of March, 2004", "Mar 29 2004",
+                           "29 march 2004."):
+                with self.subTest(gold=gold, answer=answer):
+                    self.assertTrue(score_answer(answer, gold, grading).correct)
+        self.assertTrue(score_answer("Sept 2001", "September 2001", grading).correct)
+        for answer in ("30 March 2004", "29 March 2005", "March 2004", "2004"):  # another date, or less of it
+            s = score_answer(answer, "29 March 2004", grading)
+            self.assertFalse(s.correct, answer)
+            self.assertLess(s.reward, 1.0)
+        self.assertGreater(score_answer("March 2004", "29 March 2004", grading).reward, 0.0)  # still near
+
+    def test_a_number_matches_it_with_its_unit(self):
+        grading = {"type": "text", "aliases": [], "blind": None}
+        for answer, gold in (("53", "53 member states"), ("53 member states", "53"), ("1,000", "1000 people"),
+                             ("12%", "12"), ("3.5 km", "3.5"), (53, "53 member states")):
+            self.assertTrue(score_answer(answer, gold, grading).correct, (answer, gold))
+        for answer, gold in (("54", "53 member states"), ("53 countries", "53 member states"),
+                             ("3", "3 Doors Down"), ("50", "50 Cent"), ("53 or 54", "53")):
+            self.assertFalse(score_answer(answer, gold, grading).correct, (answer, gold))
+
+    def test_a_countrys_common_and_official_names_match(self):
+        grading = {"type": "text", "aliases": [], "blind": None}
+        for answer, gold in (("Italy", "Italian Republic"), ("the Italian Republic", "Italy"),
+                             ("USA", "United States"), ("U.S.", "United States of America"),
+                             ("UK", "United Kingdom"), ("People's Republic of China", "China"),
+                             ("Burma", "Myanmar"), ("Czechia", "Czech Republic"), ("Russian Federation", "Russia")):
+            self.assertTrue(score_answer(answer, gold, grading).correct, (answer, gold))
+        for answer, gold in (("England", "United Kingdom"), ("France", "Italy"), ("Italian", "Italy"),
+                             ("South Korea", "North Korea"), ("Rome", "Italian Republic")):
+            self.assertFalse(score_answer(answer, gold, grading).correct, (answer, gold))
+
+    def test_equivalent_forms_keep_generic_answers_at_0(self):
+        for gold in ("Italian Republic", "29 March 2004", "53 member states"):
+            for answer in ("unknown", "", None, "N/A", "none", ["Italy"]):
+                self.assertEqual(score_answer(answer, gold, {"type": "text", "aliases": [], "blind": None}).reward,
+                                 0.0, (answer, gold))
+
     def test_episode_scoring_uses_only_a_valid_submit(self):
         task = SimpleNamespace(answer="Bombardier Inc.", grading=self.G)
         self.assertEqual(reward.score(task, SimpleNamespace(submitted=True, answer="Bombardier",
@@ -111,10 +151,12 @@ class TextGradingTest(unittest.TestCase):
 
 @needs_pools
 class ResearchFamilyTest(unittest.TestCase):
-    N = 4  # tasks per family and level, plus 2N more training tasks for the statistical checks
+    N = 3  # tasks per family and level, plus 2N more training tasks for the statistical checks
     LEVELS = range(1, research.MAX_LEVEL + 1)
-    # Keyword search on the question's content words: the median number of distractor documents it hits, by level.
-    MIN_HITS = {1: 20, 2: 40, 3: 80, 4: 120, 5: 200}
+    # Keyword search on the question's content words: the median number of distractor documents it hits, by level
+    # (research-v3 measured 149-183 at level 1 up to 1,086-2,003 at level 5), and the fewest in any one task.
+    MIN_HITS = {1: 90, 2: 140, 3: 250, 4: 350, 5: 600}
+    MIN_TASK_HITS = 40
 
     @classmethod
     def setUpClass(cls):
@@ -213,8 +255,20 @@ class ResearchFamilyTest(unittest.TestCase):
                 top_solves.append(top == gold)
             with self.subTest(level=level, hits=sorted(hits)):
                 self.assertGreaterEqual(statistics.median(hits), self.MIN_HITS[level])
-                self.assertGreaterEqual(min(hits), 10)
+                self.assertGreaterEqual(min(hits), self.MIN_TASK_HITS)
                 self.assertLessEqual(statistics.fmean(top_solves), 0.2)
+
+    def test_no_level_can_be_read_by_printing(self):
+        """Research-v3: the pilot read level 1 (60-90K) through grep and a few prints. The smallest context is now
+        bigger than everything the root can print in an episode (20 turns x the REPL's output cap)."""
+        from rlm_rl import bridge
+
+        self.assertGreater(research.LEVELS[1][0], 20 * bridge.OUTPUT_MAX_CHARS)
+        self.assertEqual(research.HOPS[1], (2,))
+        self.assertTrue(all(2 not in research.HOPS[level] for level in self.LEVELS if level > 1))
+        lows = [research.LEVELS[level][0] for level in self.LEVELS]
+        self.assertEqual(lows, sorted(lows))
+        self.assertGreaterEqual(research.LEVELS[research.MAX_LEVEL][1], 1_200_000)
 
     def test_list_answers_name_the_entity_and_padding_never_does(self):
         """Gold documents can be checked by reading (each names the question's entity). Apart from them, only the hard
@@ -307,6 +361,96 @@ class ResearchFamilyTest(unittest.TestCase):
             task = tasks.make_task("research", 1, seed=7)
             self.assertEqual((task.family, task.level), ("research", 1))
             self.assertEqual(tasks.training_sources("research"), ("musique", "qampari"))
+
+
+# ----------------------------------------------------------------------------- the open-book check (research-v3)
+
+
+def _clear_research_caches():
+    for fn in (research.closed_book, research.open_book, research.usable, research._by_hops, research.list_pool):
+        fn.cache_clear()
+
+
+class UsableTest(unittest.TestCase):
+    """research.usable(): checked closed-book AND not known AND, once the open-book file exists, valid."""
+
+    CLOSED = {"version": "closed-book-v1",
+              "results": {"musique": {"select": {"checked": [0, 1, 2, 3, 5], "known": [1]}}}}
+
+    def usable(self, closed, opened):
+        _clear_research_caches()
+        try:
+            with mock.patch.object(research, "closed_book", lambda: closed), \
+                    mock.patch.object(research, "open_book", lambda: opened):
+                return research.usable.__wrapped__("musique", "select")
+        finally:
+            _clear_research_caches()
+
+    def test_rules(self):
+        self.assertIsNone(self.usable(None, None))  # no check yet: every question
+        self.assertEqual(self.usable(self.CLOSED, None), {0, 2, 3, 5})
+        opened = {"version": "open-book-v1",
+                  "results": {"musique": {"select": {"checked": [0, 1, 2, 3, 5], "valid": [0, 1, 5]}}}}
+        self.assertEqual(self.usable(self.CLOSED, opened), {0, 5})
+        other_split = {"version": "open-book-v1", "results": {"musique": {"test": {"checked": [0], "valid": []}}}}
+        self.assertEqual(self.usable(self.CLOSED, other_split), {0, 2, 3, 5})
+
+
+def _open_book_script():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "open_book", Path(__file__).resolve().parents[1] / "scripts" / "open_book.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@needs_pools
+@unittest.skipUnless(HAVE_POOLS and data.derived(research.CLOSED_BOOK).exists(), "no closed-book results")
+class OpenBookScriptTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.script = _open_book_script()
+        cls.items = cls.script.plan()
+
+    def test_plan_is_every_question_the_closed_book_check_checked(self):
+        closed = research.closed_book()["results"]
+        expected = {(source, split, i) for source, by in closed.items() for split, row in by.items()
+                    for i in row["checked"]}
+        self.assertEqual(set(self.items), expected)
+        self.assertEqual(len(self.items), len(expected))
+
+    def test_documents_are_the_gold_and_nothing_else(self):
+        for source, split, i in [item for item in self.items if item[1] == "select"][:: 50]:
+            text, gold = self.script.documents(source, split, i)
+            titles = [t for _, t, _ in docs_of(text)]
+            with self.subTest(source=source, i=i):
+                if source == "musique":
+                    q = research._musique(split)["questions"][i]
+                    self.assertEqual(len(titles), len(set(q["gold"])))
+                    self.assertEqual(gold, [])
+                else:
+                    q = research._qampari(split)["questions"][i]
+                    self.assertEqual(len(titles), len(q["gold"]) + len(q["neg"]))
+                    self.assertLessEqual(set(gold), set(titles))
+                self.assertIn(research._musique(split)["questions"][i]["q"] if source == "musique" else
+                              research._qampari(split)["questions"][i]["q"], self.script.prompt(source, split, i))
+
+    def test_judge(self):
+        musique = [item for item in self.items if item[0] == "musique" and item[1] == "test"][:20]
+        for source, split, i in musique:
+            q = research._musique(split)["questions"][i]
+            self.assertTrue(self.script.judge(source, split, i, f" {q['a']} ")[0])
+            self.assertFalse(self.script.judge(source, split, i, "unknown")[0])
+        lists = [item for item in self.items if item[0] == "qampari" and item[1] == "test"][:20]
+        for source, split, i in lists:
+            _, gold = self.script.documents(source, split, i)
+            self.assertTrue(self.script.judge(source, split, i, "\n".join(f"- {t}" for t in gold))[0])
+            self.assertTrue(self.script.judge(source, split, i, "\n".join(f"{n}. {t}" for n, t in enumerate(gold, 1)))[0])
+            half = gold[: len(gold) // 2]
+            self.assertFalse(self.script.judge(source, split, i, "\n".join(half))[0])  # F1 under 0.8
 
 
 if __name__ == "__main__":
