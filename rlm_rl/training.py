@@ -63,7 +63,7 @@ from .bridge import InfraError
 from .client import ModelClient, RetryPolicy
 from .config import RunConfig
 from .controller import DifficultyController
-from .env import Episode, InfraPause, filter_step, run_groups, to_trajectory
+from .env import MIN_GROUPS, Episode, InfraPause, filter_step, run_groups, to_trajectory, trainable_turns
 from .evals import eval_set, run_eval
 from .sandbox import Sandbox
 from .transcripts import TranscriptLog, episode_record, transcript_path
@@ -79,6 +79,10 @@ TRAIN_RETRIES = 2
 TRAIN_SETTLE_S = 900.0
 TRAIN_POLL_S = 30.0
 AUDIT_EVERY = 10  # the Claude audit's checkpoints (decision 5a)
+# A rollback's branch starts from a fresh optimizer (W&B serverless, step 10 results §8.1), and a production step makes
+# 30-130 optimizer updates, so its first train calls run at these fractions of the learning rate (prod-v1 2026-10-18:
+# one full-rate step after a rollback took broken replies from ~10% of turns to ~40%).
+BRANCH_WARMUP = (0.25, 0.5)
 STOP_FILE = "STOP"
 LIVE_GUARD_S = 120.0  # a "running" state written this recently may belong to a process that is still running it
 CAPABILITY_ITEM_ESTIMATE_USD = 0.005  # one short chat call, before the first check has been measured
@@ -182,9 +186,11 @@ class TrainingRun:
 
     async def resume(self, *, from_checkpoint: str | int | None = None, lr: float | None = None,
                      retrain_pending: bool = False, discard_pending: bool = False,
-                     ceilings: dict | None = None, format_penalty: float | None = None) -> dict:
+                     ceilings: dict | None = None, format_penalty: float | None = None,
+                     mask_broken: bool | None = None) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
-        `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off)."""
+        `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
+        `mask_broken` whether broken replies take a gradient."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -212,6 +218,11 @@ class TrainingRun:
             self.state["config"]["format_penalty"] = format_penalty
             self._notice("format", f"format penalty set by the operator: {before:g} -> {format_penalty:g} off the reward "
                                    f"per broken reply, at most {reward.FORMAT_PENALTY_MAX_REPLIES} an episode")
+        if mask_broken is not None and mask_broken != self.cfg.mask_broken:
+            self.cfg.mask_broken = mask_broken
+            self.state["config"]["mask_broken"] = mask_broken
+            self._notice("format", "broken replies " + ("take no gradient from here on (masked)" if mask_broken
+                                                        else "are trained on again (not masked)"))
         target = self._resolve_checkpoint(from_checkpoint)
         if target is not None and target != self._latest():
             await self._rollback(target, reason="resumed by the operator from an earlier checkpoint", new_lr=lr)
@@ -451,7 +462,7 @@ class TrainingRun:
         t1 = time.monotonic()
         kl = await monitor.kl_to_base(self.client, clean, base_model=self.base_model, n=cfg.kl_samples, rng=self.rng)
         t_kl = time.monotonic() - t1
-        lr = st["lr"]["current"]
+        lr = st["lr"]["current"] * self._warmup()
         row = {"step": n, "branch": st["branch"], "status": "rolled_out", "lr": lr, "started_at": started,
                "sampled_from": {"checkpoint": n - 1, "model": root_model}, "trained_to": None,
                **monitor.step_metrics(groups, step_filter, controller=self.ctl, moves=moves, kl=kl,
@@ -484,13 +495,19 @@ class TrainingRun:
             hits = ", ".join(f"{rule} {k}" for rule, k in step_filter.hacks.items() if k)
             self._notice("detectors", f"step {n}: detectors fired on {step_filter.hacked_episodes} episode(s) ({hits})")
 
-        if step_filter.skip_train:
+        train_groups = [] if step_filter.skip_train else self._trajectory_groups(step_filter.groups)
+        row["masked"] = {"on": cfg.mask_broken, "groups": len(train_groups),
+                         "replies": sum(reward.broken_replies(ep.turns) for g in step_filter.groups for ep in g)
+                         if cfg.mask_broken else 0}
+        skip = step_filter.skip_train or (None if len(train_groups) >= MIN_GROUPS else
+                                          f"only {len(train_groups)} trainable group(s) once broken replies were masked "
+                                          f"(need {MIN_GROUPS})")
+        if skip:
             row["status"] = "skipped"
             st["checkpoints"][str(n)] = dict(self._ckpt(n - 1))
-            self._notice("skip", f"step {n} trained nothing: {step_filter.skip_train}")
+            self._notice("skip", f"step {n} trained nothing: {skip}")
             self._commit_row(row)
         else:
-            train_groups = self._trajectory_groups(step_filter.groups)
             latest_before = await self._backend_latest()
             self._write_pending(n, row, train_groups, latest_before, controller_before, retirement_before)
             self._live(n, "training")
@@ -589,10 +606,27 @@ class TrainingRun:
             return None
         return sum(sizes) - sum(v.get("family") in families for v in self.retirement.retired.values())
 
+    def _warmup(self) -> float:
+        """The learning rate's fraction for the next train call: BRANCH_WARMUP for a rollback branch's first calls."""
+        st = self.state
+        if not st["branch"]:
+            return 1.0
+        trained = sum(r["branch"] == st["branch"] and r["status"] == "trained" for r in st["steps"])
+        return BRANCH_WARMUP[trained] if trained < len(BRANCH_WARMUP) else 1.0
+
     def _trajectory_groups(self, groups: list[list[Episode]]) -> list:
+        """The trained groups as ART groups. With broken replies masked, an episode left with no turn to train on is
+        dropped from its group (it would only move the group mean), and so is a group left without 2 episodes that
+        differ in reward."""
         import art
 
-        return [art.TrajectoryGroup([to_trajectory(ep) for ep in group]) for group in groups]
+        mask = self.cfg.mask_broken
+        out = []
+        for group in groups:
+            kept = [ep for ep in group if trainable_turns(ep, mask_broken=mask) > 0]
+            if len(kept) >= 2 and len({ep.reward for ep in kept}) > 1:
+                out.append(art.TrajectoryGroup([to_trajectory(ep, mask_broken=mask) for ep in kept]))
+        return out
 
     async def _log_step(self, n: int, groups: list[list[Episode]]) -> None:
         """The step's trajectories and metrics to W&B through ART. A logging failure never stops the run."""

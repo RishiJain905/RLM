@@ -424,10 +424,11 @@ class RollbackTest(LoopCase):
         self.assertIn(10, self.dry.backend.models["rb"]["steps"])  # the old branch is untouched
         self.assertNotIn("10", st["audits"])
 
-    async def test_a_resume_turns_the_format_penalty_on_for_the_rollouts_after_it(self):
-        """prod-v1 (2026-10-18): a run started before the format penalty existed gets it on resume, with the rollback."""
+    async def test_a_resume_turns_the_broken_reply_fixes_on_with_a_warmup_after_the_rollback(self):
+        """prod-v1 (2026-10-18): a run started before these fixes existed gets them on resume, with the rollback. The new
+        branch's first train calls run at BRANCH_WARMUP's fractions of the rate, and broken replies take no gradient."""
         st = await self.run_("fp", cfg=second_seed("fp"), stop_after=6).start()
-        self.assertEqual(st["config"]["format_penalty"], 0.0)
+        self.assertEqual((st["config"]["format_penalty"], st["config"]["mask_broken"]), (0.0, False))
         oracle = self.dry.server.policy_for
 
         def broken_first(model, messages):  # every episode opens with a reply cut off mid-code
@@ -438,16 +439,24 @@ class RollbackTest(LoopCase):
         self.dry.server.policy_for = broken_first
         with self.assertRaises(ValueError):
             await self.run_("fp").resume(format_penalty=0.5)
-        st = await self.run_("fp", stop_after=6).resume(from_checkpoint=5, format_penalty=0.1)
-        self.assertEqual((st["latest"], st["branch"], st["config"]["format_penalty"]), (6, 1, 0.1))
-        self.assertTrue(any(n["kind"] == "format" and "0 -> 0.1" in n["text"] for n in st["notices"]))
+        st = await self.run_("fp", stop_after=8).resume(from_checkpoint=5, format_penalty=0.1, mask_broken=True)
+        self.assertEqual((st["latest"], st["branch"], st["config"]["format_penalty"], st["config"]["mask_broken"]),
+                         (8, 1, 0.1, True))
+        texts = [n["text"] for n in st["notices"] if n["kind"] == "format"]
+        self.assertTrue(any("0 -> 0.1" in t for t in texts) and any("masked" in t for t in texts), texts)
         before = TranscriptLog(transcript_path(self.results / "fp", "train", 5)).records()
         after = TranscriptLog(transcript_path(self.results / "fp", "train", 6)).records()
         self.assertFalse(any("format_penalty" in r["reward_components"] for r in before))
         self.assertTrue(after and all(r["reward_components"].get("format_penalty") == 0.1 for r in after
                                       if r["infra_error"] is None))
         self.assertGreaterEqual(st["steps"][-1]["shape"]["broken_replies"], 1.0)
-        self.assertEqual(config.production("p", 2e-5).format_penalty, 0.1)
+        trained = [r for r in st["steps"] if r["branch"] == 1 and r["status"] == "trained"]
+        self.assertEqual([r["lr"] for r in trained], [0.25e-5, 0.5e-5, 1e-5][:len(trained)])
+        self.assertEqual([t["kwargs"]["learning_rate"] for t in self.dry.backend.trained if t["model"] == "fp-b1"],
+                         [r["lr"] for r in trained])
+        self.assertTrue(all(r["masked"]["on"] and r["masked"]["replies"] >= 1 for r in st["steps"][5:]))
+        prod = config.production("p", 2e-5)
+        self.assertEqual((prod.format_penalty, prod.mask_broken), (0.0, True))
 
     async def test_a_branch_model_that_already_has_checkpoints_stops_the_resume(self):
         await self.run_("rw", cfg=second_seed("rw"), stop_after=6).start()
@@ -469,8 +478,10 @@ class LearningRateFallbackTest(LoopCase):
         # dates from step 14 (sampled from checkpoint 13), so the last good kept checkpoint is 10
         self.assertEqual((fallback["signal"], fallback["to_checkpoint"], fallback["at_step"]), ("entropy", 10, 15))
         self.assertEqual(st["lr"]["current"], 1e-5)
-        rates = {(t["model"], t["kwargs"]["learning_rate"]) for t in self.dry.backend.trained}
-        self.assertEqual(rates, {("lrf", 2e-5), ("lrf-b1", 1e-5)})
+        rates = [(t["model"], t["kwargs"]["learning_rate"]) for t in self.dry.backend.trained]
+        self.assertEqual({r for r in rates if r[0] == "lrf"}, {("lrf", 2e-5)})
+        # the branch warms up from its fresh optimizer (BRANCH_WARMUP), then trains at the floor
+        self.assertEqual([lr for model, lr in rates if model == "lrf-b1"][:3], [0.25e-5, 0.5e-5, 1e-5])
         self.assertEqual(st["abandoned"][0]["after"], 10)
         kinds = [n["kind"] for n in st["notices"]]
         self.assertLess(kinds.index("lr_fallback"), kinds.index("rollback"))

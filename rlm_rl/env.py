@@ -418,6 +418,11 @@ class StepFilter:
                 "hacks": self.hacks, "hacked_episodes": self.hacked_episodes, "hacked_contained": self.hacked_contained}
 
 
+def trainable_turns(ep: Episode, *, mask_broken: bool) -> int:
+    """How many of the episode's turns would take a gradient."""
+    return len(ep.choices) - (reward.broken_replies(ep.turns) if mask_broken else 0)
+
+
 def filter_step(groups: list[list[Episode]]) -> StepFilter:
     """Remove infra episodes, then drop groups that are too small or teach nothing (spec §5.4 steps 3, 5, 6).
 
@@ -477,16 +482,27 @@ class InfraPause:
         return None
 
 
-def to_trajectory(ep: Episode, *, with_choices: bool = True) -> Any:
-    """An ART trajectory for training (`with_choices`, needs the root choices with token ids) or for logging."""
+def to_trajectory(ep: Episode, *, with_choices: bool = True, mask_broken: bool = False) -> Any:
+    """An ART trajectory for training (`with_choices`, needs the root choices with token ids) or for logging.
+
+    `mask_broken` leaves each broken reply (reward.broken_replies) in as a plain message, so it is context for the turns
+    after it but takes no gradient either way: a win doesn't reinforce it, and a loss doesn't push down the ordinary
+    tokens it is mostly made of (prod-v1, 2026-10-18).
+    """
     import art
 
     if ep.infra_error is not None:
         raise ValueError("an infra_error episode never becomes a trajectory")
     items: list = list(ep.messages[:2])
     choices = iter(ep.choices)
+    turns = iter(ep.turns)
     for message in ep.messages[2:]:
-        items.append(next(choices) if with_choices and message["role"] == "assistant" else message)
+        if with_choices and message["role"] == "assistant":
+            choice, turn = next(choices), next(turns, None)
+            masked = mask_broken and turn is not None and reward.broken_replies([turn]) == 1
+            items.append(message if masked else choice)
+        else:
+            items.append(message)
     return art.Trajectory(
         messages_and_choices=items,
         reward=float(ep.reward),

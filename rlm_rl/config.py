@@ -92,6 +92,7 @@ class RunConfig:
     prompt_version: str = bridge.PROMPT_VERSION  # v3 (step 11 fixes on spec §12.2's v2); the second seed ran v1
     root_thinking: str | None = None  # client.ROOT_THINKING_EFFORTS or None (off); production thinks at medium
     format_penalty: float = 0.0  # reward off per broken reply in training rollouts (reward.FORMAT_PENALTY); 0 is off
+    mask_broken: bool = False  # broken replies take no gradient (env.to_trajectory); production's fix since 2026-10-18
 
     def __post_init__(self):
         if self.kind not in RUN_KINDS:
@@ -154,8 +155,7 @@ def production(run: str, learning_rate: float, tasks_from: str = "7a") -> RunCon
     return RunConfig(run=run, kind="production", learning_rate=learning_rate,
                      lr_rule="fallback" if learning_rate > LR_FLOOR else "fixed", mix=mix, eval_every=10,
                      eval_at_start=True, selection=selection, capability_set=capability_set,
-                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING,
-                     format_penalty=reward.FORMAT_PENALTY)
+                     ceilings=dict(PRODUCTION_CEILINGS), root_thinking=PRODUCTION_ROOT_THINKING, mask_broken=True)
 
 
 # ----------------------------------------------------------------------------- pinned values (spec §8)

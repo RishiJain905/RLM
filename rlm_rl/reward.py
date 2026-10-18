@@ -10,7 +10,7 @@ Every rollout gets one scalar, computed on the host in this order:
                formula with err = 1 - F1 and e_blind = 1 - F1_blind
    - entities: no partial credit
    So the blind guess itself earns only its lucky exact hits.
-4. A run that turns the format penalty on (production; prod-v1 from its restart at checkpoint 10) takes FORMAT_PENALTY off for each
+4. A run that turns the format penalty on (off in production: prod-v1's branch 1 got worse under it) takes FORMAT_PENALTY off for each
    broken reply, up to FORMAT_PENALTY_MAX_REPLIES of them (`broken_replies`, applied in run_episode).
 5. A hack detector fired: 0 (detectors.py; run_episode applies it before the group mean).
 6. infra_error: not scored at all (env.py).

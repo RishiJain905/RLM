@@ -122,7 +122,22 @@ The run stopped during step 17's rollouts (Ctrl-C twice, nothing trained on them
 .venv-linux/bin/python scripts/train.py resume prod-v1 --live --from 10 --lr 1e-5 --format-penalty 0.1
 ```
 
-Steps 11-16 of branch 0 (~$8.40) are kept under `results/prod-v1/abandoned/`. Watch broken replies on the Trouble chart: they should fall within a few steps. If they don't, the next lever is ending an episode after a run of broken replies.
+Steps 11-16 of branch 0 (~$8.40) are kept under `results/prod-v1/abandoned/`.
+
+**The penalty made it worse; masking instead (second restart).** Branch 1's first step (from checkpoint 10, 129 optimizer updates, all 8 groups trainable, a fresh optimizer) took broken replies from 14% of turns in its own rollouts to 42% in the next step's, with 9 episodes broken from their first turn. Decoding the sampled token ids with the Qwen3.8 tokenizer confirmed the model itself ends turns early (``...specifically the `load_t<|im_end|>`` inside its thinking, or ``<tool_call> <python> ... </user><|im_end|>``): the server returns exactly what was sampled. A likely mechanism: a broken reply is mostly ordinary tokens, so a negative advantage pushes those down and lifts everything else, the end-of-turn token included; a rollback's fresh optimizer at full rate adds a large first update. The run stopped during step 12's training and changed course:
+
+| Change | Where | What it does |
+|---|---|---|
+| Mask broken replies | `env.to_trajectory(mask_broken=)`, `env.trainable_turns`, `TrainingRun._trajectory_groups`, `RunConfig.mask_broken` | A broken reply stays in the trajectory as a plain message, so it is context for later turns but takes no gradient either way. An episode with no turn left to train on drops out of its group; a step left with fewer than 2 groups skips its train call. Rows record `masked` |
+| Format penalty off | `RunConfig.format_penalty` | Production's default is 0 again; the code stays for later use |
+| Warm-up after a rollback | `training.BRANCH_WARMUP` | A new branch's first two train calls run at 0.25x and 0.5x the learning rate |
+| Resume switch | `train.py resume --mask-broken` | Turns masking on for a run started before it existed |
+
+```bash
+.venv-linux/bin/python scripts/train.py resume prod-v1 --live --from 10 --lr 1e-5 --format-penalty 0 --mask-broken --discard-pending
+```
+
+Branch 1's step 11 (~$1.85) is kept under `abandoned/b1-after10`. Watch broken replies on the Trouble chart. If they still climb, the next levers are ending an episode after a run of broken replies, and a lower learning rate.
 
 ## 8. What changed for step 12 ($0, tested)
 

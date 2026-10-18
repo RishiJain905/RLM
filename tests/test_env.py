@@ -112,6 +112,18 @@ class EpisodeTest(EnvCase):
         ep = await self.episode(format_penalty=0.1, detect=lambda task, ep: [{"rule": "early_submit", "detail": "x"}])
         self.assertEqual((ep.reward, ep.reward_components["reward_before_hack"]), (0.0, 0.9))
 
+    async def test_masked_broken_replies_stay_as_context_but_take_no_gradient(self):
+        replies = iter(["", "```python\nprint(", "```python\nsubmit(len(context.splitlines()))\n```"])
+        self.server.policy = lambda messages: next(replies)
+        ep = await self.episode()
+        items = to_trajectory(ep, mask_broken=True).messages_and_choices
+        assistant = [m for m in items[2:] if isinstance(m, dict) and m["role"] == "assistant"]
+        choices = [m for m in items if not isinstance(m, dict)]
+        self.assertEqual(([m["content"] for m in assistant], len(choices)), (["", "```python\nprint("], 1))
+        self.assertEqual(len(items), len(to_trajectory(ep).messages_and_choices))
+        self.assertEqual(len([m for m in to_trajectory(ep).messages_and_choices if not isinstance(m, dict)]), 3)
+        self.assertEqual((env.trainable_turns(ep, mask_broken=True), env.trainable_turns(ep, mask_broken=False)), (1, 3))
+
     def test_a_reply_cut_at_the_token_cap_is_not_broken(self):
         def turn(reply, finish, code):
             return env.Turn(reply, finish, 10, code, None, None, 0.0, 0.0)
