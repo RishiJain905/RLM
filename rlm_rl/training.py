@@ -690,6 +690,8 @@ class TrainingRun:
             self.state["config"][key] = getattr(new, key)
         self.ctl.set_families(rtasks.max_levels([f for f, w in new.mix.items() if w > 0]))
         self.state["controller"] = self.ctl.state_dict()
+        if new.prompt_version != before.get("prompt_version", new.prompt_version):
+            self.state["template_fingerprint"] = None  # a new prompt renders differently on purpose
         self.state.setdefault("task_shifts", []).append({
             "name": name, "after_checkpoint": self._latest(), "at": time.time(), "before": before, "after": change,
             "prompt_hash": bridge.PROMPT_HASHES[new.prompt_version],
