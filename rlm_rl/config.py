@@ -70,7 +70,10 @@ RESAMPLE_BROKEN = 2
 # rollouts (more mixed groups from about the same episodes) and selection-v4. Applied at a resume with
 # `train.py resume prod-v1 --task-shift v4`; the selection set then re-scores the checkpoint it resumes from.
 TASK_SHIFTS = {
-    "v4": {"mix": {"research": 0.30, "aggregation": 0.20, "edit_spec": 0.30, "edit_bugs": 0.20},
+    # The pilot (2026-10-18): only context search rewarded delegating (0.34 vs 0.11 at L1, 0.35 vs 0 at L3, ~20
+    # sub-calls an episode); research stayed grep-solvable and coding rarely delegated. So context search leads the
+    # mix (40, from the plan's 20) and the bonus nudges the rest.
+    "v4": {"mix": {"aggregation": 0.40, "research": 0.20, "edit_spec": 0.25, "edit_bugs": 0.15},
            "prompt_version": "v4", "tasks_per_step": 6, "rollouts": 6, "selection": "selection-v4",
            "delegation_bonus": 0.2, "delegation_bonus_every": 1, "delegation_bonus_until": 50},
 }
