@@ -134,6 +134,42 @@ SOURCES = {
         "origin": "scripts/build_edit_data.py", "revision": None, "licence": "ours; each repository's own licence "
         "is permissive", "permissive": True, "role": TRAIN, "files": [],
     },
+    # The research family (step 12 multistep plan, step 1). Downloaded 2026-10-18 with the project owner's approval by
+    # scripts/build_research_data.py, which pins every file's sha256. Both sources' text is Wikipedia's, which is
+    # CC BY-SA: share-alike, which the licence bar (7b) hasn't ruled on yet.
+    "musique": {
+        "what": "MuSiQue-Ans v1.0 train split: 2-4 hop questions, each with 20 Wikipedia paragraphs (supporting and "
+                "lexically similar distractors)",
+        "origin": "hf:dgslibisey/MuSiQue, a mirror of github:StonyBrookNLP/musique v1.0 (the bdsaglam/musique mirror "
+                  "has the same sha256)",
+        "revision": "c8f4f8c9465fb69d31a8eae894c3fd509c4ca321",
+        "licence": "CC-BY-4.0 (MuSiQue's README); the paragraphs are Wikipedia text, CC BY-SA", "permissive": True,
+        "role": TRAIN,
+        "files": ["hf/dgslibisey__MuSiQue/musique_ans_v1.0_train.jsonl", "hf/dgslibisey__MuSiQue/UPSTREAM_README.md"],
+    },
+    "musique-dev": {
+        "what": "MuSiQue-Ans v1.0 dev split, the research family's selection and test questions (held out, H7)",
+        "origin": "hf:dgslibisey/MuSiQue", "revision": "c8f4f8c9465fb69d31a8eae894c3fd509c4ca321",
+        "licence": "CC-BY-4.0; Wikipedia text, CC BY-SA", "permissive": True, "role": EVAL,
+        "files": ["hf/dgslibisey__MuSiQue/musique_ans_v1.0_dev.jsonl"],
+    },
+    "qampari": {
+        "what": "QAMPARI train split: list questions (5-15 answers here) with a Wikipedia proof sentence per answer",
+        "origin": "https://aggreg-qa.s3.amazonaws.com/qampari.zip, linked from github:samsam3232/qampari's project "
+                  "page",
+        "revision": "S3 Last-Modified 2022-06-09; zip sha256 f061d10879aa2ef645db680bfc699fe6e756e922e48dc6c6a98c4979e091c1c8",
+        "licence": "CC0-1.0 (the repository's LICENSE); the proof sentences are Wikipedia text, CC BY-SA",
+        "permissive": True, "role": TRAIN,
+        "files": ["github/samsam3232__qampari/qampari.zip", "github/samsam3232__qampari/LICENSE"],
+    },
+    "qampari-eval": {
+        "what": "QAMPARI dev and test splits (crowd-validated answers), the research family's selection and test "
+                "questions (held out, H7)",
+        "origin": "https://aggreg-qa.s3.amazonaws.com/qampari.zip",
+        "revision": "zip sha256 f061d10879aa2ef645db680bfc699fe6e756e922e48dc6c6a98c4979e091c1c8",
+        "licence": "CC0-1.0; Wikipedia text, CC BY-SA", "permissive": True, "role": EVAL,
+        "files": ["github/samsam3232__qampari/qampari.zip"],
+    },
 }
 
 # Sources the plan names that are not used, and why (decision 7b and the research's avoid list).
@@ -316,3 +352,21 @@ def arxiv_title_pools() -> dict[str, tuple[str, ...]]:
     """arXiv titles grouped by archive, from the sample `build_arxiv_pool()` wrote."""
     with gzip.open(derived(ARXIV_POOL), "rt", encoding="utf-8") as f:
         return {label: tuple(texts) for label, texts in sorted(json.load(f).items())}
+
+
+# ----------------------------------------------------------------------------- research pools
+
+# The research family's pools, built by scripts/build_research_data.py. Each holds a "splits" dict with "train",
+# "select" and "test", which share no source question.
+# musique: {"paragraphs": [[title, text]], "pad_ok": [0/1, may pad a context], "questions": [{"id", "q", "a",
+#           "aliases", "hops", "paras": 20 paragraph ids, "gold": the supporting ones, "subq": sub-question ids}]}
+# qampari: {"pages": [[title, [sentence]]], "questions": [{"qid", "q", "type", "entities", "entity_urls",
+#           "gold": [[page id, [sentence ids]]], "neg": [[page id, [sentence ids]]], "exclude": [page id]}]}
+RESEARCH_POOLS = {"musique": "research/musique-v1.json.gz", "qampari": "research/qampari-v1.json.gz"}
+
+
+@functools.lru_cache(maxsize=None)
+def research_pool(source: str) -> dict:
+    """One research source's pools (host only, H3: no id or gold flag here reaches a context)."""
+    with gzip.open(derived(RESEARCH_POOLS[source]), "rt", encoding="utf-8") as f:
+        return json.load(f)

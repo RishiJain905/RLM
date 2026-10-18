@@ -9,6 +9,8 @@ Every rollout gets one scalar, computed on the host in this order:
    - lists:    0.8 x max(0, (F1 - F1_blind) / (1 - F1_blind)), by set-F1, which is the same
                formula with err = 1 - F1 and e_blind = 1 - F1_blind
    - entities: no partial credit
+   - free text: 0.8 x token-F1 against the best of the answer and its aliases, with the question's own words
+                left out. Free text has no blind guess, and an empty or generic answer ("unknown") earns 0.
    So the blind guess itself earns only its lucky exact hits.
 4. A run that turns the format penalty on (off in production: prod-v1's branch 1 got worse under it) takes FORMAT_PENALTY off for each
    broken reply, up to FORMAT_PENALTY_MAX_REPLIES of them (`broken_replies`, applied in run_episode).
@@ -22,16 +24,19 @@ the host and never enters the sandbox.
     {"type": "float", "blind": 1234.5}
     {"type": "entity"}
     {"type": "list", "item": "entity", "blind": ["host-a", "host-b"]}
+    {"type": "text", "aliases": ["Bombardier"], "blind": None, "ignore": ["built", "who"]}
 """
 
 from __future__ import annotations
 
+import collections
 import math
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-ANSWER_TYPES = ("int", "float", "entity", "list")
+ANSWER_TYPES = ("int", "float", "entity", "list", "text")
 LIST_ITEM_TYPES = ("int", "float", "entity")
 
 EXACT_REWARD = 1.0
@@ -151,6 +156,9 @@ def check_grading(grading: dict, gold: Any) -> None:
             raise ValueError("a list task needs a list gold answer and a list blind guess")
     if kind == "entity" and normalize_entity(gold) is None:
         raise ValueError("an entity task needs a non-empty gold answer")
+    if kind == "text" and (normalize_text(gold) is None or not isinstance(grading.get("aliases", []), list)
+                           or grading.get("blind") is not None):
+        raise ValueError("a text task needs a non-empty gold answer, a list of aliases and no blind guess")
 
 
 def near_miss_credit(err: float, e_blind: float) -> float:
@@ -184,6 +192,9 @@ def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
                      {"parsed": 1.0, "exact": float(exact), "partial": partial, "err": err, "e_blind": e_blind,
                       "near_blind": near_blind})
 
+    if kind == "text":
+        return score_text(answer, gold, grading)
+
     if kind == "entity":
         value = normalize_entity(answer)
         if value is None:
@@ -201,6 +212,63 @@ def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
     return Score(EXACT_REWARD if exact else partial, exact,
                  {"parsed": 1.0, "exact": float(exact), "partial": partial, "f1": round(f1, 4),
                   "f1_blind": round(f1_blind, 4)})
+
+
+# ----------------------------------------------------------------------------- free text (the research family)
+
+# Answers that say nothing. They earn 0, even when a token overlaps the gold (normalized below).
+_GENERIC = ("unknown", "none", "N/A", "NA", "nan", "null", "nothing", "no answer", "not found", "not known",
+            "not available", "not stated", "not mentioned", "not given", "not specified", "no idea", "I don't know",
+            "I do not know", "cannot be determined", "can't be determined", "unanswerable", "insufficient information",
+            "not enough information", "answer", "final answer")
+
+
+def normalize_text(value: Any) -> str | None:
+    """SQuAD-style: casefold, drop accents, the articles a/an/the and punctuation (a dash or slash becomes a space),
+    collapse whitespace. None for an empty answer, a list or a bool."""
+    if isinstance(value, (bool, list, dict)) or value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    out = []
+    for ch in unicodedata.normalize("NFKD", str(value).casefold()):
+        cat = unicodedata.category(ch)
+        if cat == "Mn":  # an accent
+            continue
+        out.append(" " if cat in ("Pd", "Zs") or ch in "/\\" else "" if cat[0] in "PS" else ch)
+    text = re.sub(r"\b(?:a|an|the)\b", " ", "".join(out))
+    return " ".join(text.split()) or None
+
+
+GENERIC_ANSWERS = frozenset(normalize_text(x) for x in _GENERIC)
+
+
+def token_f1(predicted: list[str], gold: list[str], ignore=frozenset()) -> float:
+    """Token F1 (SQuAD), with the tokens in `ignore` (the question's own words) left out of both sides, unless that
+    would leave the gold empty."""
+    kept = [t for t in gold if t not in ignore]
+    if kept:
+        gold, predicted = kept, [t for t in predicted if t not in ignore]
+    same = sum((collections.Counter(predicted) & collections.Counter(gold)).values())
+    if not same:
+        return 0.0
+    precision, recall = same / len(predicted), same / len(gold)
+    return 2 * precision * recall / (precision + recall)
+
+
+def score_text(answer: Any, gold: Any, grading: dict) -> Score:
+    """A free-text answer: 1 for a normalized exact match with the gold or an alias, else 0.8 x the best token-F1
+    against them, with the question's own words (grading["ignore"]) left out. An empty or generic answer earns 0."""
+    value = normalize_text(answer)
+    golds = [g for g in (normalize_text(x) for x in [gold, *grading.get("aliases", [])]) if g]
+    if value is None or (value in GENERIC_ANSWERS and value not in golds):
+        return Score(0.0, False, dict(_UNPARSED))
+    if value in golds:
+        return Score(EXACT_REWARD, True, {"parsed": 1.0, "exact": 1.0, "partial": 0.0, "f1": 1.0})
+    ignore = frozenset(grading.get("ignore") or ())
+    f1 = max(token_f1(value.split(), g.split(), ignore) for g in golds)
+    partial = round(NEAR_MISS_MAX * f1, 4)
+    return Score(partial, False, {"parsed": 1.0, "exact": 0.0, "partial": partial, "f1": round(f1, 4)})
 
 
 def score(task: Any, ep: Any) -> Score:
