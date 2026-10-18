@@ -149,6 +149,11 @@ def delegated(ep: Episode) -> bool:
     return bool(calls) and read >= DELEGATED_READ_SHARE * max(1, getattr(ep, "context_chars", 0) or 0)
 
 
+# An eval that lost more than this share of its episodes to infra errors runs them again at the next chance, at most
+# EVAL_MAX_RERUNS times (TrainingRun._has_eval).
+EVAL_RERUN_INFRA = 0.10
+EVAL_MAX_RERUNS = 2
+
 def _mix_text(mix: dict) -> str:
     return ", ".join(f"{family} {share:.0%}" for family, share in mix.items() if share > 0)
 
@@ -214,13 +219,15 @@ class TrainingRun:
                      retrain_pending: bool = False, discard_pending: bool = False,
                      ceilings: dict | None = None, format_penalty: float | None = None,
                      mask_broken: bool | None = None, resample_broken: int | None = None,
-                     mix: dict | None = None, task_shift: str | None = None) -> dict:
+                     mix: dict | None = None, task_shift: str | None = None, rebranch: bool = False) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
         `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
         `mask_broken` whether broken replies take a gradient; `resample_broken` how many times a broken reply is drawn
         again in the rollouts. `mix` sets the shares of the families it names (the run's own families only; the
         shares must still add up to 1). `task_shift` applies a named change of families, prompt and group shape
-        (config.TASK_SHIFTS) before `mix`."""
+        (config.TASK_SHIFTS) before `mix`. `rebranch` continues from the checkpoint (the latest unless `from_checkpoint`
+        says otherwise) on a new branch model even when it is the latest: prod-v1 2026-10-18, W&B answered HTTP 500 to
+        every call to any checkpoint of prod-v1-b2 while other models answered."""
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
@@ -263,7 +270,12 @@ class TrainingRun:
             self._notice("format", f"a broken reply is drawn again up to {resample_broken} time(s) a turn in the rollouts "
                                    "from here on, so it never enters the conversation")
         target = self._resolve_checkpoint(from_checkpoint)
-        if target is not None and target != self._latest():
+        if rebranch:
+            target = self._latest() if target is None else target
+            stuck = self._model_of(self.state["branch"])
+            await self._rollback(target, reason=f"re-seeded on a new model by the operator: W&B couldn't serve {stuck}",
+                                 new_lr=lr)
+        elif target is not None and target != self._latest():
             await self._rollback(target, reason="resumed by the operator from an earlier checkpoint", new_lr=lr)
         elif lr is not None and lr != self.state["lr"]["current"]:
             self._notice("lr", f"learning rate set by the operator: {self.state['lr']['current']:g} -> {lr:g}")
@@ -828,7 +840,15 @@ class TrainingRun:
     # ------------------------------------------------------------------ evals and the audit
 
     def _has_eval(self, c: int, name: str) -> bool:
-        return any(e["checkpoint"] == c and e["name"] == name for e in self.state["evals"])
+        """Whether checkpoint c has eval `name`. One that lost more than EVAL_RERUN_INFRA of its episodes to infra
+        errors is due again, up to EVAL_MAX_RERUNS times; run_eval then runs only those episodes (prod-v1's
+        selection-v4 baseline at checkpoint 20 lost 19 of 47 to W&B errors)."""
+        done = [e for e in self.state["evals"] if e["checkpoint"] == c and e["name"] == name]
+        if not done:
+            return False
+        summary = done[-1].get("summary") or {}
+        infra, episodes = summary.get("infra_episodes") or 0, summary.get("episodes") or 0
+        return not (episodes and infra > EVAL_RERUN_INFRA * episodes and done[-1].get("reruns", 0) < EVAL_MAX_RERUNS)
 
     def _due_evals(self, c: int) -> list[str]:
         cfg, names = self.cfg, []
@@ -875,6 +895,11 @@ class TrainingRun:
                                         **self.sandbox_kwargs)
                 entry = {"checkpoint": c, "name": name, "summary": result.summary, "ran": result.ran}
             entry.update(branch=self.state["branch"], model=model, at=time.time(), cost_usd=round(self._commit_spend("eval"), 6))
+            earlier = [e for e in self.state["evals"] if e["checkpoint"] == c and e["name"] == name]
+            if earlier:  # a re-run of infra episodes replaces the record, keeping the total cost
+                entry["reruns"] = earlier[-1].get("reruns", 0) + 1
+                entry["cost_usd"] = round(entry["cost_usd"] + sum(e.get("cost_usd", 0.0) for e in earlier), 6)
+                self.state["evals"] = [e for e in self.state["evals"] if e not in earlier]
             self.state["evals"].append(entry)
             self._update_best()
             acc = entry["summary"].get("accuracy")
@@ -1013,7 +1038,8 @@ class TrainingRun:
         """Continue from kept checkpoint `target` on a new branch forked from it (nothing is deleted)."""
         st = self.state
         snapshot = None
-        if target:
+        live = target == self._latest()  # a re-seed (resume --rebranch): the run's own state is the checkpoint's
+        if target and not live:
             path = self._snapshot_path(target)
             if not path.exists():
                 raise ValueError(f"checkpoint {target} has no snapshot to resume from")
@@ -1040,7 +1066,9 @@ class TrainingRun:
         st["evals"] = [e for e in st["evals"] if e["checkpoint"] <= target]
         st["checkpoints"] = {k: v for k, v in st["checkpoints"].items() if int(k) <= target}
         st["audits"] = {k: v for k, v in st["audits"].items() if int(k) <= target}
-        if snapshot is not None:
+        if live:
+            lr = st["lr"]["current"]
+        elif snapshot is not None:
             self.ctl = DifficultyController.from_state(snapshot["controller"])
             self.retirement = rtasks.Retirement(snapshot.get("retirement"))
             lr = snapshot["lr"]["current"]
@@ -1048,6 +1076,10 @@ class TrainingRun:
             self.ctl = DifficultyController(rtasks.max_levels(self.cfg.mix), frozen=self.cfg.frozen_controller)
             self.retirement = rtasks.Retirement()
             lr = self.cfg.learning_rate
+        # a checkpoint saved before a task shift knows the old families: track the run's current ones
+        mix_families = {f for f, w in self.cfg.mix.items() if w > 0}
+        if set(self.ctl.families) != mix_families:
+            self.ctl.set_families(rtasks.max_levels(sorted(mix_families, key=list(self.cfg.mix).index)))
         st["controller"] = self.ctl.state_dict()
         st["retirement"] = self.retirement.state_dict()
         st["lr"]["current"] = new_lr if new_lr is not None else lr

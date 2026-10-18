@@ -531,6 +531,29 @@ class TaskShiftTest(LoopCase):
             self.assertTrue(any(n["kind"] == "mix" and "task shift t" in n["text"] for n in st["notices"]))
             st = await self.run_("ts", stop_after=3).resume(task_shift="t")  # already applied: nothing changes
             self.assertEqual(len(st["task_shifts"]), 1)
+            # re-seed the latest checkpoint on a new model (the backend couldn't serve the branch's model)
+            branches = len(st["branches"])
+            st = await self.run_("ts", stop_after=4).resume(rebranch=True)
+            self.assertEqual(len(st["branches"]), branches + 1)
+            self.assertEqual(st["branches"][-1]["from"]["checkpoint"], 3)
+            self.assertIn("couldn't serve", st["branches"][-1]["reason"])
+            self.assertEqual(set(st["controller"]["families"]), {"tickets_all"})  # the shift's families, not ckpt 3's
+            self.assertEqual(st["steps"][-1]["step"], 4)
+
+
+class EvalRerunTest(unittest.TestCase):
+    def test_an_eval_that_lost_many_episodes_to_infra_is_due_again_twice_at_most(self):
+        from types import SimpleNamespace
+
+        def run(**entry):
+            rec = {"checkpoint": 20, "name": "sel", "summary": {"episodes": 47, "infra_episodes": 19}, **entry}
+            return SimpleNamespace(state={"evals": [rec]})
+
+        has = training.TrainingRun._has_eval
+        self.assertFalse(has(run(), 20, "sel"))  # 19 of 47 lost: run them again
+        self.assertTrue(has(run(reruns=2), 20, "sel"))  # but not forever
+        self.assertTrue(has(run(summary={"episodes": 47, "infra_episodes": 3}), 20, "sel"))
+        self.assertFalse(has(run(), 30, "sel"))
 
 
 class DelegationBonusTest(unittest.TestCase):
