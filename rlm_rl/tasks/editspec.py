@@ -529,6 +529,26 @@ def _expr_target(repo: Repo, mod: Module, node, fn: Fn | None):
     return target
 
 
+def _local_names(node) -> set[str]:
+    """Names a function binds itself (parameters, assignments, loop, `with` and `except` targets, local imports), so
+    a use of one is never taken for the module-level function of the same name. Nested functions count too."""
+    out, glob = set(), set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.arg):
+            out.add(n.arg)
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            out.add(n.id)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            out |= {(a.asname or a.name).split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            out.add(n.name)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n is not node:
+            out.add(n.name)
+        elif isinstance(n, ast.Global):
+            glob |= set(n.names)
+    return out - glob
+
+
 def _resolve_refs(repo: Repo) -> None:
     for path, mod in repo.modules.items():
         owners = []  # (node, fn or None) whose own body we scan
@@ -549,11 +569,16 @@ def _resolve_refs(repo: Repo) -> None:
         for node, fn in owners:
             seen_nodes = set()
             walk = [node] if fn is None else list(ast.iter_child_nodes(node))
+            local = _local_names(node) if fn is not None else set()
             stack = walk
             while stack:
                 n = stack.pop()
                 if isinstance(n, (ast.Name, ast.Attribute)) and isinstance(getattr(n, "ctx", None), ast.Load) \
                         and id(n) not in seen_nodes:
+                    head = (_chain(n) or [""])[0]
+                    if head in local and head not in ("self", "cls"):
+                        stack.extend(ast.iter_child_nodes(n))
+                        continue  # a parameter or local variable that shadows a module-level name
                     target = _expr_target(repo, mod, n, fn)
                     if target and target[0] == "fn" and target[1] in repo.fns:
                         # the whole chain is resolved: its inner parts aren't separate references

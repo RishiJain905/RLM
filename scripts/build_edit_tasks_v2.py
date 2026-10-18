@@ -2,6 +2,7 @@
 
     .venv-linux/bin/python scripts/build_edit_tasks_v2.py profile                # baseline run + per-test call map
     .venv-linux/bin/python scripts/build_edit_tasks_v2.py spec                   # clusters, stubs, documents, lab check
+    .venv-linux/bin/python scripts/build_edit_tasks_v2.py redoc                  # documents again, from the current analysis
     .venv-linux/bin/python scripts/build_edit_tasks_v2.py screen                 # single candidate bugs, one by one
     .venv-linux/bin/python scripts/build_edit_tasks_v2.py bugs                   # linked bug sets, lab check
     .venv-linux/bin/python scripts/build_edit_tasks_v2.py grade spec bugs --jobs 6   # the real grader on every task
@@ -698,6 +699,34 @@ def stage_spec(key: str, entry: dict, seed: int) -> None:
     print(f"{key}: spec {ok} of {len(rows)} pass the lab; drops {dict(drops)}", flush=True)
 
 
+def stage_redoc(key: str, entry: dict, seed: int) -> None:
+    """Rewrite the requirements documents of a repository's spec candidates from the current analysis (no lab run:
+    the document doesn't change what the tests check), and check them for leaks again. Changed rows are appended,
+    so they replace the old ones."""
+    ctx = Context(key, entry)
+    path = v2_path("candidates", "spec.jsonl")
+    rows = [r for r in read_jsonl(path) if r["key"] == key]
+    out = []
+    for r in rows:
+        cluster = [f"{t['path']}::{t['qualname']}" for t in r["targets"]]
+        if any(c not in ctx.repo.fns for c in cluster):
+            continue
+        doc = editspec.requirements(entry["repo"], ctx.repo, cluster)
+        if doc == r["issue"]:
+            continue
+        leak = editdata.leaks(doc, r["gold_patch"], [])
+        lab = dict(r["lab"])
+        if leak and lab["ok"]:
+            lab.update(ok=False, why="; ".join(leak))
+        elif not leak and lab["why"].startswith("quotes the gold patch"):
+            lab.update(ok=True, why="")
+        out.append(dict(r, issue=doc, lab=lab))
+    if out:
+        append_jsonl(path, out)
+    print(f"{key}: {len(out)} of {len(rows)} spec documents rewritten; "
+          f"{sum(r['lab']['ok'] for r in out)} of those pass", flush=True)
+
+
 # ----------------------------------------------------------------------------- stage: screen (edit_bugs)
 
 
@@ -977,7 +1006,7 @@ def for_repos(names, fn, jobs: int, *args) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("profile", "spec", "screen", "bugs"):
+    for name in ("profile", "spec", "redoc", "screen", "bugs"):
         p = sub.add_parser(name)
         p.add_argument("repos", nargs="*")
         p.add_argument("--jobs", type=int, default=5, help="repositories at once (one lab container each)")
@@ -993,8 +1022,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "profile":
         for_repos(args.repos, stage_profile, args.jobs)
-    elif args.command in ("spec", "screen", "bugs"):
-        stage = {"spec": stage_spec, "screen": stage_screen, "bugs": stage_bugs}[args.command]
+    elif args.command in ("spec", "redoc", "screen", "bugs"):
+        stage = {"spec": stage_spec, "redoc": stage_redoc, "screen": stage_screen, "bugs": stage_bugs}[args.command]
         for_repos(args.repos, stage, args.jobs, args.seed)
     elif args.command == "grade":
         os.environ.setdefault(grader.GLOBAL_SLOTS_ENV, str(args.jobs))

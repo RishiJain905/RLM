@@ -148,6 +148,14 @@ class AnalysisTest(unittest.TestCase):
         usage = [u for u in demo_repo().usages if u.target == "demo/util.py::clamp"]
         self.assertEqual([(u.where, u.text) for u in usage], [("demo/core.py::total", "out += clamp(v, limit)")])
 
+    def test_a_local_name_never_resolves_to_the_module_function(self):
+        shadow = ('"""m."""\nfrom .util import clamp\n\n\ndef f(clamp, limit):\n    """Uses its own clamp."""\n'
+                  '    value = clamp\n    return value + limit\n\n\ndef g(x):\n    """Calls util.clamp."""\n'
+                  '    y = clamp(x, 3)\n    return y\n')
+        repo = editspec.analyze({**FILES, "demo/shadow.py": shadow})
+        self.assertEqual(repo.fns["demo/shadow.py::f"].refs, set())
+        self.assertEqual(repo.fns["demo/shadow.py::g"].refs, {"demo/util.py::clamp"})
+
     def test_profile_entries_map_to_functions(self):
         repo = demo_repo()
         biggest = repo.fns["demo/core.py::Box.biggest"]
