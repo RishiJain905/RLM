@@ -1,0 +1,665 @@
+<title>RLM Dashboard Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a field manual for the live dashboard. Sticky search and section index on the left (top on phones),
+   one column of entries per dashboard section, in the dashboard's own order and type. Colour marks only the
+   reading direction of each chart. */
+:root {
+  --bg: #f2f4f7; --panel: #ffffff; --wash: #eceff4; --ink: #0f1621; --ink-2: #4a5565; --muted: #7d8898;
+  --line: #e1e5eb; --axis: #c2c9d3; --accent: #2a78d6;
+  --up: #006300; --up-bg: #e3f3e3; --down: #a4441c; --down-bg: #fbe9e1; --band: #7a5200; --band-bg: #fdf1d6;
+  --flat: #2a5ea8; --flat-bg: #e3edfa; --info: #4a5565; --info-bg: #eceff4;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.8rem; --step-0: 0.95rem; --step-1: 1.1rem; --step-2: 1.4rem; --step-3: 2rem;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+    --line: #222935; --axis: #353f4d; --accent: #5598e7;
+    --up: #5fd35f; --up-bg: #12301a; --down: #f09a77; --down-bg: #3a2016; --band: #f5bd47; --band-bg: #33280f;
+    --flat: #8db8ef; --flat-bg: #172a43; --info: #a8b2c0; --info-bg: #1a2029;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0e13; --panel: #131820; --wash: #1a2029; --ink: #e8edf4; --ink-2: #a8b2c0; --muted: #77828f;
+  --line: #222935; --axis: #353f4d; --accent: #5598e7;
+  --up: #5fd35f; --up-bg: #12301a; --down: #f09a77; --down-bg: #3a2016; --band: #f5bd47; --band-bg: #33280f;
+  --flat: #8db8ef; --flat-bg: #172a43; --info: #a8b2c0; --info-bg: #1a2029;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.55; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--font-data); font-size: 0.86em; }
+code { background: var(--wash); border-radius: 3px; padding: 0 4px; }
+
+.shell { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px;
+  display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 32px; align-items: start; }
+.side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
+.eyebrow { font-family: var(--font-display); font-stretch: 118%; font-weight: 700; font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.brand h1 { margin: 4px 0 0; font-family: var(--font-display); font-weight: 800; font-size: var(--step-2); line-height: 1.15; letter-spacing: -0.01em; text-wrap: balance; }
+.search { display: grid; gap: 6px; }
+.search label { font-size: var(--step--1); font-weight: 600; color: var(--ink-2); }
+.search input { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--axis); border-radius: var(--radius); background: var(--panel); color: var(--ink); }
+.search .hint { font-size: 0.74rem; color: var(--muted); }
+nav.toc { display: grid; gap: 1px; }
+nav.toc a { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 4px; color: var(--ink-2); text-decoration: none; font-size: var(--step--1); font-weight: 600; }
+nav.toc a:hover { background: var(--wash); color: var(--ink); }
+nav.toc a .n { font-family: var(--font-data); font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+nav.toc a.empty { opacity: 0.4; }
+
+main { display: grid; gap: 28px; min-width: 0; }
+.intro { display: grid; gap: 12px; }
+.intro p { margin: 0; max-width: 72ch; color: var(--ink-2); }
+.intro .lead { font-size: var(--step-1); color: var(--ink); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.dir { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: var(--step--1); font-weight: 650; white-space: nowrap; }
+.dir .g { font-family: var(--font-data); font-weight: 600; }
+.dir.up { color: var(--up); background: var(--up-bg); }
+.dir.down { color: var(--down); background: var(--down-bg); }
+.dir.band { color: var(--band); background: var(--band-bg); }
+.dir.flat { color: var(--flat); background: var(--flat-bg); }
+.dir.info { color: var(--info); background: var(--info-bg); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.card h2 { margin: 0; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); }
+.checks { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; counter-reset: c; }
+.checks li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.checks li::before { counter-increment: c; content: counter(c); font-family: var(--font-data); font-weight: 600; color: var(--accent); }
+.checks b { font-weight: 650; }
+.conv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 10px 18px; margin: 0; }
+.conv div { display: grid; gap: 2px; }
+.conv dt { font-weight: 650; }
+.conv dd { margin: 0; color: var(--ink-2); font-size: var(--step--1); }
+
+details.gloss > summary { cursor: pointer; font-family: var(--font-display); font-weight: 750; font-stretch: 108%; font-size: var(--step-1); }
+details.gloss[open] > summary { margin-bottom: 12px; }
+.gl { display: grid; grid-template-columns: minmax(110px, 170px) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.gl dt { font-weight: 650; }
+.gl dd { margin: 0; color: var(--ink-2); }
+
+section.sec { display: grid; gap: 12px; scroll-margin-top: 16px; }
+.sec-head { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+.sec-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 105%; font-size: var(--step-2); letter-spacing: -0.01em; }
+.sec-head p { margin: 0; color: var(--ink-2); max-width: 75ch; }
+.entries { display: grid; gap: 10px; }
+article.entry { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; min-width: 0; scroll-margin-top: 16px; }
+article.entry header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+article.entry h3 { margin: 0; font-size: var(--step-0); font-weight: 700; }
+article.entry h3 .where { display: block; font-weight: 500; font-size: 0.74rem; color: var(--muted); }
+article.entry p { margin: 0; max-width: 78ch; }
+.read { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: var(--step--1); }
+.read dt { font-weight: 650; color: var(--ink-2); }
+.read dd { margin: 0; }
+.read dd.bad { color: var(--ink); }
+.none { display: none; padding: 18px; border: 1px dashed var(--axis); border-radius: var(--radius); color: var(--ink-2); }
+footer { color: var(--muted); font-size: var(--step--1); display: grid; gap: 4px; }
+footer p { margin: 0; max-width: 80ch; }
+mark { background: color-mix(in srgb, var(--band) 30%, transparent); color: inherit; border-radius: 2px; }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 16px 48px; }
+  .side { position: static; max-height: none; overflow: visible; }
+  nav.toc { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  nav.toc a { border: 1px solid var(--line); }
+}
+@media (max-width: 480px) {
+  .read { grid-template-columns: minmax(0, 1fr); }
+  .gl { grid-template-columns: minmax(0, 1fr); }
+  .gl dd { margin-bottom: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <div class="eyebrow">Companion to the live dashboard</div>
+      <h1>RLM Dashboard Guide</h1>
+    </div>
+    <div class="search">
+      <label for="q">Find a chart</label>
+      <input id="q" type="search" placeholder="e.g. entropy, groups, grader" autocomplete="off">
+      <div class="hint" id="q-hint">Type a chart's name or a word from it.</div>
+    </div>
+    <nav class="toc" id="toc" aria-label="Sections">
+      <a href="#start">Start here</a>
+      <a href="#overview">Overview <span class="n"></span></a>
+      <a href="#pass">Pass rates and difficulty <span class="n"></span></a>
+      <a href="#policy">Policy health <span class="n"></span></a>
+      <a href="#behaviour">RLM behaviour <span class="n"></span></a>
+      <a href="#editing">Editing <span class="n"></span></a>
+      <a href="#reward">Reward and cheating <span class="n"></span></a>
+      <a href="#infra">Infra and timing <span class="n"></span></a>
+      <a href="#evals">Evals <span class="n"></span></a>
+      <a href="#rules">Stop rules <span class="n"></span></a>
+      <a href="#log">Notices, transcripts, table <span class="n"></span></a>
+    </nav>
+  </aside>
+
+  <main>
+    <section class="intro" id="start">
+      <p class="lead">What every chart on the RLM production dashboard tracks, and which way is good. The sections below follow the dashboard's own sections, top to bottom, so a chart you're looking at there is in the section of the same name here.</p>
+      <p>The run trains Qwen3.8-27B to work as a recursive language model (RLM): it reads long inputs and edits code through a Python REPL, and hands pieces of the reading to smaller copies of itself (sub-calls). Each training step gives it 8 tasks, tries each one 4 times, and nudges the model toward the attempts that scored better than the others on the same task. That last idea, called GRPO, explains most of the charts.</p>
+      <div class="legend" aria-label="How to read the badges">
+        <span class="dir up"><span class="g">↑</span>Higher is better</span>
+        <span class="dir down"><span class="g">↓</span>Lower is better</span>
+        <span class="dir band"><span class="g">↔</span>Best inside a range</span>
+        <span class="dir flat"><span class="g">≈</span>Steady is good</span>
+        <span class="dir info"><span class="g">i</span>Context, not a score</span>
+      </div>
+      <p>The cost meters and spend charts aren't covered here; the dashboard's Cost section explains itself. Open the dashboard: <a href="https://claude.ai/artifact/HqtrsXwnHQcJKud7GnUHMm">RLM Production Run</a>.</p>
+    </section>
+
+    <section class="card" aria-labelledby="five">
+      <h2 id="five">Five things to check first</h2>
+      <ol class="checks">
+        <li><span><b>Accuracy on selection-v3</b> (Evals) climbs over checkpoints from the base model's 50% at checkpoint 0. That is the number the run is for.</span></li>
+        <li><span><b>Groups per step</b> (Pass rates) shows at least 4 of 8 groups trainable most steps. Fewer means the tasks are too easy or too hard to learn from.</span></li>
+        <li><span><b>Entropy</b> and <b>within-group reward std</b> (Policy health) stay above their grey lines. Dropping through them is a collapse, and the run rolls itself back.</span></li>
+        <li><span><b>Hack-detector hits</b> (Reward and cheating) stay near zero, and the Claude audit's clean share stays near 100%.</span></li>
+        <li><span><b>Infra error rate</b> (Infra and timing) stays under the 1% line. Above it the run pauses for Rishi.</span></li>
+      </ol>
+    </section>
+
+    <section class="card" aria-labelledby="conv">
+      <h2 id="conv">How to read any chart on the dashboard</h2>
+      <dl class="conv">
+        <div><dt>The horizontal axis</dt><dd>The training step, 1, 2, 3… The Evals charts use the checkpoint instead: the model after that many steps, where checkpoint 0 is the untrained base model.</dd></div>
+        <div><dt>One point per step</dt><dd>Most values are averages over that step's 32 attempts (8 tasks × 4 tries). A single step is noisy; read the trend over 5 to 10 steps.</dd></div>
+        <div><dt>Grey dashed lines</dt><dd>Thresholds the training loop checks, such as the collapse lines, the 1% infra line or the 70% and 20% level lines. Crossing one usually triggers something.</dd></div>
+        <div><dt>Red vertical marks</dt><dd>Rollbacks. The run went back to an earlier checkpoint, usually after a collapse, and continued at a lower learning rate.</dd></div>
+        <div><dt>Faded lines</dt><dd>Steps from before a rollback, kept for comparison. They are no longer part of the run.</dd></div>
+        <div><dt>The number at top right</dt><dd>The latest value. Hover or tap a chart for each step's exact numbers.</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <details class="gloss">
+        <summary>Words the dashboard uses</summary>
+        <dl class="gl">
+          <dt>Step</dt><dd>One round of training: 8 tasks, 4 attempts each, then one update to the model. A step takes roughly 15 to 35 minutes.</dd>
+          <dt>Episode, rollout</dt><dd>One attempt at one task, from the first turn to the submitted answer. 32 per step.</dd>
+          <dt>Group</dt><dd>The 4 attempts at the same task. GRPO compares attempts within a group, so a group where all 4 scored the same teaches nothing.</dd>
+          <dt>Reward</dt><dd>The score of an attempt: 1 for an exact answer (or, for code edits, every hidden test passing), partial credit for a near miss on some read tasks, 0 otherwise.</dd>
+          <dt>Family</dt><dd>A kind of task. <b>Aggregation:</b> count or classify things across a long log of short texts. <b>Call graph:</b> say which functions can end up calling a given one, in a generated code base. <b>Needle:</b> find the one function that does what a description says. <b>Repo loc:</b> name the files a real GitHub issue's fix changed. <b>Edit real:</b> fix a real bug in a real repository. <b>Edit synth:</b> fix a planted bug in a generated Python package.</dd>
+          <dt>Level</dt><dd>Difficulty, 1 to 5, per family. Read tasks grow from ~35K to ~400K characters; edit tasks grow in files and lines to change.</dd>
+          <dt>Controller</dt><dd>What moves each family's level: up when the family passes over 70% of its last 3 steps, down under 20%.</dd>
+          <dt>Root, turn</dt><dd>The root is the main model. Each turn it writes some thinking and a Python cell; the REPL runs the cell and shows the output.</dd>
+          <dt>Sub-call</dt><dd>The root calling the base model on a piece of text from inside its code (<code>llm()</code>). Up to 30 per episode.</dd>
+          <dt>Checkpoint</dt><dd>The model's weights after a given step. Checkpoint 0 is the base model.</dd>
+          <dt>Selection set</dt><dd>64 fixed tasks (selection-v3) evaluated every 10 steps to pick the best checkpoint. Never trained on.</dd>
+          <dt>Infra episode</dt><dd>An attempt lost to the machinery: a container that didn't start, a grader that never reported, a server that kept failing. Rerun or left out, never scored as a failure.</dd>
+          <dt>Retired task</dt><dd>An edit real task taken out of the draw after its group came back all-wrong twice or all-right once, since it can't teach anything more.</dd>
+          <dt>Thinking</dt><dd>The root reasons in hidden thinking tokens before each turn (at the "medium" setting). Sub-calls don't think.</dd>
+        </dl>
+      </details>
+    </section>
+
+    <div class="none" id="none">No chart matches that search. Try a shorter word.</div>
+
+    <!-- ============================================================ overview -->
+    <section class="sec" id="overview">
+      <div class="sec-head"><div class="eyebrow">Overview</div><h2>Where the run stands</h2><p>The tiles at the top of the dashboard. Each one summarises a section further down.</p></div>
+      <div class="entries">
+        <article class="entry" id="tile-pass">
+          <header><h3>Training pass rate, last step</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of the last step's attempts that were exactly right, with the 10-step average and how many of the 8 groups the model could learn from.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Roughly 40-70%. It dips each time a family moves up a level, which is expected.</dd><dt>Worry if</dt><dd>It slides for 10+ steps with no level moves to explain it.</dd></dl>
+        </article>
+        <article class="entry" id="tile-edit">
+          <header><h3>Edit tasks resolved, last step</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of code-editing attempts where every hidden test passed, at the last step and over the last 10.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Rising over the run. One step has only 4-12 edit attempts, so single steps jump around.</dd><dt>Worry if</dt><dd>The 10-step figure falls while the read families improve.</dd></dl>
+        </article>
+        <article class="entry" id="tile-best">
+          <header><h3>Best selection-v3</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The best accuracy any checkpoint has reached on the 64-task selection set, with the latest result and the base model's for comparison. This is the run's headline number.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Above the base model's 50% (checkpoint 0) and climbing every few evals.</dd><dt>Worry if</dt><dd>No new best for 3 evals in a row: that is the plateau stop rule.</dd></dl>
+        </article>
+        <article class="entry" id="tile-rules">
+          <header><h3>Stop rules</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>How many of the stop rules have fired or need watching. Details are in the Stop rules section.</p>
+          <dl class="read"><dt>Healthy</dt><dd>"All clear".</dd><dt>Worry if</dt><dd>Anything fired. A fired rule stops or pauses the run.</dd></dl>
+        </article>
+        <article class="entry" id="tile-levels">
+          <header><h3>Difficulty levels</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The current level of each family, 1 to 5. Every family starts at 1.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Levels creep up as the model gets better.</dd><dt>Worry if</dt><dd>A family keeps bouncing between two levels, or falls back.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ pass rates -->
+    <section class="sec" id="pass">
+      <div class="sec-head"><div class="eyebrow">rlm/pass · dynamic sampling</div><h2>Pass rates and difficulty</h2><p>Whether the model is solving its training tasks, and whether the difficulty is set where it can still learn. The text under the section title also shows how many edit real tasks are retired and how many are left to draw.</p></div>
+      <div class="entries">
+        <article class="entry" id="pass-rate">
+          <header><h3>Pass rate</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of the step's attempts that were exactly right. "Without infra" leaves out attempts lost to the machinery; "with infra" counts them as failures.</p>
+          <dl class="read"><dt>Healthy</dt><dd>A noisy line that holds or rises, with dips right after level-ups. The two lines sit almost on top of each other.</dd><dt>Worry if</dt><dd>A long slide with no level-ups, or a gap between the two lines (infra trouble).</dd></dl>
+        </article>
+        <article class="entry" id="pass-family">
+          <header><h3>Pass rate by family <span class="where">(controller's 3-step window)</span></h3><span class="dir band"><span class="g">↔</span>Best inside a range</span></header>
+          <p>Each family's pass rate over its last 3 steps: the number the controller uses. Grey lines at 70% (move up a level) and 20% (move down).</p>
+          <dl class="read"><dt>Healthy</dt><dd>Lines between 20% and 70%, or crossing 70% and then dropping as the family moves up. That range is where a model learns the most.</dd><dt>Worry if</dt><dd>A family sits under 20% at level 1 (it can't learn it), or above 70% at level 5 (nothing left to learn).</dd></dl>
+        </article>
+        <article class="entry" id="levels">
+          <header><h3>Difficulty level by family</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Each family's level over time, as a staircase.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Steps up, rarely down.</dd><dt>Worry if</dt><dd>Repeated up-down-up moves, which mean the level boundary is too sharp for the model.</dd></dl>
+        </article>
+        <article class="entry" id="groups">
+          <header><h3>Groups per step</h3><span class="dir up"><span class="g">↑</span>Higher is better (the "trainable" part)</span></header>
+          <p>The 8 groups of each step, split by what they were useful for. <b>Trainable:</b> the 4 attempts scored differently, so GRPO can learn from them. <b>All 0:</b> all 4 wrong (too hard). <b>All 1:</b> all 4 right (too easy). <b>Other equal:</b> all 4 got the same partial credit. <b>Too small:</b> fewer than 2 usable attempts after infra losses.</p>
+          <dl class="read"><dt>Healthy</dt><dd>4 or more trainable most steps.</dd><dt>Worry if</dt><dd>Trainable falls to 0-2. Under 2, the step skips training entirely.</dd></dl>
+        </article>
+        <article class="entry" id="histogram">
+          <header><h3>Correct rollouts per group, last 10 steps</h3><span class="dir band"><span class="g">↔</span>Best in the middle</span></header>
+          <p>How many of each group's 4 attempts were right, counted over the last 10 steps. The 0/4 and 4/4 bars are highlighted because those groups teach nothing.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Most of the mass in 1/4, 2/4 and 3/4.</dd><dt>Worry if</dt><dd>Tall 0/4 or 4/4 bars: the levels are set too hard or too easy.</dd></dl>
+        </article>
+        <article class="entry" id="heatmap">
+          <header><h3>Pass rate by family and level, whole run</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>A table: each cell is a family's pass rate at one level over the whole run, darker for higher, with the number of attempts. The outlined cell is the family's current level.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Where each family struggles. Rates should fall from left to right, since higher levels are harder.</dd><dt>Worry if</dt><dd>A family's current level shows a very low rate on hundreds of attempts.</dd></dl>
+        </article>
+        <article class="entry" id="pool">
+          <header><h3>Edit real retired and left to draw <span class="where">(text under the section title)</span></h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>How many of the 107 edit real training tasks are retired, and how many can still be drawn. If too few are left, their slots go to edit synth tasks instead, and the text says so.</p>
+          <dl class="read"><dt>Healthy</dt><dd>"Left to draw" shrinks slowly. Late in the run, slots moving to edit synth is expected and planned.</dd><dt>Worry if</dt><dd>It empties in the first 20-30 steps, which would mean most tasks were too easy or too hard.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ policy -->
+    <section class="sec" id="policy">
+      <div class="sec-head"><div class="eyebrow">rlm/policy · actor</div><h2>Policy health</h2><p>Whether training itself is stable. These charts are about the model's internals, not its scores. Collapses show up here first.</p></div>
+      <div class="entries">
+        <article class="entry" id="entropy">
+          <header><h3>Entropy <span class="where">(mean −logprob of sampled root tokens)</span></h3><span class="dir flat"><span class="g">≈</span>Steady, slowly falling is good</span></header>
+          <p>How spread out the model's word choices are. High entropy means it still explores different ways to write things; low means it says the same thing every time. The grey line is 70% of the highest value in the last 10 steps.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Flat or drifting down gently.</dd><dt>Worry if</dt><dd>It falls through the grey line. That is a collapse: the run rolls back to the last good checkpoint and continues at half the learning rate. A second one stops the run.</dd></dl>
+        </article>
+        <article class="entry" id="reward-std">
+          <header><h3>Within-group reward std <span class="where">(Echo Trap signal)</span></h3><span class="dir flat"><span class="g">≈</span>Steady is good</span></header>
+          <p>How different the 4 attempts at each task scored, averaged over the step. GRPO learns only from those differences. The grey line is half the 10-step average.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Steady, clearly above 0.</dd><dt>Worry if</dt><dd>It falls under the grey line and stays there for 3 steps: the "Echo Trap", where every attempt gives the same answer. That counts as a collapse.</dd></dl>
+        </article>
+        <article class="entry" id="kl">
+          <header><h3>KL to base <span class="where">(logged, not in the loss)</span></h3><span class="dir flat"><span class="g">≈</span>Small and slowly rising is good</span></header>
+          <p>How far the trained model's word probabilities have moved from the base model's, measured on 4 attempts a step. Two estimates of the same thing (k1 and k3). The note under the chart says how many re-scored turns lined up; 0 misaligned is healthy.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Starts near 0 and rises slowly as the model learns.</dd><dt>Worry if</dt><dd>It jumps suddenly, or reads n/a because every re-scored turn was misaligned (which says nothing about training, only about the measurement).</dd></dl>
+        </article>
+        <article class="entry" id="grad-norm">
+          <header><h3>Grad norm</h3><span class="dir flat"><span class="g">≈</span>Steady is good</span></header>
+          <p>The size of each training update. The grey line is 3 times its median.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Wobbling around a steady level.</dd><dt>Worry if</dt><dd>Spikes above the grey line, especially several in a row.</dd></dl>
+        </article>
+        <article class="entry" id="probs-corr">
+          <header><h3>probs_corr <span class="where">(trainer vs sampler logprobs)</span></h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Whether the training server and the inference server agree on how likely each sampled word was. They should, since they hold the same weights. The grey line is the 0.98 floor.</p>
+          <dl class="read"><dt>Healthy</dt><dd>0.99 or above, flat.</dd><dt>Worry if</dt><dd>It drops under 0.98: the model being trained no longer matches the one that produced the attempts.</dd></dl>
+        </article>
+        <article class="entry" id="clip">
+          <header><h3>Clip fraction <span class="where">(CISPO, weights clipped to [0, 5])</span></h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>The share of words whose training weight hit the safety limit. That happens when the model has moved a lot between producing an attempt and training on it.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0%.</dd><dt>Worry if</dt><dd>It climbs above a few percent.</dd></dl>
+        </article>
+        <article class="entry" id="ratio">
+          <header><h3>Importance ratio</h3><span class="dir band"><span class="g">↔</span>Best close to 1</span></header>
+          <p>For each word, how much more or less likely the model being trained finds it than the model that wrote it. Mean, 95th and 99th percentiles.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Mean about 1.00, p95 near 1.1, p99 near 1.2-1.3.</dd><dt>Worry if</dt><dd>The mean drifts away from 1, or p99 climbs well above 1.5.</dd></dl>
+        </article>
+        <article class="entry" id="lr">
+          <header><h3>Learning rate</h3><span class="dir flat"><span class="g">≈</span>Flat is good</span></header>
+          <p>How big a step each update takes: 2e-5, dropping to 1e-5 if a collapse forces a rollback.</p>
+          <dl class="read"><dt>Healthy</dt><dd>A flat line at 2e-5.</dd><dt>Worry if</dt><dd>It steps down. That means a collapse already happened and was handled once.</dd></dl>
+        </article>
+        <article class="entry" id="loss">
+          <header><h3>Train loss</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The training objective's value. In this kind of RL it hovers around 0 and doesn't mean "lower is better" the way it does in ordinary training.</p>
+          <dl class="read"><dt>Read it as</dt><dd>A sanity check: small values wobbling around 0.</dd><dt>Worry if</dt><dd>Sudden large swings, alongside a grad norm spike.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ behaviour -->
+    <section class="sec" id="behaviour">
+      <div class="sec-head"><div class="eyebrow">rlm/shape</div><h2>RLM behaviour</h2><p>How the model works through a task: how many turns and sub-calls it uses, what goes wrong along the way, and how much it writes. These show whether gains come "the RLM way", by reading with code and sub-calls rather than guessing.</p></div>
+      <div class="entries">
+        <article class="entry" id="subcalls">
+          <header><h3>Sub-calls per episode</h3><span class="dir info"><span class="g">i</span>Context, read it with accuracy</span></header>
+          <p>How often the root hands a piece of text to a sub-call, on average. The budget is 30 per episode.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Rising together with accuracy: the model learning to delegate reading.</dd><dt>Worry if</dt><dd>It climbs toward 30 while accuracy stays flat. That's busywork.</dd></dl>
+        </article>
+        <article class="entry" id="budget-hit">
+          <header><h3>Budget-hit rate</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>The share of episodes that used all 30 sub-calls.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0%.</dd><dt>Worry if</dt><dd>It rises: the model is spending its budget instead of planning.</dd></dl>
+        </article>
+        <article class="entry" id="turns">
+          <header><h3>Root turns per episode</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The average number of turns per episode. Read tasks allow 12 and edit tasks 30, so the average mixes both.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Effort. More turns on harder levels is normal.</dd><dt>Worry if</dt><dd>The average sits near a cap: episodes are running out of turns before they finish.</dd></dl>
+        </article>
+        <article class="entry" id="first-turn">
+          <header><h3>First-turn submits</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>The share of episodes that submitted an answer on the very first turn, before looking at the input.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0%.</dd><dt>Worry if</dt><dd>It rises: the model is learning to guess. The early-submit detector zeroes these.</dd></dl>
+        </article>
+        <article class="entry" id="trouble">
+          <header><h3>Trouble per episode</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>Four kinds of friction, per episode: <b>REPL errors</b> (the code crashed), <b>cell timeouts</b> (a cell ran past 120 s in read tasks or 300 s in edit tasks), <b>turns without code</b> (no runnable code block in the reply), and <b>outputs cut short</b> (it printed more than the output limit).</p>
+          <dl class="read"><dt>Healthy</dt><dd>All four low and falling. Some errors are normal; the model fixes them on the next turn.</dd><dt>Worry if</dt><dd>Turns without code climb (a format problem), or timeouts climb (slow or looping code).</dd></dl>
+        </article>
+        <article class="entry" id="transcript">
+          <header><h3>Root transcript length (tokens)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>How long the root's whole conversation gets: average, 95th percentile and longest.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Effort and cost. It grows with harder levels.</dd><dt>Worry if</dt><dd>The longest keeps growing fast, which means rambling or loops.</dd></dl>
+        </article>
+        <article class="entry" id="output-tokens">
+          <header><h3>Output tokens per episode</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>How much the root writes (thinking included) and how much the sub-calls write, per episode.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Where the effort and the cost go.</dd><dt>Worry if</dt><dd>Root output balloons while accuracy doesn't move.</dd></dl>
+        </article>
+        <article class="entry" id="context">
+          <header><h3>Context size (characters)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The average size of the input the model has to work through. Read tasks go from ~35K characters at level 1 to ~400K at level 5. Edit tasks only show the issue and a file list, so they pull the average down.</p>
+          <dl class="read"><dt>Read it as</dt><dd>A rising line means the families are moving up levels.</dd><dt>Worry if</dt><dd>Nothing in particular: it follows the levels.</dd></dl>
+        </article>
+        <article class="entry" id="cutoff">
+          <header><h3>Episodes with a turn cut off at the token cap</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>The share of episodes where at least one turn hit its length limit (3,072 tokens for read tasks, 4,096 for edit tasks), usually because thinking used the whole turn.</p>
+          <dl class="read"><dt>Healthy</dt><dd>A few percent or less.</dd><dt>Worry if</dt><dd>It climbs: the model is overthinking and losing turns.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ editing -->
+    <section class="sec" id="editing">
+      <div class="sec-head"><div class="eyebrow">rlm/edit · spec §12.9</div><h2>Editing</h2><p>The code-editing tasks (edit real and edit synth, 40% of training). The model changes a repository with seven tools (read_file, find_files, grep, edit_file, write_file, shell, diff), and hidden tests grade the change. Only "resolved" earns reward; everything else here shows how it works.</p></div>
+      <div class="entries">
+        <article class="entry" id="resolved">
+          <header><h3>Resolved rate, last 3 steps</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of edit attempts where every hidden test passed, pooled over 3 steps, overall and per family.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Rising, with edit real below edit synth (real repositories are harder).</dd><dt>Worry if</dt><dd>Falling for 10+ steps.</dd></dl>
+        </article>
+        <article class="entry" id="hidden">
+          <header><h3>Hidden tests</h3><span class="dir up"><span class="g">↑</span>f2p up, p2p down</span></header>
+          <p><b>f2p passing:</b> of the tests that failed before the fix and should pass after it, the share that pass. <b>p2p broken:</b> the share of attempts that broke a test that used to pass.</p>
+          <dl class="read"><dt>Healthy</dt><dd>f2p rising, p2p low.</dd><dt>Worry if</dt><dd>p2p climbs: the model is "fixing" things by breaking others.</dd></dl>
+        </article>
+        <article class="entry" id="submitted-edit">
+          <header><h3>Submitted, and submitted no change</h3><span class="dir up"><span class="g">↑</span>Submitted up, empty down</span></header>
+          <p>The share of attempts that called submit, and the share that submitted without changing anything.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Submitted near 100%, empty diff near 0%.</dd><dt>Worry if</dt><dd>Empty diffs rise.</dd></dl>
+        </article>
+        <article class="entry" id="tested">
+          <header><h3>Tested after the last edit, before submit</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of attempts that ran tests between their last change and submitting.</p>
+          <dl class="read"><dt>Healthy</dt><dd>High and rising. Checking before submitting is the habit we want.</dd><dt>Worry if</dt><dd>It falls while resolved stays flat.</dd></dl>
+        </article>
+        <article class="entry" id="cycles">
+          <header><h3>Test runs and edit-test cycles per episode</h3><span class="dir band"><span class="g">↔</span>At least 1, not dozens</span></header>
+          <p>How many times the model ran tests, and how many edit-then-test loops it went through.</p>
+          <dl class="read"><dt>Healthy</dt><dd>At least one of each.</dd><dt>Worry if</dt><dd>Many cycles with no rise in resolved: flailing.</dd></dl>
+        </article>
+        <article class="entry" id="first-edit">
+          <header><h3>Turn of the first edit</h3><span class="dir band"><span class="g">↔</span>A few turns in</span></header>
+          <p>On average, which turn the model first changed the repository (out of 30).</p>
+          <dl class="read"><dt>Healthy</dt><dd>A few turns of exploring first, well before the cap.</dd><dt>Worry if</dt><dd>Turn 1 (editing blind) or close to the cap (never getting to the fix).</dd></dl>
+        </article>
+        <article class="entry" id="tools">
+          <header><h3>Tool calls per episode</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The average use of each of the seven tools. The number at top right is all seven together.</p>
+          <dl class="read"><dt>Read it as</dt><dd>A healthy mix: search and read early, edits followed by shell (test) runs, and diff before submitting.</dd><dt>Worry if</dt><dd>One tool dominates, such as endless read_file calls with no edits.</dd></dl>
+        </article>
+        <article class="entry" id="failed-edits">
+          <header><h3>Edits that failed per episode</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>edit_file calls that failed because the text to replace wasn't found, or wasn't unique. The file is left untouched.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Falling as the model learns to copy text exactly.</dd><dt>Worry if</dt><dd>Rising.</dd></dl>
+        </article>
+        <article class="entry" id="raw-io">
+          <header><h3>Plain Python instead of the tools</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The share of file writes and commands done with plain Python (open, subprocess) instead of the tools. Not penalised.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Which way of working the model prefers.</dd><dt>Worry if</dt><dd>Nothing by itself.</dd></dl>
+        </article>
+        <article class="entry" id="diff-lines">
+          <header><h3>Lines changed per diff</h3><span class="dir band"><span class="g">↔</span>Close to the task's size</span></header>
+          <p>The average size of the submitted change. The grader refuses changes over 2,000 lines.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Small, near what the tasks need (most level 1 fixes are under 10 lines).</dd><dt>Worry if</dt><dd>It balloons: rewriting files instead of fixing them.</dd></dl>
+        </article>
+        <article class="entry" id="files-changed">
+          <header><h3>Files changed per diff</h3><span class="dir info"><span class="g">i</span>Should follow the levels</span></header>
+          <p>The average number of files the change touches. Level 1 needs one file, level 4 three or more.</p>
+          <dl class="read"><dt>Read it as</dt><dd>It should rise as edit levels rise.</dd><dt>Worry if</dt><dd>Many files at level 1.</dd></dl>
+        </article>
+        <article class="entry" id="subcall-read">
+          <header><h3>Reading done by sub-calls</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Of all the text the model looked at, the share it handed to sub-calls instead of printing for itself.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Rising: the root delegates reading, as an RLM should.</dd><dt>Worry if</dt><dd>Stuck at 0 on big tasks.</dd></dl>
+        </article>
+        <article class="entry" id="review">
+          <header><h3>Review sub-calls per episode</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Sub-calls that include a diff: the root asking a helper to review its change.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Above 0, and more on bigger tasks.</dd><dt>Worry if</dt><dd>Nothing by itself.</dd></dl>
+        </article>
+        <article class="entry" id="repeated">
+          <header><h3>Repeated cells per episode <span class="where">(loop signal)</span></h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>Cells identical to an earlier cell in the same attempt.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0.</dd><dt>Worry if</dt><dd>It climbs: the model is stuck in a loop.</dd></dl>
+        </article>
+        <article class="entry" id="network">
+          <header><h3>Blocked network attempts per episode</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>Attempts to reach the internet, for example to install packages. The sandbox has no network, so they always fail. Logged, never penalised.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0.</dd><dt>Worry if</dt><dd>It rises: the model keeps trying to download its way out.</dd></dl>
+        </article>
+        <article class="entry" id="grader-time">
+          <header><h3>Grader time per episode</h3><span class="dir flat"><span class="g">≈</span>Steady is good</span></header>
+          <p>How long the hidden-test run takes per attempt, in seconds. Each task's cap is at least 600 s.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Steady and far below the cap.</dd><dt>Worry if</dt><dd>Climbing toward the cap: the PC's data drive is struggling.</dd></dl>
+        </article>
+        <article class="entry" id="grader-reruns">
+          <header><h3>Grader re-runs per episode</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>A grader that hits its cap runs once more, alone, with double the time, so a slow disk can't fail a correct fix.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0.</dd><dt>Worry if</dt><dd>It climbs: the machine is overloaded.</dd></dl>
+        </article>
+        <article class="entry" id="languages">
+          <header><h3>Resolved by repository language, whole run</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>A table of edit attempts and the share resolved per programming language (Python, Go, JavaScript), over the run and over the last 10 steps.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Every language improving.</dd><dt>Worry if</dt><dd>One language stuck near 0% while the others climb.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ reward -->
+    <section class="sec" id="reward">
+      <div class="sec-head"><div class="eyebrow">rlm/reward</div><h2>Reward and cheating</h2><p>What the model is being scored on, and whether it's earning the score honestly. Detectors catch known tricks and zero the reward of any attempt that uses one.</p></div>
+      <div class="entries">
+        <article class="entry" id="exact">
+          <header><h3>Exact accuracy and mean reward</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Exact accuracy is the share of attempts exactly right (resolved, for edits). Mean reward also counts partial credit for near misses.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Both rising, close together.</dd><dt>Worry if</dt><dd>Mean reward rises while exact accuracy doesn't: the model is farming partial credit.</dd></dl>
+        </article>
+        <article class="entry" id="partial">
+          <header><h3>Partial credit and near-blind answers</h3><span class="dir down"><span class="g">↓</span>Near-blind lower is better</span></header>
+          <p>Partial credit is the average credit given for near misses. Near-blind is the share of answers closer to the "blind guess" than to the truth. The blind guess is the answer you could make up from the input's size alone, without reading it.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near-blind low or falling.</dd><dt>Worry if</dt><dd>Near-blind rises: answers are drifting toward guessing from metadata.</dd></dl>
+        </article>
+        <article class="entry" id="detectors">
+          <header><h3>Hack-detector hits by rule</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>Attempts caught by each cheating detector, stacked per step. <b>Early submit:</b> answered before looking. <b>Copied answer:</b> typed an answer that appears nowhere in its work. <b>Escape attempt:</b> tried to get out of the sandbox. <b>Timeout loop:</b> 3 or more timed-out cells. <b>Test tamper:</b> changed the tests or test settings. <b>Grader tamper:</b> the grader's check tests came back wrong. <b>Test aware:</b> code that behaves differently when it's being tested. <b>Network try</b> (grey) is only logged.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 0, an occasional hit.</dd><dt>Worry if</dt><dd>Hits on more than 5% of attempts over 10 steps and rising. That pauses the run for Rishi (stop rule 5).</dd></dl>
+        </article>
+        <article class="entry" id="submitted">
+          <header><h3>Episodes that submitted</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The share of attempts that gave an answer at all.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Near 100%.</dd><dt>Worry if</dt><dd>It falls: attempts are running out of turns.</dd></dl>
+        </article>
+        <article class="entry" id="audit">
+          <header><h3>Claude audit of sampled wins <span class="where">(clean solve rate table)</span></h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Every 10 steps, Claude reads a sample of winning attempts and judges whether each answer really followed from the work shown. "Clean share" is the share judged clean. It never changes rewards.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Clean share near 100%.</dd><dt>Worry if</dt><dd>Any win judged a hack. That pauses the run until the environment is fixed.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ infra -->
+    <section class="sec" id="infra">
+      <div class="sec-head"><div class="eyebrow">rlm/infra · rlm/time</div><h2>Infra and timing</h2><p>The machinery around the model: the inference servers, the sandboxes and graders on the PC, and how long each step takes. Problems here cost time, not reward.</p></div>
+      <div class="entries">
+        <article class="entry" id="infra-rate">
+          <header><h3>Infra error rate</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>The share of attempts lost to the machinery rather than the model.</p>
+          <dl class="read"><dt>Healthy</dt><dd>0%, with a rare blip.</dd><dt>Worry if</dt><dd>Above the 1% line over 10 steps (more than 3 of 320 attempts). The run pauses for Rishi.</dd></dl>
+        </article>
+        <article class="entry" id="requests">
+          <header><h3>Request trouble per step</h3><span class="dir down"><span class="g">↓</span>Lower is better</span></header>
+          <p>Requests to W&amp;B's inference servers that were rate limited (429), failed on the server (5xx), and the retries that followed.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Some 5xx and retries are normal: about a quarter of requests failed and were retried in step 11, and every episode recovered.</dd><dt>Worry if</dt><dd>Failures rise and the infra error rate rises with them.</dd></dl>
+        </article>
+        <article class="entry" id="step-time">
+          <header><h3>Step time (minutes)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>How long each step took, split into rollouts (the attempts), the KL measurement and training.</p>
+          <dl class="read"><dt>Read it as</dt><dd>About 15-35 minutes, longer when a Go repository's tests run slowly.</dd><dt>Worry if</dt><dd>Steps get steadily longer without harder tasks to explain it.</dd></dl>
+        </article>
+        <article class="entry" id="tokens">
+          <header><h3>Tokens per step</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>How much text went to and from the models each step: the root's prompts, the sub-calls' prompts and the root's output.</p>
+          <dl class="read"><dt>Read it as</dt><dd>The main driver of each step's cost.</dd><dt>Worry if</dt><dd>A sudden jump with no level move to explain it.</dd></dl>
+        </article>
+        <article class="entry" id="in-flight">
+          <header><h3>Requests in flight, step peak</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The most requests waiting on the servers at once during the step. The cap is 30.</p>
+          <dl class="read"><dt>Read it as</dt><dd>Near the cap means the run is as busy as it's allowed to be.</dd><dt>Worry if</dt><dd>Nothing by itself.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ evals -->
+    <section class="sec" id="evals">
+      <div class="sec-head"><div class="eyebrow">val</div><h2>Evals</h2><p>Every 10 steps the latest checkpoint is tested on tasks it never trains on. These results pick the best checkpoint and drive most stop rules.</p></div>
+      <div class="entries">
+        <article class="entry" id="selection">
+          <header><h3>Accuracy on selection-v3</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>Accuracy on 64 fixed held-out tasks (48 read, 16 edit) at each evaluated checkpoint, with ±1 standard error bars. The ring marks the best checkpoint so far.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Climbing above checkpoint 0 (the base model: 50.0% on 2026-10-18). Each point is about ±6 points either way, so read the trend over several evals.</dd><dt>Worry if</dt><dd>No new best for 3 evals (plateau), or it falls two evals in a row while training pass rates rise (overfitting).</dd></dl>
+        </article>
+        <article class="entry" id="capability">
+          <header><h3>Capability check <span class="where">(frying)</span></h3><span class="dir flat"><span class="g">≈</span>Flat is good</span></header>
+          <p>About 100 general questions (instruction following, knowledge, code reasoning and chat) asked the same way each time. It checks that RLM training isn't damaging the model's general skills. The grey line is 2 points below checkpoint 0.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Flat at the checkpoint 0 level (76% for this run).</dd><dt>Worry if</dt><dd>It drops more than 2 points: the frying stop rule ends the run.</dd></dl>
+        </article>
+        <article class="entry" id="eval-tables">
+          <header><h3>By family and by language tables</h3><span class="dir up"><span class="g">↑</span>Higher is better</span></header>
+          <p>The selection set's accuracy per task family, and for the edit tasks per language, at checkpoint 0 and at the latest checkpoint side by side.</p>
+          <dl class="read"><dt>Healthy</dt><dd>Most rows improve.</dd><dt>Worry if</dt><dd>One family gets worse while the overall number rises.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ stop rules -->
+    <section class="sec" id="rules">
+      <div class="sec-head"><div class="eyebrow">Stop rules</div><h2>What would stop or pause the run</h2><p>Checked after every step. Each rule shows OK, Watch, Fired or Not yet. A stop keeps the best checkpoint, a pause waits for Rishi, and every stop can be resumed.</p></div>
+      <div class="entries">
+        <article class="entry" id="r-plateau">
+          <header><h3>1. Plateau <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
+          <p>Fires after 3 selection evals (30 steps) with no new best and no family moving up a level. More training isn't helping.</p>
+        </article>
+        <article class="entry" id="r-overfitting">
+          <header><h3>2. Overfitting <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
+          <p>Fires when training reward rises while selection accuracy falls, two evals in a row. The model is memorising its training tasks.</p>
+        </article>
+        <article class="entry" id="r-frying">
+          <header><h3>3. Frying <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
+          <p>Fires when the capability check drops more than ~2 points, or when a collapse comes back after one rollback.</p>
+        </article>
+        <article class="entry" id="r-saturation">
+          <header><h3>4. Saturation <span class="where">stops, keeps the best</span></h3><span class="dir info"><span class="g">i</span>A good problem to have</span></header>
+          <p>Fires when every family is at its top level with a pass rate above ~70%. The next step is harder data, not more training.</p>
+        </article>
+        <article class="entry" id="r-hacking">
+          <header><h3>5. Hacking <span class="where">pauses for Rishi</span></h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
+          <p>Fires on a hack verdict in the Claude audit, or when detectors fire on more than 5% of attempts over 10 steps and rising. Someone fixes the environment, then the run resumes.</p>
+        </article>
+        <article class="entry" id="r-lr">
+          <header><h3>Learning-rate rule</h3><span class="dir info"><span class="g">i</span>Should say "No collapse"</span></header>
+          <p>If entropy falls below 70% of its 10-step peak, or reward std stays under half its 10-step mean for 3 steps, the run rolls back to the last good checkpoint and continues at 1e-5. That happens once; a second collapse stops the run.</p>
+        </article>
+        <article class="entry" id="r-infra">
+          <header><h3>Infra pause</h3><span class="dir info"><span class="g">i</span>Should stay OK</span></header>
+          <p>More than 1% of attempts lost to infra over the last 10 steps pauses the run.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ log -->
+    <section class="sec" id="log">
+      <div class="sec-head"><div class="eyebrow">Notices · transcripts · table view</div><h2>The log, the examples and the raw numbers</h2><p>The bottom of the dashboard: not charts, but where to look when a chart raises a question.</p></div>
+      <div class="entries">
+        <article class="entry" id="notices">
+          <header><h3>Notices (operator log)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>Everything that happened, newest first: starts and stops, evals, level moves, rollbacks, retired tasks, detector hits, and warnings. The chips filter by kind: interventions, warnings, evals and audits, level moves.</p>
+          <dl class="read"><dt>Look here</dt><dd>When a chart changes suddenly. There is usually a notice at the same step that explains it.</dd></dl>
+        </article>
+        <article class="entry" id="samples">
+          <header><h3>Sampled transcripts (training rollouts)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>Real attempts from training: one win and one failure per step, plus any attempt a detector flagged. Each shows the task, the model's turns and code, its sub-calls and its score. Text is cut short, and eval tasks never appear.</p>
+          <dl class="read"><dt>Look here</dt><dd>To see what a number means in practice, such as what "turns without code" or a flagged attempt actually looked like.</dd></dl>
+        </article>
+        <article class="entry" id="table">
+          <header><h3>Table view (the latest steps)</h3><span class="dir info"><span class="g">i</span>Context, not a score</span></header>
+          <p>The numbers behind the charts, one row per step, with a button that copies every step as CSV for a spreadsheet.</p>
+          <dl class="read"><dt>Look here</dt><dd>For exact values, or to compare steps side by side.</dd></dl>
+        </article>
+      </div>
+    </section>
+
+    <footer>
+      <p>Written for the production run prod-v1 (plan step 12), 2026-10-17. If something on the dashboard looks off, tell Rishi with the section, the chart and the step number. Stopping, fixing or resuming the run is his call.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var q = document.getElementById("q"), hint = document.getElementById("q-hint"), none = document.getElementById("none");
+  var secs = [].slice.call(document.querySelectorAll("section.sec"));
+  var links = {};
+  [].slice.call(document.querySelectorAll("#toc a")).forEach(function (a) { links[a.getAttribute("href").slice(1)] = a; });
+  function counts() {
+    var total = 0;
+    secs.forEach(function (s) {
+      var n = s.querySelectorAll("article.entry:not([hidden])").length; total += n;
+      var a = links[s.id]; if (a) { var c = a.querySelector(".n"); if (c) c.textContent = n; a.classList.toggle("empty", n === 0); }
+    });
+    return total;
+  }
+  function apply() {
+    var term = q.value.trim().toLowerCase();
+    secs.forEach(function (s) {
+      var shown = 0;
+      [].slice.call(s.querySelectorAll("article.entry")).forEach(function (e) {
+        var hit = !term || e.textContent.toLowerCase().indexOf(term) >= 0;
+        e.hidden = !hit; if (hit) shown++;
+      });
+      s.hidden = term && !shown;
+    });
+    var total = counts();
+    none.style.display = term && !total ? "block" : "none";
+    hint.textContent = term ? total + (total === 1 ? " chart matches." : " charts match.") : "Type a chart's name or a word from it.";
+  }
+  q.addEventListener("input", apply);
+  counts();
+})();
+</script>

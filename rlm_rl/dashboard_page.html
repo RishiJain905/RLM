@@ -841,7 +841,7 @@ footer p { margin: 0; max-width: 92ch; }
     chart(eh, { title: "Test runs and edit-test cycles per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, series: [es("test runs", "var(--c1)", "test_runs"), es("edit cycles", "var(--c2)", "edit_cycles")],
                 note: "Mean test commands, and edit-then-test cycles, per episode. Healthy: at least one of each; many cycles with no gain in resolved is flailing." });
     chart(eh, { title: "Turn of the first edit", fmt: F.num, yMin: 0, yMaxAtLeast: 4, series: [es("turns to first edit", "var(--c1)", "turns_to_first_edit")],
-                note: "Mean turn of the first write to the repository, out of 20. Healthy: a few turns of exploring first, well before the cap." });
+                note: "Mean turn of the first write to the repository, out of 30 (20 before prompt v3). Healthy: a few turns of exploring first, well before the cap." });
     var TOOLS = ["read_file", "find_files", "grep", "edit_file", "write_file", "shell", "diff"];
     var lastCalls = (lastE.edit && lastE.edit.tool_calls) || {}, totalCalls = TOOLS.reduce(function (n, t) { return isNum(lastCalls[t]) ? (n || 0) + lastCalls[t] : n; }, null);
     chart(eh, { title: "Tool calls per episode", fmt: F.num, yMin: 0, yMaxAtLeast: 2, endLabels: true, headline: isNum(totalCalls) ? F.num(totalCalls) : null,
