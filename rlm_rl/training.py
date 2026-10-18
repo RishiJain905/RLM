@@ -131,6 +131,24 @@ def load_state(results: Path, run: str) -> dict:
     return json.loads(state_path(results, run).read_text(encoding="utf-8"))
 
 
+# What counts as really delegating, for the delegation bonus. A read episode's sub-calls must have read at least
+# DELEGATED_READ_SHARE of its context between them (the pilot's roots grepped a few lines and read them alone); an edit
+# episode needs DELEGATED_EDIT_CALLS sub-calls that each sent at least DELEGATED_EDIT_PROMPT_CHARS (code, a spec, a
+# failing test) and got an answer. A sub-call that errored or came back empty doesn't count.
+DELEGATED_READ_SHARE = 0.25
+DELEGATED_EDIT_CALLS = 2
+DELEGATED_EDIT_PROMPT_CHARS = 1_000
+
+
+def delegated(ep: Episode) -> bool:
+    """Whether an episode really handed work to sub-calls (the delegation bonus's gate)."""
+    calls = [s for s in (ep.subcalls or []) if isinstance(s, dict) and s.get("output") and not s.get("error")]
+    if bridge.is_edit(ep.family):
+        return sum(len(s.get("prompt") or "") >= DELEGATED_EDIT_PROMPT_CHARS for s in calls) >= DELEGATED_EDIT_CALLS
+    read = sum(len(s.get("prompt") or "") for s in calls)
+    return bool(calls) and read >= DELEGATED_READ_SHARE * max(1, getattr(ep, "context_chars", 0) or 0)
+
+
 def _mix_text(mix: dict) -> str:
     return ", ".join(f"{family} {share:.0%}" for family, share in mix.items() if share > 0)
 
@@ -682,21 +700,25 @@ class TrainingRun:
                             f"{new.selection}")
 
     def _delegation_bonus(self, n: int, groups: list[list[Episode]]) -> int:
-        """The reserve delegation bonus (RunConfig.delegation_bonus): on its steps, a right answer from an episode
-        that made sub-calls which answered gets the bonus. Wrong answers never do, so delegating can't be farmed for
-        its own sake. Returns how many episodes got it."""
+        """The delegation bonus (RunConfig.delegation_bonus): on its steps, a right answer from an episode that really
+        delegated (`delegated`) gets the bonus, fading linearly from the first step it applies to (the latest task
+        shift's next step, else step 1) to 0 at delegation_bonus_until. Wrong answers never get it, and token sub-calls
+        don't count, so delegating can't be farmed for its own sake. Returns how many episodes got it."""
         cfg = self.cfg
         if not cfg.delegation_bonus or n > cfg.delegation_bonus_until or n % cfg.delegation_bonus_every:
             return 0
+        shifts = (getattr(self, "state", None) or {}).get("task_shifts") or []
+        start = (shifts[-1]["after_checkpoint"] or 0) + 1 if shifts else 1
+        span = max(1, cfg.delegation_bonus_until - start + 1)
+        value = round(cfg.delegation_bonus * max(0.0, min(1.0, (cfg.delegation_bonus_until - n + 1) / span)), 4)
         given = 0
         for ep in (ep for group in groups for ep in group):
-            answered = any(s.get("output") for s in (ep.subcalls or []) if isinstance(s, dict))
-            if ep.infra_error is None and ep.correct and not ep.hacks and answered:
-                ep.reward_components["delegation_bonus"] = cfg.delegation_bonus
-                ep.reward = round(ep.reward + cfg.delegation_bonus, 4)
+            if value and ep.infra_error is None and ep.correct and not ep.hacks and delegated(ep):
+                ep.reward_components["delegation_bonus"] = value
+                ep.reward = round(ep.reward + value, 4)
                 given += 1
         if given:
-            self._notice("bonus", f"step {n}: delegation bonus {cfg.delegation_bonus:g} on {given} right answer(s)")
+            self._notice("bonus", f"step {n}: delegation bonus {value:g} on {given} right answer(s)")
         return given
 
     async def _warm(self, model: str, n: int) -> None:

@@ -71,7 +71,8 @@ RESAMPLE_BROKEN = 2
 # `train.py resume prod-v1 --task-shift v4`; the selection set then re-scores the checkpoint it resumes from.
 TASK_SHIFTS = {
     "v4": {"mix": {"research": 0.30, "aggregation": 0.20, "edit_spec": 0.30, "edit_bugs": 0.20},
-           "prompt_version": "v4", "tasks_per_step": 6, "rollouts": 6, "selection": "selection-v4"},
+           "prompt_version": "v4", "tasks_per_step": 6, "rollouts": 6, "selection": "selection-v4",
+           "delegation_bonus": 0.2, "delegation_bonus_every": 1, "delegation_bonus_until": 50},
 }
 
 TRAINING_GPU_USD_PER_STEP = 0.16  # the 20-step run's measured rate (research §7.1); an estimate for the dashboard
@@ -106,9 +107,12 @@ class RunConfig:
     format_penalty: float = 0.0  # reward off per broken reply in training rollouts (reward.FORMAT_PENALTY); 0 is off
     mask_broken: bool = False  # broken replies take no gradient (env.to_trajectory); production's fix since 2026-10-18
     resample_broken: int = 0  # times a training rollout draws a broken reply again before it enters the conversation
-    # A part-time, correctness-gated delegation bonus (step-12 plan step 4, kept in reserve; 0 is off): on every
-    # `delegation_bonus_every`-th step up to `delegation_bonus_until`, a right answer from an episode whose sub-calls
-    # answered gets this much more reward (Parallel-R1 arXiv 2509.07980, RAO arXiv 2605.06639, Kimi K2.5 PARL).
+    # A correctness-gated delegation bonus (step-12 plan step 4; 0 is off): on every `delegation_bonus_every`-th step
+    # up to `delegation_bonus_until`, a right answer from an episode that really delegated (training.delegated) gets up
+    # to this much more reward, fading linearly to 0 at `delegation_bonus_until` (Parallel-R1 arXiv 2509.07980, RAO
+    # arXiv 2605.06639, Kimi K2.5 PARL). The task shift turns it on: the pilot found delegating and solo rollouts
+    # equally right, so without it GRPO has no reason to prefer delegating (Rishi, 2026-10-18: "reward answers that
+    # used sub-calls and got it right").
     delegation_bonus: float = 0.0
     delegation_bonus_every: int = 5
     delegation_bonus_until: int = 50

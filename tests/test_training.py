@@ -534,24 +534,32 @@ class TaskShiftTest(LoopCase):
 
 
 class DelegationBonusTest(unittest.TestCase):
-    def test_only_right_answers_that_delegated_on_bonus_steps(self):
+    def test_only_right_answers_that_really_delegated_get_it_and_it_fades(self):
         from types import SimpleNamespace
 
-        def ep(correct, outputs, hacks=()):
+        def ep(correct, calls, hacks=(), family="research", context=40_000):
             return SimpleNamespace(infra_error=None, correct=correct, hacks=list(hacks), reward=float(correct),
-                                   reward_components={}, subcalls=[{"output": o} for o in outputs])
+                                   reward_components={}, family=family, context_chars=context,
+                                   subcalls=[{"prompt": "x" * n, "output": o, "error": None} for n, o in calls])
 
         notes = []
-        run = SimpleNamespace(cfg=config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed",
-                                                   delegation_bonus=0.2),
+        cfg = config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed", delegation_bonus=0.2,
+                               delegation_bonus_every=1, delegation_bonus_until=30)
+        run = SimpleNamespace(cfg=cfg, state={"task_shifts": [{"after_checkpoint": 20}]},
                               _notice=lambda kind, text: notes.append(text))
-        group = [ep(True, ["a"]), ep(True, []), ep(False, ["a"]), ep(True, [""]), ep(True, ["a"], hacks=["x"])]
-        self.assertEqual(training.TrainingRun._delegation_bonus(run, 5, [group]), 1)
-        self.assertEqual([e.reward for e in group], [1.2, 1.0, 0.0, 1.0, 1.0])
-        self.assertEqual(training.TrainingRun._delegation_bonus(run, 6, [[ep(True, ["a"])]]), 0)  # not a bonus step
-        self.assertEqual(training.TrainingRun._delegation_bonus(run, 55, [[ep(True, ["a"])]]), 0)  # annealed away
+        read = [(6_000, "a")] * 2  # 12K of a 40K context: 30% read by sub-calls
+        group = [ep(True, read), ep(True, [(2_000, "a")]), ep(False, read), ep(True, [(12_000, "")]),
+                 ep(True, read, hacks=["x"]), ep(True, [(1_500, "fix"), (1_200, "fix")], family="edit_bugs"),
+                 ep(True, [(1_500, "fix")], family="edit_bugs")]
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 21, group and [group]), 2)
+        self.assertEqual([e.reward for e in group], [1.2, 1.0, 0.0, 1.0, 1.0, 1.2, 1.0])
+        g = [ep(True, read)]
+        training.TrainingRun._delegation_bonus(run, 26, [g])
+        self.assertEqual(g[0].reward, 1.1)  # half way from step 21 to 30
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 31, [[ep(True, read)]]), 0)  # faded out
         run.cfg = config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed")
-        self.assertEqual(training.TrainingRun._delegation_bonus(run, 5, [[ep(True, ["a"])]]), 0)  # off by default
+        self.assertEqual(training.TrainingRun._delegation_bonus(run, 25, [[ep(True, read)]]), 0)  # off by default
+        self.assertEqual(config.TASK_SHIFTS["v4"]["delegation_bonus"], 0.2)  # the task shift turns it on
         with self.assertRaises(ValueError):
             config.RunConfig(run="b", kind="production", learning_rate=1e-5, lr_rule="fixed", delegation_bonus=0.5)
 
