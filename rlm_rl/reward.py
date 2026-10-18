@@ -63,6 +63,9 @@ FORMAT_PENALTY_MAX_REPLIES = 3  # so the most it takes is 0.3 *(mine)*
 # so this only trims a tail that was already below it.
 COUNT_DECAY = 0.75
 COUNT_MAX_ERR = 10
+# aggregation-v4 counts over a whole log reach ~1,300, where a miss of a few lines is near-perfect labelling. A unit of
+# error is COUNT_REL_UNIT of the gold count, at least 1, so counts up to 100 keep OOLONG's per-line credit exactly.
+COUNT_REL_UNIT = 0.01
 
 # A minus sign counts only when it isn't joined to a word, so "host-42" parses as 42.
 _NUMBER_RE = re.compile(r"(?:(?<!\w)-)?\d+(?:\.\d+)?")
@@ -83,7 +86,7 @@ def settings() -> dict:
             "decimal_tolerance": DECIMAL_TOLERANCE, "answer_types": list(ANSWER_TYPES),
             "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec §12.6, decision E-c)",
             "format_penalty_max_replies": FORMAT_PENALTY_MAX_REPLIES, "count_decay": COUNT_DECAY,
-            "count_max_err": COUNT_MAX_ERR}
+            "count_max_err": COUNT_MAX_ERR, "count_rel_unit": COUNT_REL_UNIT}
 
 
 def broken_replies(turns: Any) -> int:
@@ -388,14 +391,16 @@ def score_text(answer: Any, gold: Any, grading: dict) -> Score:
 
 
 def score_count(answer: Any, gold: Any, grading: dict) -> Score:
-    """A count, OOLONG-style: exact 1, a miss 0.8 x 0.75^|err|, and 0 from COUNT_MAX_ERR off. The blind guess
+    """A count, OOLONG-style: exact 1, a miss 0.8 x 0.75^units, and 0 from COUNT_MAX_ERR units off, where a unit is
+    one, or 1% of a gold count over 100. The blind guess
     doesn't scale the credit here; it is only logged (`e_blind`, `near_blind`), as for the "int" type."""
     value, target, blind = parse_number(answer), parse_number(gold), parse_number(grading["blind"])
     if value is None:
         return Score(0.0, False, dict(_UNPARSED))
     err, e_blind = abs(value - target), abs(blind - target)
     exact = value == target
-    partial = 0.0 if exact or err >= COUNT_MAX_ERR else round(NEAR_MISS_MAX * COUNT_DECAY ** err, 4)
+    units = err / max(1.0, COUNT_REL_UNIT * abs(target))
+    partial = 0.0 if exact or units >= COUNT_MAX_ERR else round(NEAR_MISS_MAX * COUNT_DECAY ** units, 4)
     near_blind = float(not exact and abs(value - blind) < err)
     return Score(EXACT_REWARD if exact else partial, exact,
                  {"parsed": 1.0, "exact": float(exact), "partial": partial, "err": err, "e_blind": e_blind,

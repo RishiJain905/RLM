@@ -415,12 +415,22 @@ class OpenBookScriptTest(unittest.TestCase):
         cls.script = _open_book_script()
         cls.items = cls.script.plan()
 
-    def test_plan_is_every_question_the_closed_book_check_checked(self):
+    def test_plan_checks_the_drawable_questions(self):
+        """Select and test: every question the closed-book check found not known. Train: a fixed sample of those."""
         closed = research.closed_book()["results"]
-        expected = {(source, split, i) for source, by in closed.items() for split, row in by.items()
-                    for i in row["checked"]}
-        self.assertEqual(set(self.items), expected)
-        self.assertEqual(len(self.items), len(expected))
+        items = set(self.items)
+        self.assertEqual(len(self.items), len(items))
+        for source, by in closed.items():
+            for split, row in by.items():
+                drawable = {(source, split, i) for i in set(row["checked"]) - set(row["known"])}
+                mine = {item for item in items if item[:2] == (source, split)}
+                if split == "train":
+                    self.assertLessEqual(mine, drawable)
+                    cap = self.script.TRAIN_SAMPLE[source]
+                    self.assertLessEqual(len(mine), sum(cap.values()) if isinstance(cap, dict) else cap)
+                else:
+                    self.assertEqual(mine, drawable)
+        self.assertEqual(self.items, self.script.plan())  # fixed
 
     def test_documents_are_the_gold_and_nothing_else(self):
         for source, split, i in [item for item in self.items if item[1] == "select"][:: 50]:

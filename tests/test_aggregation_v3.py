@@ -50,6 +50,10 @@ class CountScoreTest(unittest.TestCase):
             self.assertAlmostEqual(s.reward, expected, places=4, msg=answer)
             self.assertEqual(s.correct, answer in (70, "70 messages"))
         self.assertAlmostEqual(reward.score_answer(70.5, 70, self.GRADING).reward, round(0.8 * 0.75 ** 0.5, 4))
+        # a whole-log count (aggregation-v4): a unit of error is 1% of the gold, so 13 off 1,300 is one unit
+        big = {"type": "count", "blind": 900}
+        self.assertAlmostEqual(reward.score_answer(1313, 1300, big).reward, 0.6, places=4)
+        self.assertEqual(reward.score_answer(1170, 1300, big).reward, 0.0)  # 10 units off
 
     def test_credit_is_not_calibrated_against_the_blind_guess(self):
         """Unlike "int": a near blind guess doesn't shrink the credit (the generator re-draws such tasks instead)."""
