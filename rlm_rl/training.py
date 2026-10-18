@@ -83,6 +83,10 @@ AUDIT_EVERY = 10  # the Claude audit's checkpoints (decision 5a)
 # 30-130 optimizer updates, so its first train calls run at these fractions of the learning rate (prod-v1 2026-10-18:
 # one full-rate step after a rollback took broken replies from ~10% of turns to ~40%).
 BRANCH_WARMUP = (0.25, 0.5)
+# Before a step's rollouts, one tiny call to the checkpoint it samples from, tried this many times (each with the
+# client's own ~6 minutes of retries). W&B loads a new checkpoint on first use and answers 500 meanwhile; on 2026-10-18
+# that outlasted the episodes' own retries when 32 of them hit a fresh checkpoint at once (prod-v1 steps 16-18).
+WARM_TRIES = 3
 STOP_FILE = "STOP"
 LIVE_GUARD_S = 120.0  # a "running" state written this recently may belong to a process that is still running it
 CAPABILITY_ITEM_ESTIMATE_USD = 0.005  # one short chat call, before the first check has been measured
@@ -447,6 +451,7 @@ class TrainingRun:
         started, t0 = time.time(), time.monotonic()
         self.client.reset_stats()  # the step's request stats leave out the evals before it
         self._live(n, "rollouts")
+        await self._warm(root_model, n)
         retired = self.retirement.ids()
         batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels(), n, **({"exclude": retired} if retired else {}))
         fallback = self._fallback_slots(n, batch)
@@ -612,6 +617,17 @@ class TrainingRun:
         if not families or None in sizes:
             return None
         return sum(sizes) - sum(v.get("family") in families for v in self.retirement.retired.values())
+
+    async def _warm(self, model: str, n: int) -> None:
+        """Wake the checkpoint step n samples from with one tiny call before its episodes start (WARM_TRIES)."""
+        for attempt in range(1, WARM_TRIES + 1):
+            try:
+                await self.client.chat([{"role": "user", "content": "Reply with OK."}], model=model, max_tokens=4)
+                return
+            except InfraError as exc:
+                self._notice("warmup", f"step {n}: the checkpoint didn't answer a warm-up call ({attempt} of "
+                                       f"{WARM_TRIES}): {exc}"[:300])
+        self._notice("warmup", f"step {n}: starting the rollouts anyway; their own retries apply")
 
     def _warmup(self) -> float:
         """The learning rate's fraction for the next train call: BRANCH_WARMUP for a rollback branch's first calls."""

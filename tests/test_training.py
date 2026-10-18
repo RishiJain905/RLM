@@ -492,6 +492,29 @@ class LearningRateFallbackTest(LoopCase):
         self.assertLess(kinds.index("lr_fallback"), kinds.index("rollback"))
 
 
+class WarmupTest(LoopCase):
+    async def test_each_step_wakes_its_checkpoint_before_the_rollouts(self):
+        """prod-v1 steps 16-18: W&B answered 500 while loading a fresh checkpoint, longer than the episodes' retries."""
+        failed = []
+
+        def fault(kind, body):
+            warm = body["messages"][-1]["content"] == "Reply with OK."
+            if warm and len(failed) < FAST.tries:  # the first warm-up call fails all its tries
+                failed.append(body["model"])
+                return 500
+            return None
+
+        self.dry.server.fault = fault
+        st = await self.run_("wu", cfg=second_seed("wu", 3), stop_after=2).start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
+        warm = [b["model"] for b in self.dry.server.bodies if b["messages"][-1]["content"] == "Reply with OK."]
+        self.assertEqual(warm, ["wu:step0"] * (FAST.tries + 1) + ["wu:step1"])
+        notes = [n["text"] for n in st["notices"] if n["kind"] == "warmup"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("step 1: the checkpoint didn't answer a warm-up call (1 of 3)", notes[0])
+        self.assertEqual(training.WARM_TRIES, 3)
+
+
 class PauseTest(LoopCase):
     async def test_an_infra_error_pauses_the_second_seed_until_resumed(self):
         made = []
