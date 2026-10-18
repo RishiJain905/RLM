@@ -42,6 +42,9 @@ from rlm_rl.tasks import research  # noqa: E402
 MODEL_NAME = "prod-v1"  # step 0 is the base model, as in scripts/closed_book.py
 VALID_LIST_F1 = 0.8
 SHUFFLE_SEED = 20261018
+# Training questions checked per source (and per hop count for MuSiQue): a run draws a few hundred research tasks, so
+# a fixed sample is plenty; the select and test splits are checked in full.
+TRAIN_SAMPLE = {"musique": {2: 600, 3: 1500, 4: 1200}, "qampari": 700}
 MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")  # a list line's bullet or number
 AT_ONCE = 32
 SAVE_EVERY = 250
@@ -72,10 +75,24 @@ def plan() -> list[tuple[str, str, int]]:
     if checked is None:
         raise SystemExit(f"no closed-book results at {data.derived(research.CLOSED_BOOK)}: run scripts/closed_book.py")
     items = []
+    rng = random.Random(f"{SHUFFLE_SEED}:plan")
     for split in ("train", "select", "test"):
         for source in ("musique", "qampari"):
             row = checked["results"].get(source, {}).get(split)
-            items += [(source, split, i) for i in sorted(set(row["checked"]))] if row else []
+            if not row:
+                continue
+            # questions the closed-book check found known are never drawn, so they need no check
+            left = sorted(set(row["checked"]) - set(row["known"]))
+            if split == "train":  # a training run draws a few hundred: a fixed sample per hop count keeps it ~$2.5
+                if source == "musique":
+                    by_hops: dict[int, list[int]] = {}
+                    for i in left:
+                        by_hops.setdefault(int(research._musique(split)["questions"][i]["hops"]), []).append(i)
+                    left = sorted(i for hops, ids in by_hops.items()
+                                  for i in rng.sample(ids, min(len(ids), TRAIN_SAMPLE["musique"].get(hops, 0))))
+                else:
+                    left = sorted(rng.sample(left, min(len(left), TRAIN_SAMPLE["qampari"])))
+            items += [(source, split, i) for i in left]
     return items
 
 

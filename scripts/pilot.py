@@ -81,7 +81,7 @@ async def run_live(args) -> None:
         base = backend.inference_name(args.source_run, 0)
         models = {"ckpt20": backend.inference_name(model, ckpt["backend_step"])}
         run = baselines.BaselineRun(args.run, RESULTS, openai_client=backend.openai_client(), base_model=base,
-                                    ceiling=args.ceiling, eval_set=args.run, models=models)
+                                    ceiling=args.ceiling, eval_set=args.run, models=models, max_edit=args.max_edit)
         arms = args.arms.split(",")
         proj = baselines.project(run.run_dir, tasks, [baselines.ARMS[a] for a in arms])
         print(f"projected ${proj['todo_usd']:.2f} more; spent ${run.budget.spent():.2f}; ceiling ${args.ceiling:g}")
@@ -138,6 +138,8 @@ def main() -> int:
     p.add_argument("--arms", default=",".join(DEFAULT_ARMS))
     p.add_argument("--source-run", default="prod-v1")
     p.add_argument("--checkpoint", type=int, default=20)
+    p.add_argument("--max-edit", type=int, default=baselines.MAX_EDIT_AT_ONCE,
+                   help="edit episodes at once (training runs ~20; the baselines' default is 8)")
     p = sub.add_parser("summary")
     p.add_argument("run")
     args = parser.parse_args()
