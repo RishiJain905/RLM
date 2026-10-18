@@ -25,6 +25,11 @@ the host and never enters the sandbox.
     {"type": "entity"}
     {"type": "list", "item": "entity", "blind": ["host-a", "host-b"]}
     {"type": "text", "aliases": ["Bombardier"], "blind": None, "ignore": ["built", "who"]}
+    {"type": "count", "blind": 71}
+
+"count" (aggregation-v3, 2026-10-18) grades a count the way OOLONG does instead of against the blind guess:
+0.8 x 0.75^|err| for a miss, and nothing from COUNT_MAX_ERR off. Its generator re-draws any task whose blind
+guess lands within COUNT_MAX_ERR of the gold, so the blind guess still earns only its exact hits (H1).
 """
 
 from __future__ import annotations
@@ -36,7 +41,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-ANSWER_TYPES = ("int", "float", "entity", "list", "text")
+ANSWER_TYPES = ("int", "float", "entity", "list", "text", "count")
 LIST_ITEM_TYPES = ("int", "float", "entity")
 
 EXACT_REWARD = 1.0
@@ -51,6 +56,11 @@ DECIMAL_TOLERANCE = 0.005
 # only once the logs show the need).
 FORMAT_PENALTY = 0.1  # per broken reply *(mine)*
 FORMAT_PENALTY_MAX_REPLIES = 3  # so the most it takes is 0.3 *(mine)*
+# The "count" type (aggregation-v3): OOLONG's near-miss credit, 0.75 per unit of error, scaled to NEAR_MISS_MAX.
+# A miss of COUNT_MAX_ERR or more earns nothing: 0.8 x 0.75^10 = 0.045, under the 0.05 a metadata guess may earn,
+# so this only trims a tail that was already below it.
+COUNT_DECAY = 0.75
+COUNT_MAX_ERR = 10
 
 # A minus sign counts only when it isn't joined to a word, so "host-42" parses as 42.
 _NUMBER_RE = re.compile(r"(?:(?<!\w)-)?\d+(?:\.\d+)?")
@@ -70,7 +80,8 @@ def settings() -> dict:
     return {"exact_reward": EXACT_REWARD, "near_miss_max": NEAR_MISS_MAX, "near_miss_slope": NEAR_MISS_SLOPE,
             "decimal_tolerance": DECIMAL_TOLERANCE, "answer_types": list(ANSWER_TYPES),
             "edit": "binary: 1 when every fail-to-pass and pass-to-pass test passes (spec §12.6, decision E-c)",
-            "format_penalty_max_replies": FORMAT_PENALTY_MAX_REPLIES}
+            "format_penalty_max_replies": FORMAT_PENALTY_MAX_REPLIES, "count_decay": COUNT_DECAY,
+            "count_max_err": COUNT_MAX_ERR}
 
 
 def broken_replies(turns: Any) -> int:
@@ -147,7 +158,7 @@ def check_grading(grading: dict, gold: Any) -> None:
     kind = grading.get("type")
     if kind not in ANSWER_TYPES:
         raise ValueError(f"unknown answer type {kind!r}")
-    if kind in ("int", "float") and (parse_number(gold) is None or parse_number(grading.get("blind")) is None):
+    if kind in ("int", "float", "count") and (parse_number(gold) is None or parse_number(grading.get("blind")) is None):
         raise ValueError(f"a {kind} task needs a numeric gold answer and a numeric blind guess")
     if kind == "list":
         if grading.get("item") not in LIST_ITEM_TYPES:
@@ -177,6 +188,9 @@ def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
     kind = grading["type"]
     if answer is None:
         return Score(0.0, False, dict(_UNPARSED))
+
+    if kind == "count":
+        return score_count(answer, gold, grading)
 
     if kind in ("int", "float"):
         value, target, blind = parse_number(answer), parse_number(gold), parse_number(grading["blind"])
@@ -269,6 +283,21 @@ def score_text(answer: Any, gold: Any, grading: dict) -> Score:
     f1 = max(token_f1(value.split(), g.split(), ignore) for g in golds)
     partial = round(NEAR_MISS_MAX * f1, 4)
     return Score(partial, False, {"parsed": 1.0, "exact": 0.0, "partial": partial, "f1": round(f1, 4)})
+
+
+def score_count(answer: Any, gold: Any, grading: dict) -> Score:
+    """A count, OOLONG-style: exact 1, a miss 0.8 x 0.75^|err|, and 0 from COUNT_MAX_ERR off. The blind guess
+    doesn't scale the credit here; it is only logged (`e_blind`, `near_blind`), as for the "int" type."""
+    value, target, blind = parse_number(answer), parse_number(gold), parse_number(grading["blind"])
+    if value is None:
+        return Score(0.0, False, dict(_UNPARSED))
+    err, e_blind = abs(value - target), abs(blind - target)
+    exact = value == target
+    partial = 0.0 if exact or err >= COUNT_MAX_ERR else round(NEAR_MISS_MAX * COUNT_DECAY ** err, 4)
+    near_blind = float(not exact and abs(value - blind) < err)
+    return Score(EXACT_REWARD if exact else partial, exact,
+                 {"parsed": 1.0, "exact": float(exact), "partial": partial, "err": err, "e_blind": e_blind,
+                  "near_blind": near_blind})
 
 
 def score(task: Any, ep: Any) -> Score:

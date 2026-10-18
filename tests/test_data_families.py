@@ -53,8 +53,11 @@ class FamilyContract:
         self.assertEqual(reward.score_answer(task.answer, task.answer, task.grading).reward, 1.0)
         blind = reward.score_answer(task.grading.get("blind"), task.answer, task.grading)
         self.assertLessEqual(blind.reward, float(blind.correct))  # H1: the blind guess earns only an exact hit
+        # The answer isn't in the question, unless the question offers it as an option: a list blind guess holds
+        # every option (aggregation-v3's top_topic answers with one of the topics the question lists).
+        options = task.grading.get("blind") if isinstance(task.grading.get("blind"), list) else []
         self.assertNotIn(str(task.answer), task.question) if isinstance(task.answer, (int, str)) and \
-            len(str(task.answer)) > 4 else None
+            len(str(task.answer)) > 4 and task.answer not in options else None
 
     def check_deterministic(self, family, level):
         a = tasks.make_task(family, level, seed=12345, task_id="t")
@@ -293,16 +296,19 @@ class AggregationTest(FamilyContract, unittest.TestCase):
                     self.assertTrue(lo * 0.95 <= len(task.context) <= hi * 1.05, len(task.context))
 
     def test_the_answer_is_what_the_context_says(self):
+        """The v2 generator, which the eval sets frozen before v3 still build (tests/test_aggregation_v3.py covers
+        v3). Since 2026-10-18 it is asked for by version: training draws v3."""
         pools = {**data.clinc_domain_pools(), **data.massive_scenario_pools(), **data.ledgar_pools(),
                  **data.arxiv_title_pools(), **data.huffpost_pools()}
         rng, kinds = random.Random(2), set()
         for family in aggregation.FAMILIES:
             for _ in range(30):
-                task = tasks.make_task(family, rng.choice([1, 2]), seed=seed_of(rng))
+                level = rng.choice([1, 2])
+                task = aggregation.make_task(seed_of(rng), family, level, version=aggregation.LEGACY_VERSION)
                 kinds.add(task.grading["kind"])
                 with self.subTest(family=family, kind=task.grading["kind"]):
                     self.assertEqual(recount(task, pools), task.answer)
-        self.assertEqual(kinds, set(aggregation.KINDS))
+        self.assertEqual(kinds, set(aggregation.KINDS_V2))
 
     def test_no_label_appears_in_the_context(self):
         rng = random.Random(3)
