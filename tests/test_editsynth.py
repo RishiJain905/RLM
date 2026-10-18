@@ -136,7 +136,8 @@ class TaskShapeTest(unittest.TestCase):
             self.assertNotIn(Path(path).stem, task.context)
         self.assertIsNone(task.answer)
         first = bridge.initial_messages(task.question, task.context, edit=task.edit, limits=bridge.limits(task.family))[1]
-        self.assertIn("You have at most 20 turns and 30 sub-calls, and each cell may run for 300 seconds.", first["content"])
+        # prompt v3 (step 11) gives edit tasks 30 turns
+        self.assertIn("You have at most 30 turns and 30 sub-calls, and each cell may run for 300 seconds.", first["content"])
 
     def test_hidden_inputs_differ_from_the_task_s_example(self):
         for seed in range(6):

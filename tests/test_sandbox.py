@@ -164,7 +164,7 @@ attempt("rename context", lambda: os.rename("/episode/context.txt", "/scratch/c.
             "with tempfile.NamedTemporaryFile('w', delete=False) as f: f.write('t')\n"
             "print(open('/scratch/a.txt').read(), f.name.startswith('/scratch/'), sorted(os.listdir('/episode')))")
         self.assertIsNone(result.error, result.error)
-        self.assertEqual(result.stdout, "kept True ['bridge.sock', 'context.txt']\n")
+        self.assertEqual(result.stdout, "kept True ['bridge.sock', 'context.txt', 'subcalls.json']\n")
 
 
 class ImportsAndSecretsTest(SandboxCase):
