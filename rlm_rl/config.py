@@ -52,7 +52,11 @@ EDIT_MANIFEST = "edit/manifest.json"  # the edit task data's manifest, on the da
 # Inference ceilings, $ (plan step 10a, spec v2 §12.11). Each is a hard stop: the run never starts a step or an eval it
 # can't afford.
 SECOND_SEED_CEILINGS = {"train": 14.0, "eval": 3.0}  # ~$12 planned: ~$10 of steps and ~$1.6 of eval *(mine)*
-PRODUCTION_CEILINGS = {"train": 157.0, "eval": 30.0}  # spec §12.11; the ~$10 reserve is never spent without Rishi (12a)
+# Production, from W&B's billing page before the run (Rishi, 2026-10-17: $191.01 left): $146 of steps and $34 of evals,
+# so ~$11 stays unspent: the $10 reserve, never spent without Rishi (12a), and ~$1 for the ~1% the run's own spend
+# figures have differed from the bill (step 10, step 11's rerun). Evals get ~23% of steps' share: at step 11's prices
+# (~$1.5 a step, ~$3 for the selection set and the capability check every 10 steps) both run out near step 100.
+PRODUCTION_CEILINGS = {"train": 146.0, "eval": 34.0}  # spec §12.11 planned $157 and $30 of a larger pot
 
 # Root thinking for production (Rishi, 2026-10-17, decision 11b): the base model with its root thinking at `medium` beat
 # thinking off by 17 points in the step 11 baselines, at ~1.25x the inference cost a step. Sub-calls stay off.

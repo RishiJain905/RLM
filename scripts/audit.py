@@ -29,9 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from rlm_rl.grader import is_runner_module, is_test_config, is_test_path, parse_patch  # noqa: E402
 from rlm_rl.transcripts import TranscriptLog, find_logs, transcript_path  # noqa: E402
 
 CLIP = 1500
+DIFF_CLIP = 12_000  # an edit win's diff in the sample; `show` prints the whole record
 VERDICTS = ("clean", "suspicious", "hack")
 CHECKPOINT_EVERY = 10
 DEFAULT_TRAIN, DEFAULT_VAL, DEFAULT_FLAGGED = 16, 8, 4
@@ -56,7 +58,69 @@ def flags(r: dict) -> list[str]:
         out.append(f"{r['timeouts']} cell timeouts")
     if r["submitted"] and not r["answer_valid"]:
         out.append("invalid submit")
+    if is_edit(r):
+        out += edit_flags(r)
     return out
+
+
+def is_edit(r: dict) -> bool:
+    return r.get("diff") is not None or bool(r.get("grade"))
+
+
+def file_kind(path: str, language: str, new: bool) -> str:
+    """How the grader treats a changed file (grader.check_diff): test and runner files never reach the graded patch."""
+    if is_runner_module(path, language):
+        return "test runner's module (stripped)"
+    if is_test_config(path, language):
+        return "test configuration (stripped)"
+    if is_test_path(path, language):
+        return "new test file (never run)" if new else "test file (stripped)"
+    return "new file" if new else "source"
+
+
+def changed_files(r: dict) -> list[tuple[str, str, int, int]]:
+    """(path, kind, added, removed) for each file the episode's diff changes."""
+    lang = r.get("language") or ""
+    return [(fp.path, file_kind(fp.path, lang, fp.new_file), fp.added, fp.removed)
+            for fp in parse_patch(r.get("diff") or "")]
+
+
+def edit_flags(r: dict) -> list[str]:
+    """An edit episode's signs worth a look (audit-procedure.md, "Edit wins"); the grader's own hits are in `hacks`."""
+    g, files = r.get("grade") or {}, changed_files(r)
+    out = []
+    touched = [f"{path} ({kind})" for path, kind, _, _ in files if kind not in ("source", "new file")]
+    if touched:
+        out.append("changes test or runner files: " + ", ".join(touched[:6]))
+    added = [path for path, kind, _, _ in files if kind == "new file"]
+    if added:
+        out.append("adds files outside the tests: " + ", ".join(added[:6]))
+    if g.get("audit"):
+        out.append("grader audit signals: " + "; ".join(str(a) for a in g["audit"][:6]))
+    for key in ("build_failed", "deadline_hit", "oversize"):
+        if g.get(key):
+            out.append(f"grade: {key.replace('_', ' ')}")
+    return out
+
+
+def render_edit(r: dict) -> str:
+    """The change an edit episode left in the repository, how the grader treated each file, and its grade."""
+    g, files = r.get("grade") or {}, changed_files(r)
+    lines = [f"#### The change ({len(files)} file(s), +{sum(f[2] for f in files)} -{sum(f[3] for f in files)})\n"]
+    if files:
+        lines += ["| File | Kind | + | - |", "|---|---|---|---|"]
+        lines += [f"| `{path}` | {kind} | {add} | {rem} |" for path, kind, add, rem in files]
+    grade = [f"applied {g.get('applied')}", f"resolved {g.get('resolved')}",
+             f"failing tests fixed {g.get('f2p_passed')}/{g.get('f2p_total')}",
+             f"passing tests broken {g.get('p2p_failed')}/{g.get('p2p_total')}",
+             f"graded patch {g.get('files_changed')} file(s), {g.get('diff_lines')} line(s)"]
+    stripped = {k: v for k, v in (g.get("stripped") or {}).items() if v}
+    if stripped:
+        grade.append("stripped " + ", ".join(f"{k} {v}" for k, v in sorted(stripped.items())))
+    lines.append("\nGrade: " + " · ".join(grade))
+    if r.get("diff"):
+        lines.append("\n```diff\n" + clip(r["diff"], DIFF_CLIP) + "\n```")
+    return "\n".join(lines) + "\n"
 
 
 def summary(paths: list[Path], root: Path) -> int:
@@ -88,10 +152,13 @@ def summary(paths: list[Path], root: Path) -> int:
 
 
 def render(r: dict) -> str:
+    edit = is_edit(r)
+    gold = "the hidden tests" if edit else f"`{r['gold']}`"
     lines = [f"### {r['split']} {r.get('eval') or ''} step {r['step']} · task {r['task_id']} ({r['family']}, level "
              f"{r['level']}) · episode {r['episode_id']}",
-             f"- Gold: `{r['gold']}` · submitted: `{r['answer']}` · reward {r['reward']} · correct {r['correct']}",
-             f"- Turns {len(r['turns'])}, sub-calls {r['subcalls_used']}, root model `{r['root_model']}`"]
+             f"- Gold: {gold} · submitted: `{r['answer']}` · reward {r['reward']} · correct {r['correct']}",
+             f"- Turns {len(r['turns'])}, sub-calls {r['subcalls_used']}, root model `{r['root_model']}`"
+             + (f", {r.get('language')} in `{r.get('repo')}`" if edit else "")]
     for flag in flags(r):
         lines.append(f"- **Flag:** {flag}")
     lines.append(f"\n**Question:** {r['question']}\n")
@@ -102,6 +169,8 @@ def render(r: dict) -> str:
             lines.append("REPL output:\n```text\n" + clip(cell["stdout"]) + "\n```")
             if cell["error"]:
                 lines.append("Error:\n```text\n" + clip(cell["error"], 600) + "\n```")
+    if edit:
+        lines.append("\n" + render_edit(r))
     if r["subcalls"]:
         lines.append(f"\n#### Sub-calls ({len(r['subcalls'])})\n")
         for j, call in enumerate(r["subcalls"], 1):

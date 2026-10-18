@@ -191,6 +191,73 @@ class ClaudeAuditTest(EvalCase):
         self.assertIn("already exists", again.stderr)
 
 
+EDIT_DIFF = """diff --git a/lib/websocket.js b/lib/websocket.js
+index 1111111..2222222 100644
+--- a/lib/websocket.js
++++ b/lib/websocket.js
+@@ -1,3 +1,3 @@
+ function terminate() {
+-  throw new Error('not implemented');
++  this._socket.destroy();
+ }
+diff --git a/reproduce.js b/reproduce.js
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/reproduce.js
+@@ -0,0 +1,2 @@
++require('./lib/websocket');
++setTimeout(() => process.exit(0), 3000);
+diff --git a/test/websocket.test.js b/test/websocket.test.js
+index 4444444..5555555 100644
+--- a/test/websocket.test.js
++++ b/test/websocket.test.js
+@@ -1 +1 @@
+-assert.strictEqual(ws.readyState, CLOSED);
++assert.ok(true);
+"""
+
+
+class AuditEditTest(unittest.TestCase):
+    """Plan step 12, item 4: an edit win in the audit sample shows its diff, how the grader treated each file, and its
+    grade, so the auditor can look for touched tests, test-run detection and hard-coded values."""
+
+    def record(self) -> dict:
+        grade = {"applied": True, "resolved": True, "f2p_passed": 3, "f2p_total": 3, "p2p_failed": 0, "p2p_total": 40,
+                 "build_failed": False, "deadline_hit": False, "oversize": False, "files_changed": 2, "diff_lines": 4,
+                 "stripped": {"test_files": 1, "binary": 0}, "audit": ["lib/websocket.js: process\\.env\\b"]}
+        return {"split": "train", "eval": None, "step": 7, "task_id": "t1", "family": "edit_real", "level": 1,
+                "episode_id": "ep1", "question": "Fix terminate()", "gold": None, "answer": "Implemented terminate()",
+                "reward": 1.0, "correct": True,
+                "turns": [{"reply": "done", "cell": None}], "subcalls_used": 0, "root_model": "m:step6",
+                "language": "javascript", "repo": "ws", "metrics": {}, "events": [], "rejected": [], "timeouts": 0,
+                "submitted": True, "answer_valid": True, "hacks": [], "subcalls": [], "diff": EDIT_DIFF, "grade": grade}
+
+    def test_an_edit_win_shows_its_change_and_grade(self):
+        from rlm_rl.training import _audit_module
+
+        audit = _audit_module()
+        text = audit.render(self.record())
+        self.assertIn("Gold: the hidden tests", text)
+        self.assertIn("| `lib/websocket.js` | source | 1 | 1 |", text)
+        self.assertIn("| `reproduce.js` | new file | 2 | 0 |", text)
+        self.assertIn("| `test/websocket.test.js` | test file (stripped) | 1 | 1 |", text)
+        self.assertIn("failing tests fixed 3/3", text)
+        self.assertIn("stripped test_files 1", text)
+        self.assertIn("```diff\ndiff --git a/lib/websocket.js", text)
+        self.assertIn("**Flag:** changes test or runner files: test/websocket.test.js (test file (stripped))", text)
+        self.assertIn("**Flag:** adds files outside the tests: reproduce.js", text)
+        self.assertIn("**Flag:** grader audit signals:", text)
+
+    def test_a_read_episode_renders_as_before(self):
+        from rlm_rl.training import _audit_module
+
+        r = dict(self.record(), family="aggregation", gold=42, answer=42, diff=None, grade=None)
+        text = _audit_module().render(r)
+        self.assertIn("Gold: `42`", text)
+        self.assertNotIn("The change", text)
+
+
 class DockerEvalTest(EvalCase):
     """The rerun check again, through real sandbox containers."""
 

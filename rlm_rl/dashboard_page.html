@@ -699,7 +699,7 @@ footer p { margin: 0; max-width: 92ch; }
   var overSplit = (isNum(ceil.train) && isNum(pot.production_usd) && ceil.train > pot.production_usd) || (isNum(ceil.eval) && isNum(pot.evals_usd) && ceil.eval > pot.evals_usd);
   meter("W&B inference pot used (estimate)", potUsed, pot.inference_usd,
         "About " + F.usd(pot.inference_left_usd) + " was left on " + pot.as_of + ", before this run, so about " + F.usd(Math.max(0, (pot.inference_left_usd || 0) - (sp.total_usd || 0))) + " is left now. " +
-        "It is split: second seed " + F.usd0(pot.second_seed_usd) + ", baselines " + F.usd0(pot.baselines_usd) + ", production ceiling " + F.usd0(pot.production_usd) + ", evals " + F.usd0(pot.evals_usd) + ", reserve " + F.usd0(pot.reserve_usd) + ". " +
+        "It is split: " + [["second seed", pot.second_seed_usd], ["baselines", pot.baselines_usd], ["production ceiling", pot.production_usd], ["evals", pot.evals_usd], ["reserve", pot.reserve_usd], ["margin for the bill", pot.margin_usd]].filter(function (p) { return isNum(p[1]); }).map(function (p) { return p[0] + " " + F.usd0(p[1]); }).join(", ") + ". " +
         (overSplit ? "This run's ceilings are above their split, so the " + F.usd0(pot.reserve_usd) + " reserve is in use." : "The " + F.usd0(pot.reserve_usd) + " reserve is untouched; spending it is Rishi's call."));
   meter("Training GPU pot used (estimate)", (pot.gpu_usd || 0) - (pot.gpu_left_usd || 0) + (sp.training_gpu_usd_est || 0), pot.gpu_usd, "This run: " + F.usd(sp.training_gpu_usd_est || 0) + " at ~$0.16 a step. A separate pot, and not a constraint.");
   var cc = $("cost-charts");
@@ -721,6 +721,9 @@ footer p { margin: 0; max-width: 92ch; }
                        series("too small", "var(--c5)", function (r) { return get(r, ["pass", "small_groups"]); })],
               headline: last ? get(last, ["pass", "trainable_groups"]) + " trainable" : null, note: "All-equal groups give GRPO no signal and are dropped, not refilled." });
   if (hasEdit || mixHasEdit) $("pass-sub").textContent += " An edit task whose group came back all 0 twice, or all 1 once, is retired and not drawn again.";
+  var pool = last && last.pool;
+  if (pool && isNum(pool.left)) $("pass-sub").textContent += " Edit real: " + F.int(pool.total) + " retired, " + F.int(pool.left) + " left to draw" +
+    (pool.moved ? "; too few are left, so " + F.int(pool.moved) + " of its slots went to edit synth this step." : ".");
   var pe = $("pass-extra");
   // histogram of the last 10 steps
   (function () {
@@ -782,7 +785,12 @@ footer p { margin: 0; max-width: 92ch; }
   }
   chart(po, { title: "Entropy (mean −logprob of sampled root tokens)", fmt: F.num, series: [series("entropy", "var(--c1)", function (r) { return get(r, ["policy", "entropy"]); }, { area: true }), { label: "collapse line: 70% of the 10-step peak", threshold: true, pts: rollingThreshold(["policy", "entropy"], 10, 0.7, "max") }].concat(ghosts(function (r) { return get(r, ["policy", "entropy"]); })), xmarks: rollbackMarks() });
   chart(po, { title: "Within-group reward std (Echo Trap signal)", fmt: F.num, series: [series("reward std", "var(--c1)", function (r) { return get(r, ["policy", "reward_std"]); }), { label: "half its 10-step mean", threshold: true, pts: rollingThreshold(["policy", "reward_std"], 10, 0.5, "mean") }].concat(ghosts(function (r) { return get(r, ["policy", "reward_std"]); })), xmarks: rollbackMarks() });
-  chart(po, { title: "KL to base (logged, not in the loss)", fmt: F.num, series: [series("KL (k1)", "var(--c1)", function (r) { return get(r, ["policy", "kl_to_base"]); }), series("k3 estimator", "var(--c2)", function (r) { return get(r, ["policy", "kl_k3"]); })].concat(ghosts(function (r) { return get(r, ["policy", "kl_to_base"]); })), note: "From 4 rollouts a step re-scored under the base model." });
+  var klLast = steps.length ? steps[steps.length - 1] : null;
+  var klReq = klLast ? get(klLast, ["policy", "kl_requests"]) : null;
+  var klBad = (klLast && get(klLast, ["policy", "kl_misaligned"])) || 0, klFail = (klLast && get(klLast, ["policy", "kl_failed"])) || 0;
+  var klNote = "From 4 rollouts a step re-scored under the base model." + (isNum(klReq) && klReq > 0 ?
+    " Step " + klLast.step + ": " + F.int(klReq) + " re-score requests, " + F.int(klBad) + " misaligned turn" + (klBad === 1 ? "" : "s") + ", " + F.int(klFail) + " failed. Healthy is 0 misaligned; misaligned turns are left out of KL, and KL reads n/a if all are." : "");
+  chart(po, { title: "KL to base (logged, not in the loss)", fmt: F.num, series: [series("KL (k1)", "var(--c1)", function (r) { return get(r, ["policy", "kl_to_base"]); }), series("k3 estimator", "var(--c2)", function (r) { return get(r, ["policy", "kl_k3"]); })].concat(ghosts(function (r) { return get(r, ["policy", "kl_to_base"]); })), note: klNote });
   var gnMed = median(steps.map(function (r) { return get(r, ["policy", "grad_norm"]); }));
   chart(po, { title: "Grad norm", fmt: F.num, series: [series("grad norm", "var(--c1)", function (r) { return get(r, ["policy", "grad_norm"]); })].concat(ghosts(function (r) { return get(r, ["policy", "grad_norm"]); })), refs: isNum(gnMed) ? [{ y: 3 * gnMed, label: "3× median" }] : [], maxGap: 3 });
   chart(po, { title: "probs_corr (trainer vs sampler logprobs)", fmt: function (v) { return isNum(v) ? v.toFixed(3) : "–"; }, zero: false, series: [series("probs_corr", "var(--c1)", function (r) { return get(r, ["policy", "probs_corr"]); })], refs: [{ y: 0.98, label: "0.98 floor" }], yMaxAtLeast: 1, maxGap: 3 });

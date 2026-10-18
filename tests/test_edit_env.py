@@ -197,6 +197,42 @@ class RetirementTest(unittest.TestCase):
         self.assertEqual(seen[0][1], {"old-1"})
         self.assertEqual(seen[1][1], {"old-1", "edit_real-1"})  # nor the same task twice in a step
 
+    def test_a_used_up_pool_gives_its_slots_to_edit_synth(self):
+        """Decision 12b: with no edit_real task left to draw, the slot goes to edit_synth at edit_synth's own level."""
+        import collections
+        from unittest import mock
+
+        made = []
+
+        def fake(family, level, seed=None, task_id=None, exclude=None):
+            if family == "edit_real" and len(set(exclude or ())) >= 2:  # one task left beside the retired "old-1"
+                raise tasks.PoolEmpty("no edit_real task left to draw")
+            made.append((family, level))
+            return env.Task(f"{family}-{len(made)}", family, "q", "c")
+
+        with mock.patch.object(tasks, "make_task", fake):
+            drawn = tasks.draw(8, {"edit_real": 0.5, "edit_synth": 0.5}, {"edit_real": 2, "edit_synth": 3}, step=1,
+                               exclude={"old-1"})
+            self.assertEqual(collections.Counter(t.family for t in drawn), {"edit_real": 1, "edit_synth": 7})
+            self.assertEqual(set(made), {("edit_real", 2), ("edit_synth", 3)})
+            with self.assertRaises(tasks.PoolEmpty):  # a run without edit_synth has nowhere to move the slot
+                tasks.draw(2, {"edit_real": 1.0}, {"edit_real": 1}, step=1, exclude={"old-1"})
+
+    def test_the_pool_reports_empty_and_its_size(self):
+        import random
+        from unittest import mock
+
+        from rlm_rl.tasks import editreal
+
+        with self.assertRaises(tasks.PoolEmpty):
+            editreal._pick([], 1, random.Random(0))
+        self.assertTrue(issubclass(tasks.PoolEmpty, ValueError))  # what the pool raised before 12b
+        with mock.patch.object(editreal, "records", lambda split: [{"id": split}] * 3):
+            self.assertEqual(tasks.pool_size("edit_real"), 3)
+        with mock.patch.object(editreal, "records", mock.Mock(side_effect=FileNotFoundError("no index"))):
+            self.assertIsNone(tasks.pool_size("edit_real"))
+        self.assertIsNone(tasks.pool_size("aggregation"))  # not a fixed pool
+
 
 @linux_only
 class DockerEditTest(EditEnvCase):

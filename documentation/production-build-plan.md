@@ -634,7 +634,9 @@ This is needed here because every eval from now on should use whichever model th
 
 ## Step 12. Production run
 
-**Type:** Spend · **Cost:** up to ~$157 + ~$30 evals; training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9 · **Status (2026-10-16):** after step 11. Code, data and dry runs are ready. The edit red team's gate for edit spend is open now that F1-F3 are fixed ([step-9.5-red-team-results.md](step-9.5-red-team-results.md), Fixes). 12b comes first.
+**Type:** Spend · **Cost:** up to $146 of steps + $34 of evals (from $191.01 left); training GPU ~$25-60 of the ~$992 left · **Research:** §5.6, §8.5, §8.6, §9 · **Status (2026-10-17):** ready to start; Rishi starts it. Every before-start item below is done at $0, and the live dashboard is a new page, https://claude.ai/artifact/HqtrsXwnHQcJKud7GnUHMm. The run command, a healthy first step and the watch loop are in [step-12-runbook.md](step-12-runbook.md).
+
+**Budget, from Rishi's billing read (2026-10-17: $191.01 left).** `config.PRODUCTION_CEILINGS` is $146 for steps (rollouts and the KL re-score) and $34 for evals, both hard stops. That leaves ~$11 unspent: the $10 reserve (12a) and ~$1 for the ~1% the run's own spend figures have differed from the bill (step 10 measured 1.1% high; step 11's rerun matched within $0.02). Evals get ~23% of the steps' share because at step 11's prices (~$1.5 a step; ~$3 for the selection set and the capability check every 10 steps) the two then run out together, near step 100.
 
 ### What we run
 
@@ -662,14 +664,14 @@ The command is `train.py start --kind production --run <name> --lr <2e-5 or 1e-5
 
 **Before it starts** (all $0, on the PC):
 0. **Training with root thinking at `medium`:** done 2026-10-17 ($0). `config.production` sets it, the loop's client and pinned config carry it, and the KL monitor re-scores thinking turns one at a time with their thinking (spec §5.3). A 3-step fake-model dry run of production with thinking on came out clean (every re-scored turn lined up). Production's first step is the first live check of the KL alignment (`kl_misaligned` on the dashboard).
-1. **What 12b chooses,** built and tested.
-2. **The training run clears leftover containers at start.** The data build does this since 2026-10-15, but a training run doesn't yet, so a crashed run's containers would pile up. It's a few lines and a test.
+1. **What 12b chooses,** built and tested. *Done 2026-10-17:* Rishi chose a fallback; the default picked is to move `edit_real`'s slots to `edit_synth` once too few tasks are left to draw (`tasks.FALLBACK`), rather than redraw retired tasks, which came back all-1 (nothing left to learn) or all-0 twice. A step records the moved slots (`fallback`) and the tasks left to draw (`retired.left`), and the Notices panel says when a stretch of moved slots starts. A rollback restores the retired set, and with it the pool.
+2. **The training run clears leftover containers at start.** The data build does this since 2026-10-15, but a training run doesn't yet, so a crashed run's containers would pile up. It's a few lines and a test. *Done 2026-10-17:* `start` and `resume` remove the run's own containers in any state and every other finished one older than 10 minutes (`sandbox.clear_for_run`), and a resume refuses while the state says running and was written in the last 2 minutes, so it can't remove a live process's containers.
 3. **Optional drive settings**, yours to make (edit-build-results.md §5a):
    - Defender exclusions for `D:\Docker-Image`, `D:\WSL` and `D:\RLM-data` (as administrator);
    - other WSL distros stopped during the run (e.g. `EXL3-Runtime`);
    - no other jobs on D:.
-4. **Edit wins in the Claude audit** (decision 5a). `scripts/audit.py`'s sample shows no diff or grade, and audit-procedure.md has no edit checks (checked 2026-10-16). Since the audit is the backstop for the canary gap, each sampled edit win should show its diff, and the procedure should say what to look for (test or runner files touched, code that detects a test run, hard-coded expected values).
-5. **A last fake-model dry run** with `--real-edit` on the final code.
+4. **Edit wins in the Claude audit** (decision 5a). `scripts/audit.py`'s sample shows no diff or grade, and audit-procedure.md has no edit checks (checked 2026-10-16). Since the audit is the backstop for the canary gap, each sampled edit win should show its diff, and the procedure should say what to look for (test or runner files touched, code that detects a test run, hard-coded expected values). *Done 2026-10-17:* each edit episode in the sample shows its changed files (with how the grader treats each), its grade and its diff, with flags for touched test files, new files and the grader's audit signals; [audit-procedure.md](audit-procedure.md) has an "Edit wins" section.
+5. **A last fake-model dry run** with `--real-edit` on the final code. *Done 2026-10-17:* see the runbook.
 
 **It keeps going while** the selection set has reached a new best in one of the last 3 evals, or a family has moved up a level in the last 30 steps.
 
@@ -701,7 +703,7 @@ A stop rule fires or the run reaches the ceiling, and the best checkpoint on the
 - **Taken: I ask you before touching it** (2026-10-12; spec §12.11). The run stops at its ceiling and says whether the research's rule would spend the reserve; resuming with a higher ceiling spends it.
 - *Not taken:* spend it automatically when the last 2 evals were both new bests, then ask (the research's rule).
 
-**12b. When the `edit_real` pool runs out** (new, 2026-10-16)
+**12b. When the `edit_real` pool runs out** (new, 2026-10-16) · **Taken (Rishi, 2026-10-17): add a fallback before production;** built as the move to `edit_synth` (item 1 above).
 
 About 75 steps × 2 `edit_real` tasks is ~150 draws from 107 training tasks. Retirement takes a task out for good once its group comes back all-0 twice or all-1 once. If every task retires, `editreal.make_task` raises "no edit_real task left to draw", nothing catches it, and the run stops mid-step. It can resume from its last checkpoint, but someone has to be there.
 - **Add a fallback before production: recommended (mine).** When the pool is empty, draw again from the tasks retired longest ago, or move `edit_real`'s 25% to `edit_synth` for the rest of the run. It takes a few hours on the PC with a test, costs $0, and the run never stops for want of tasks. Round 2 can still be added later.

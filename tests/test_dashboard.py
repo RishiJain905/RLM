@@ -99,7 +99,7 @@ class PageTest(DryRunCase):
         page = (self.out / "page.html").read_text(encoding="utf-8")
         data = dashboard.embedded_data(page)
         self.assertEqual(data["steps"][-1]["step"], 12)
-        self.assertIn("<title>RLM Live Run</title>", page[:8192])
+        self.assertIn("<title>RLM Production Run</title>", page[:8192])  # production's page is its own artifact
         self.assertLess(r["bytes"], 16 * 1024 * 1024)
         self.assertGreater(r["checked"]["seeds"], 0)          # the dry run's eval seeds were read
         self.assertGreater(r["checked"]["eval_tasks"], 0)  # and its eval transcripts
@@ -159,7 +159,7 @@ class CheckTest(DryRunCase):
         self.assertNotIn("api.wandb.ai", page)
         self.assertNotIn("Personal\\RLM", page)
         self.assertTrue(dashboard.check(page)["ok"])
-        planted = page.replace("RLM Live Run</title>", f"RLM Live Run</title><!-- {fake_key} -->")
+        planted = page.replace("</title>", f"</title><!-- {fake_key} -->", 1)
         r = dashboard.check(planted)
         self.assertFalse(r["ok"])
         self.assertNotIn(fake_key, json.dumps(r))  # findings are counts, never the match
@@ -364,6 +364,21 @@ class EditDataTest(EditCase):
             self.assertNotIn(leak, json.dumps(data["steps"]), leak)
         self.assertTrue(dashboard.check(page)["ok"])
 
+    def test_the_edit_real_pool_shows_counts_only(self):
+        """Decision 12b: the page shows how many edit_real tasks are retired and left, and the slots moved to edit_synth."""
+        state = self.state()
+        state["steps"][-2].update(retired={"new": 0, "total": 90, "left": 17}, fallback={})
+        state["steps"][-1].update(retired={"new": 3, "total": 107, "left": 0},
+                                  fallback={"edit_real": {"to": "edit_synth", "slots": 2}})
+        state["retirement"] = {"retired": {"py-acme-bug-0001": {"step": 3, "why": "all-1"}}}
+        data = self.data(state)
+        self.assertEqual(data["steps"][-2]["pool"], {"total": 90, "left": 17, "moved": 0})
+        self.assertEqual(data["steps"][-1]["pool"], {"total": 107, "left": 0, "moved": 2})
+        self.assertNotIn("pool", data["steps"][0])  # a step without the counts, as on older runs
+        page = dashboard.render(data)
+        self.assertNotIn("py-acme-bug-0001", page)  # retired task ids never reach the page
+        self.assertTrue(dashboard.check(page)["ok"])
+
     def test_old_records_without_an_edit_block_still_build(self):
         state = self.state()
         for r in state["steps"][:6]:
@@ -404,12 +419,15 @@ class EditDataTest(EditCase):
             self.assertIn(family, data["controller"]["families"])
             self.assertIn(family, data["steps"][-1]["families"])
 
-    def test_the_pot_matches_the_v2_split(self):
+    def test_the_pot_matches_production_s_split(self):
+        from rlm_rl import config
+
         pot = self.data()["pot"]
-        self.assertEqual((pot["second_seed_usd"], pot["baselines_usd"], pot["production_usd"], pot["evals_usd"],
-                          pot["reserve_usd"]), (12.0, 9.0, 157.0, 30.0, 10.0))
-        self.assertEqual(sum(pot[k] for k in ("second_seed_usd", "baselines_usd", "production_usd", "evals_usd",
-                                              "reserve_usd")), pot["inference_left_usd"])
+        self.assertEqual((pot["production_usd"], pot["evals_usd"]),
+                         (config.PRODUCTION_CEILINGS["train"], config.PRODUCTION_CEILINGS["eval"]))
+        self.assertEqual(pot["reserve_usd"], 10.0)
+        self.assertAlmostEqual(sum(pot[k] for k in ("production_usd", "evals_usd", "reserve_usd", "margin_usd")),
+                               pot["inference_left_usd"])
 
     def test_edit_samples_show_no_gold_hidden_tests_or_paths(self):
         cache: dict = {}

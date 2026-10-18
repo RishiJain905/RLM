@@ -37,6 +37,7 @@ import tarfile
 from pathlib import Path
 
 from ..env import Task
+from . import PoolEmpty
 
 GENERATOR_VERSION = "editreal-v1"
 FAMILIES = ("edit_real", "edit_real_select", "edit_real_test")
@@ -102,7 +103,7 @@ def _pick(pool: list[dict], level: int, rng: random.Random) -> dict:
     for r in pool:
         by_level.setdefault(int(r["level"]), []).append(r)
     if not by_level:
-        raise ValueError("no edit_real task left to draw")
+        raise PoolEmpty("no edit_real task left to draw")
     best = min(by_level, key=lambda lv: (abs(lv - level), lv > level))  # the nearest level, a lower one on a tie
     return rng.choice(sorted(by_level[best], key=lambda r: r["id"]))
 
@@ -114,6 +115,11 @@ def make_task(seed: int, family: str, level: int = 1, task_id: str | None = None
     excluded = set(exclude or ())
     pool = [r for r in records(SPLIT[family]) if r["id"] not in excluded]
     return to_task(_pick(pool, level, random.Random(seed)), family, task_id)
+
+
+def pool_size(family: str = "edit_real") -> int:
+    """The number of tasks in the family's split, before retirement (tasks.pool_size)."""
+    return len(records(SPLIT[family]))
 
 
 def eval_tasks(split: str, family: str) -> list[Task]:

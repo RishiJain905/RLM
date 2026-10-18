@@ -191,6 +191,13 @@ def cleanup_finished(docker: str = "docker", older_than_s: float = 600) -> int:
     return len(old)
 
 
+def clear_for_run(run_id: str, docker: str = "docker") -> dict:
+    """What a training run removes when it starts or resumes (plan step 12): its own containers, in any state, which only
+    a process of this run that died can have left (a resume refuses while another may be running it), then every other
+    sandbox or grader container that finished long ago (cleanup_finished)."""
+    return {"run": cleanup_stale(run_id, docker=docker), "finished": cleanup_finished(docker=docker)}
+
+
 def run_args(docker: str, name: str, image: str, episode_dir: Path, limits: SandboxLimits, run_id: str,
              entrypoint: list[str] | None = None) -> list[str]:
     """The `docker run` command for one episode container. `entrypoint` replaces the REPL (tests only)."""

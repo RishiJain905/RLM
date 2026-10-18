@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -64,11 +65,11 @@ class LoopCase(AsyncCase):
         """Call `action()` when the loop draws its `at`-th batch of tasks (that is, during step `at`)."""
         original, calls = run.draw, []
 
-        def draw(*args):
+        def draw(*args, **kwargs):  # kwargs: the retired tasks to exclude, once there are any
             calls.append(1)
             if len(calls) == at:
                 action()
-            return original(*args)
+            return original(*args, **kwargs)
 
         run.draw = draw
         return run
@@ -180,6 +181,90 @@ class ProductionMixTest(LoopCase):
         self.assertEqual(pinned["manifest"]["mix"], cfg.mix)
         self.assertIsNotNone(pinned["manifest"]["dataset_manifest_sha256"])
         self.assertEqual(set(pinned["generators"]), set(cfg.mix))
+
+    async def test_a_used_up_edit_real_pool_draws_edit_synth(self):
+        """Decision 12b: once every edit_real task is retired, its slots go to edit_synth and the run goes on."""
+        from rlm_rl import tasks as rtasks
+        from rlm_rl.tasks import editreal
+
+        cfg = config.production("pool12b", 2e-5)
+        cfg.eval_at_start = False
+        run = self.run_("pool12b", cfg=cfg, stop_after=2)
+        everything = {r["id"]: {"step": 1, "why": "all-1", "family": "edit_real"} for r in editreal.records("train")}
+        self.hook_draw(run, 1, lambda: setattr(run, "retirement", rtasks.Retirement({"retired": everything})))
+        st = await run.start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 2))
+        first, second = st["steps"]
+        planned = rtasks.allocate_step(cfg.tasks_per_step, cfg.mix, 2)["edit_real"]
+        self.assertEqual(first["fallback"], {})
+        self.assertEqual(second["fallback"], {"edit_real": {"to": "edit_synth", "slots": planned}})
+        self.assertEqual(second["families"].get("edit_real", {}).get("episodes", 0), 0)
+        self.assertEqual(second["retired"]["left"], 0)
+        self.assertEqual(sum(n["kind"] == "fallback" for n in st["notices"]), 1)
+
+
+class LeftoversTest(LoopCase):
+    """Plan step 12: a run clears what a crashed process left behind, and a resume won't race a process still running."""
+
+    async def test_start_and_resume_clear_leftover_containers(self):
+        calls = []
+
+        def clear(run):
+            calls.append(run)
+            return {"run": 2, "finished": 1} if len(calls) == 1 else {"run": 0, "finished": 0}
+
+        st = await self.run_("lc", cfg=second_seed("lc", 3), stop_after=1, clear_containers=clear).start()
+        self.assertEqual(calls, ["lc"])
+        texts = [n["text"] for n in st["notices"] if n["kind"] == "containers"]
+        self.assertEqual(len(texts), 1)
+        self.assertIn("removed 2 leftover container(s) of this run and 1 long-finished", texts[0])
+        st = await self.run_("lc", stop_after=2, clear_containers=clear).resume()
+        self.assertEqual((calls, st["status"], st["latest"]), (["lc", "lc"], "stopped", 2))
+        self.assertEqual(sum(n["kind"] == "containers" for n in st["notices"]), 1)  # nothing to say when nothing was left
+
+    async def test_a_failed_clear_is_noted_and_the_run_goes_on(self):
+        def clear(run):
+            raise FileNotFoundError("docker")
+
+        st = await self.run_("lc2", cfg=second_seed("lc2", 2), stop_after=1, clear_containers=clear).start()
+        self.assertEqual((st["status"], st["latest"]), ("stopped", 1))
+        self.assertTrue(any("couldn't clear leftover containers" in n["text"] for n in st["notices"]))
+
+    async def test_resume_refuses_while_another_process_may_be_running_the_run(self):
+        await self.run_("busy", cfg=second_seed("busy", 3), stop_after=1).start()
+        path = training.state_path(self.results, "busy")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state.update(status="running", updated_at=time.time() - 10)  # as a live process leaves it between saves
+        path.write_text(json.dumps(state), encoding="utf-8")
+        calls = []
+        with self.assertRaises(ResumeBlocked):
+            await self.run_("busy", clear_containers=lambda run: calls.append(run) or {}).resume()
+        self.assertEqual(calls, [])  # nothing of the other process's was removed
+        state["updated_at"] = time.time() - 2 * training.LIVE_GUARD_S  # a process killed outright: its state goes quiet
+        path.write_text(json.dumps(state), encoding="utf-8")
+        st = await self.run_("busy", stop_after=2).resume()
+        self.assertEqual(st["status"], "stopped")
+        self.assert_contiguous(st, 2)
+
+
+class FallbackSlotsTest(unittest.TestCase):
+    def test_slots_short_of_the_plan_are_counted(self):
+        from rlm_rl import tasks as rtasks
+        from rlm_rl.env import Task
+
+        cfg = config.RunConfig(run="fb", kind="production", learning_rate=2e-5, lr_rule="fallback",
+                               mix={"aggregation": 0.6, "edit_real": 0.25, "edit_synth": 0.15})
+        run = training.TrainingRun("fb", backend=None, cfg=cfg)
+        for step in (1, 2, 3):
+            planned = rtasks.allocate_step(cfg.tasks_per_step, cfg.mix, step)
+            full = [Task(f"{f}-{i}", f, "q", "c") for f, k in planned.items() for i in range(k)]
+            self.assertEqual(run._fallback_slots(step, full), {})
+            short = [t for t in full if t.family != "edit_real"] + [Task("s", "edit_synth", "q", "c")] * planned["edit_real"]
+            expected = {"edit_real": {"to": "edit_synth", "slots": planned["edit_real"]}} if planned["edit_real"] else {}
+            self.assertEqual(run._fallback_slots(step, short), expected)
+        tickets = training.TrainingRun("t", backend=None, cfg=second_seed("t"))
+        self.assertEqual(tickets._fallback_slots(1, []), {})  # no fixed pool in the mix
+        self.assertIsNone(tickets._pool_left())
 
 
 class StopSwitchTest(LoopCase):

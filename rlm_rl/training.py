@@ -45,6 +45,7 @@ newer steps, or new weights under an old step all failed.
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import importlib.util
 import io
@@ -73,6 +74,7 @@ STATE_FORMAT = 1
 HEARTBEAT_S = 15.0
 AUDIT_EVERY = 10  # the Claude audit's checkpoints (decision 5a)
 STOP_FILE = "STOP"
+LIVE_GUARD_S = 120.0  # a "running" state written this recently may belong to a process that is still running it
 CAPABILITY_ITEM_ESTIMATE_USD = 0.005  # one short chat call, before the first check has been measured
 
 
@@ -121,7 +123,7 @@ class TrainingRun:
                  draw: Callable[..., list] = rtasks.draw, eval_sets: Callable[[str], tuple] = eval_set,
                  capability_items: list | None = None, prune: bool = True, stop_after: int | None = None,
                  rng: random.Random | None = None, retry: RetryPolicy | None = None, pacer: Any = None,
-                 log: Callable[[str], None] = print):
+                 clear_containers: Callable[[str], dict] | None = None, log: Callable[[str], None] = print):
         self.run = run
         self.cfg = cfg
         self.backend = backend
@@ -137,6 +139,7 @@ class TrainingRun:
         self.rng = rng or random.Random()
         self.retry = retry or RetryPolicy()
         self.pacer = pacer
+        self.clear_containers = clear_containers  # sandbox.clear_for_run on a real run (scripts/train.py)
         self.say = log
         self.state: dict = {}
         self.ctl: DifficultyController | None = None
@@ -160,6 +163,7 @@ class TrainingRun:
         self.ctl = DifficultyController(rtasks.max_levels(self.cfg.mix), frozen=self.cfg.frozen_controller)
         self.retirement = rtasks.Retirement()
         self.state = self._new_state()
+        self._clear_leftovers()
         self._load_capability()
         await self._open()
         self._notice("start", f"{self.cfg.kind} run started at learning rate {self.cfg.learning_rate:g}, "
@@ -174,9 +178,15 @@ class TrainingRun:
         self.state = load_state(self.results, self.run)
         if self.state.get("format") != STATE_FORMAT:
             raise ValueError(f"unknown state format {self.state.get('format')}")
+        age = time.time() - float(self.state.get("updated_at") or 0)
+        if self.state.get("status") == "running" and age < LIVE_GUARD_S:
+            raise ResumeBlocked(f"the run's state says it is running and was written {age:.0f} s ago, so another "
+                                f"process may still be running it. Check with `train.py status {self.run}` and `ps`; "
+                                f"if nothing is running it, resume again after {LIVE_GUARD_S:.0f} s")
         self.cfg = RunConfig.from_dict(self.state["config"])
         self.ctl = DifficultyController.from_state(self.state["controller"])
         self.retirement = rtasks.Retirement(self.state.get("retirement"))
+        self._clear_leftovers()
         self._load_capability()
         await self._open()
         self._settle_interrupted()
@@ -276,6 +286,21 @@ class TrainingRun:
 
     def _ceilings_text(self) -> str:
         return ", ".join(f"{k} ${v:g}" for k, v in self.cfg.ceilings.items()) or "none"
+
+    def _clear_leftovers(self) -> None:
+        """Remove containers a crashed or killed process left behind (plan step 12, before-start item 2): this run's own,
+        whatever their state, and every sandbox or grader container that finished long ago. A failure is only noted:
+        the episodes themselves will show whether Docker works."""
+        if self.clear_containers is None:
+            return
+        try:
+            removed = self.clear_containers(self.run)
+        except Exception as exc:
+            self._notice("containers", f"couldn't clear leftover containers: {exc!r}"[:300])
+            return
+        if any(removed.values()):
+            self._notice("containers", f"removed {removed.get('run', 0)} leftover container(s) of this run and "
+                                       f"{removed.get('finished', 0)} long-finished one(s) of earlier runs")
 
     def _load_capability(self) -> None:
         if self.capability_items is None and self.cfg.capability_set:
@@ -391,6 +416,7 @@ class TrainingRun:
         self._live(n, "rollouts")
         retired = self.retirement.ids()
         batch = self.draw(cfg.tasks_per_step, cfg.mix, self.ctl.levels(), n, **({"exclude": retired} if retired else {}))
+        fallback = self._fallback_slots(n, batch)
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
                                   sandbox_factory=self.sandbox_factory, prompt_version=cfg.prompt_version,
                                   **self.sandbox_kwargs)
@@ -422,10 +448,18 @@ class TrainingRun:
         row["cost"] = {"step_usd": round(cost, 6), "kl_usd": kl["cost_usd"], "spent_train_usd": st["spend"]["train_usd"]}
         st["controller"] = self.ctl.state_dict()
         st["retirement"] = self.retirement.state_dict()
-        row["retired"] = {"new": len(newly_retired), "total": len(self.retirement.retired)}
+        row["retired"] = {"new": len(newly_retired), "total": len(self.retirement.retired), "left": self._pool_left()}
+        row["fallback"] = fallback
         if newly_retired:
+            left = row["retired"]["left"]
             self._notice("retired", f"step {n}: {len(newly_retired)} edit_real task(s) retired (all-0 twice or all-1 once); "
-                                     f"{len(self.retirement.retired)} retired so far")
+                                     f"{len(self.retirement.retired)} retired so far"
+                                     + (f", {left} left to draw" if left is not None else ""))
+        previous = st["steps"][-1].get("fallback") if st["steps"] else None
+        for family, moved in fallback.items():
+            if not (previous or {}).get(family):  # once when a stretch starts, not every step of it
+                self._notice("fallback", f"step {n}: too few {family} tasks left to draw, so {moved['slots']} of its "
+                                         f"slot(s) went to {moved['to']} (12b). This repeats each step the pool is short")
         for mv in moves:
             self._notice("level", f"{mv.family} {'would move' if not mv.applied else 'moved'} {mv.direction} "
                                   f"from level {mv.from_level} to {mv.to_level} (pass rate {mv.pass_rate:.0%} over "
@@ -472,6 +506,23 @@ class TrainingRun:
         self.say(f"[{self.run}] step {row['step']} {row['status']}: pass {_pct(p['rate'])}, trainable "
                  f"{p['trainable_groups']}/{p['groups']}, entropy {_num(pol['entropy'])}, KL {_num(pol['kl_to_base'])}, "
                  f"${row['cost']['step_usd']:.3f} (train ${self.state['spend']['train_usd']:.2f})")
+
+    def _fallback_slots(self, n: int, batch: list) -> dict:
+        """A fixed pool's slots that went to its fallback family because too few of its tasks were left (12b)."""
+        families = [f for f in rtasks.FALLBACK if f in self.cfg.mix]
+        if not families:
+            return {}
+        planned = rtasks.allocate_step(self.cfg.tasks_per_step, self.cfg.mix, n)
+        drawn = collections.Counter(t.family for t in batch)
+        return {f: {"to": rtasks.FALLBACK[f], "slots": planned[f] - drawn[f]} for f in families if drawn[f] < planned[f]}
+
+    def _pool_left(self) -> int | None:
+        """Fixed-pool tasks not retired yet, or None when the run draws from no fixed pool or its index can't be read."""
+        families = [f for f in rtasks.RETIRABLE if f in self.cfg.mix]
+        sizes = [rtasks.pool_size(f) for f in families]
+        if not families or None in sizes:
+            return None
+        return sum(sizes) - sum(v.get("family") in families for v in self.retirement.retired.values())
 
     def _trajectory_groups(self, groups: list[list[Episode]]) -> list:
         import art

@@ -14,6 +14,10 @@ A live run spends W&B inference credit, so `start` and `resume` need either --li
 call and no credit, writing to results/dry/ (git-ignored). The fake backend's checkpoints persist
 in results/dry/fake-backend.json, so a dry run can be stopped and resumed like a live one.
 
+`start` and `resume` first remove containers a crashed process of the run left behind, and any sandbox
+or grader container that finished long ago (plan step 12). A resume refuses while the run's state says
+it's running and was written in the last two minutes, since another process may still be running it.
+
 `stop` sets the stop switch: the run finishes the step it's on, and that step's eval if one is
 due, then stops. Ctrl-C does the same; a second Ctrl-C stops at once, and `resume` picks up
 from the last recorded step. The W&B key is read from .env and never printed.
@@ -30,7 +34,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rlm_rl import config, training  # noqa: E402
+from rlm_rl import config, sandbox, training  # noqa: E402
 
 DRY_RESULTS = ROOT / "results" / "dry"
 
@@ -65,7 +69,8 @@ async def run_live(args, cfg) -> dict:
     backend = ArtBackend(project=project, base_model=base_model)
     try:
         run = training.TrainingRun(args.run, backend=backend, cfg=cfg, results=results_dir(args),
-                                   prune=not args.no_prune, stop_after=args.stop_after)
+                                   prune=not args.no_prune, stop_after=args.stop_after,
+                                   clear_containers=sandbox.clear_for_run)
         install_stop_handler(run)
         return await go(run, args, cfg)
     finally:
@@ -78,7 +83,9 @@ async def run_dry(args, cfg) -> dict:
     async with DryRun(results_dir(args), seed=args.seed, persist=True, real_edit=args.real_edit) as dry:
         if args.latency:  # slows the fake server to a live run's pace, e.g. for the dashboard (plan step 9)
             dry.server.latency = (args.latency * 0.5, args.latency * 1.5)
-        run = dry.training_run(args.run, cfg=cfg, prune=not args.no_prune, stop_after=args.stop_after)
+        # with --real-edit, edit episodes run in real containers, so leftovers are cleared as in a live run
+        clear = {"clear_containers": sandbox.clear_for_run} if args.real_edit else {}
+        run = dry.training_run(args.run, cfg=cfg, prune=not args.no_prune, stop_after=args.stop_after, **clear)
         install_stop_handler(run)
         return await go(run, args, cfg)
 

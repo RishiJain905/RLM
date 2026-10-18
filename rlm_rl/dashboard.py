@@ -33,13 +33,14 @@ from .repl_tools import TOOL_NAMES
 
 SCHEMA = 1
 TEMPLATE = Path(__file__).with_name("dashboard_page.html")
+TITLES = {"production": "RLM Production Run"}  # the page's <title> by run kind; others keep the template's
 DATA_MARK = "/*__DASHBOARD_DATA__*/null"
 
-# The two W&B pots (plan "Where we start"). W&B's billing page is the truth for both. The ~$218 left
-# is split by spec §12.11: second seed 12, baselines 9, production ceiling 157, evals 30, reserve 10.
-POT = {"inference_usd": 250.0, "inference_left_usd": 218.0, "second_seed_usd": 12.0, "baselines_usd": 9.0,
-       "production_usd": 157.0, "evals_usd": 30.0, "reserve_usd": 10.0,
-       "gpu_usd": 1000.0, "gpu_left_usd": 992.0, "as_of": "2026-10-11"}
+# The two W&B pots (plan "Where we start"). W&B's billing page is the truth for both. Before production
+# (Rishi, 2026-10-17) $191.01 was left, split like config.PRODUCTION_CEILINGS: production ceiling 146, evals 34,
+# reserve 10, and ~1 of margin for the run's estimates against the bill. The second seed and the baselines are spent.
+POT = {"inference_usd": 250.0, "inference_left_usd": 191.01, "production_usd": 146.0, "evals_usd": 34.0,
+       "reserve_usd": 10.0, "margin_usd": 1.01, "gpu_usd": 1000.0, "gpu_left_usd": 992.0, "as_of": "2026-10-17"}
 
 # The 20-step run (documentation/archive/rlsd-vs-grpo-20-step-results.md): held-out accuracy over
 # 100 episodes on the ticket tasks, the second seed's comparison.
@@ -231,7 +232,7 @@ def step_row(r: dict) -> dict:
                   for m in (r.get("moves") or []) if re.fullmatch(r"[a-z0-9_]{1,40}", str(m.get("family")))],
         "reward": {**_pick(r.get("reward"), REWARD_KEYS), "hacks": _counts((r.get("reward") or {}).get("hacks"))},
         "policy": {**_pick(pol, POLICY_KEYS), "kl_tokens": _num(kl.get("tokens")), "kl_failed": _num(kl.get("failed")),
-                   "kl_misaligned": _num(kl.get("misaligned_turns"))},
+                   "kl_misaligned": _num(kl.get("misaligned_turns")), "kl_requests": _num(kl.get("requests"))},
         "shape": {**_pick(shape, SHAPE_KEYS), "transcript_tokens_mean": _num(rtt.get("mean")),
                   "transcript_tokens_p95": _num(rtt.get("p95")), "transcript_tokens_max": _num(rtt.get("max"))},
         "infra": {**_pick(infra, ("episodes", "infra", "rate")), "kinds": _counts(infra.get("kinds")),
@@ -243,6 +244,10 @@ def step_row(r: dict) -> dict:
         "time": _pick(r.get("time"), ("rollouts_s", "kl_s", "train_s", "total_s")),
         "tokens": _pick(r.get("tokens"), TOKEN_KEYS),
         **({"edit": edit} if edit is not None else {}),  # absent, not null, so old steps add no CSV column
+        # the edit_real pool (12b): counts only, never a task id
+        **({"pool": {**_pick(r["retired"], ("total", "left")),
+                     "moved": _num(sum(_num((m or {}).get("slots")) or 0 for m in (r.get("fallback") or {}).values()))}}
+           if isinstance(r.get("retired"), dict) and r["retired"].get("left") is not None else {}),
     }
 
 
@@ -489,6 +494,9 @@ def render(data: dict, template: str | None = None) -> str:
     blob = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     # "<" only occurs inside JSON strings, where \u003c is the same character to JSON.parse
     blob = blob.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    title = TITLES.get((data.get("run") or {}).get("kind"))
+    if title:  # production's page is its own artifact (step 12), so its tab and gallery card say which run it is
+        template = template.replace("<title>RLM Live Run</title>", f"<title>{title}</title>", 1)
     return template.replace(DATA_MARK, blob)
 
 

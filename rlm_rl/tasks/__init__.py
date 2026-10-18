@@ -167,19 +167,38 @@ def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None
 
     With `step` (the training loop always passes it), the split carries its rounding across steps
     (`allocate_step`); without it, every call rounds the same way (`allocate`). `exclude` holds retired
-    task ids (spec §12.7); a fixed pool also never repeats a task within one step.
+    task ids (spec §12.7); a fixed pool also never repeats a task within one step. A slot of a fixed pool
+    with no task left to draw goes to its FALLBACK family, if the run has it (decision 12b).
     """
     out = []
     counts = allocate(n, mix) if step is None else allocate_step(n, mix, step)
     for family, count in counts.items():
         taken = set(exclude or ())
         for _ in range(count):
-            task = make_task(family, levels[family], exclude=taken if family in RETIRABLE else None)
-            if family in RETIRABLE:
-                taken.add(task.task_id)
+            if family not in RETIRABLE:
+                out.append(make_task(family, levels[family]))
+                continue
+            try:
+                task = make_task(family, levels[family], exclude=taken)
+            except PoolEmpty:
+                sub = FALLBACK.get(family)
+                if sub not in levels:
+                    raise
+                out.append(make_task(sub, levels[sub]))
+                continue
+            taken.add(task.task_id)
             out.append(task)
     secrets.SystemRandom().shuffle(out)
     return out
+
+
+def pool_size(family: str) -> int | None:
+    """How many training tasks a fixed pool holds (edit_real's index), or None when it can't be read."""
+    size = getattr(generator(family), "pool_size", None)
+    try:
+        return size(family) if callable(size) else None
+    except (OSError, ValueError):
+        return None
 
 
 # ----------------------------------------------------------------------------- task retirement (spec §12.7)
@@ -187,6 +206,14 @@ def draw(n: int, mix: dict[str, float], levels: dict[str, int], step: int | None
 RETIRABLE = ("edit_real",)  # fixed pools whose tasks come back; synthetic families never repeat a task
 RETIRE_ALL_ZERO = 2  # a task whose group came back all-0 this many times isn't drawn again
 RETIRE_ALL_ONE = 1  # nor one whose group came back all-1 once
+# Decision 12b (Rishi, 2026-10-17): ~150 edit_real draws are wanted from 107 training tasks, so retirement can use the
+# pool up. Its slots then go to edit_synth, which generates fresh tasks at its own level, rather than redrawing retired
+# tasks: those came back all-1 (no signal left) or all-0 twice. A rollback restores the retired set, and the pool.
+FALLBACK = {"edit_real": "edit_synth"}
+
+
+class PoolEmpty(ValueError):
+    """A fixed pool has no task left to draw: every one is retired, or already drawn this step."""
 
 
 class Retirement:
