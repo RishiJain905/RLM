@@ -280,7 +280,8 @@ def eval_entry(e: dict) -> dict:
 
 def _config(cfg: dict) -> dict:
     keep = ("kind", "learning_rate", "lr_rule", "tasks_per_step", "rollouts", "max_steps", "eval_every",
-            "eval_at_start", "selection", "final_eval", "keep_every", "kl_samples", "base_model", "frozen_controller")
+            "eval_at_start", "selection", "final_eval", "keep_every", "kl_samples", "base_model", "frozen_controller",
+            "prompt_version")
     out = {k: cfg.get(k) for k in keep if isinstance(cfg.get(k), (int, float, str, bool)) or cfg.get(k) is None}
     out["mix"] = {k: _num(v) for k, v in (cfg.get("mix") or {}).items() if re.fullmatch(r"[a-z0-9_]{1,40}", k)}
     out["ceilings"] = {k: _num(v) for k, v in (cfg.get("ceilings") or {}).items() if k in ("train", "eval")}
