@@ -162,6 +162,7 @@ class FakeBackend:
         self.logged: list[dict] = []
         self.deleted: list[tuple[str, list[int]]] = []
         self.branched: list[tuple[str, str, int]] = []  # (new model, source model, source step)
+        self.opened: set[str] | None = None  # set it to an empty set to act as a new process: only opened models serve
         self.fail_next_train: BaseException | None = None
         self.fail_after_next_train: BaseException | None = None  # the job finishes, then the client loses it
         self.train_metrics = lambda name, step: {"loss/grad_norm": 0.7, "loss/probs_corr": 0.997,
@@ -179,9 +180,13 @@ class FakeBackend:
 
     async def open(self, name: str) -> None:
         self.models.setdefault(name, {"steps": [], "next": 1})
+        if self.opened is not None:
+            self.opened.add(name)
         self._persist()
 
     def inference_name(self, name: str, step: int) -> str:
+        if self.opened is not None and name not in self.opened:
+            raise KeyError(name)  # as ArtBackend: a model this process hasn't opened has no inference name
         return f"{name}:step{step}"
 
     def openai_client(self):
@@ -224,6 +229,8 @@ class FakeBackend:
             raise ValueError(f"{source} has no checkpoint {step}")
         self.branched.append((name, source, step))
         self.models.setdefault(name, {"steps": [], "next": 1})  # a name already used keeps its steps: the loop refuses it
+        if self.opened is not None:
+            self.opened.add(name)  # ArtBackend.branch_from opens it
         self._persist()
 
     async def log(self, name: str, groups, *, split: str, step: int, metrics: dict) -> None:

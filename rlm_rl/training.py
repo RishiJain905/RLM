@@ -385,9 +385,12 @@ class TrainingRun:
             self.capability_items = capability.load(capability.resolve(self.cfg.capability_set))
 
     async def _open(self) -> None:
-        await self.backend.open(self._model_of(0))
-        if self._branch != self._model_of(0):
-            await self.backend.open(self._branch)
+        await self.backend.open(self._model_of(0))  # first: the client and sub-calls go through the base model
+        # Every branch a checkpoint is on, not only the current one: after a re-seed (resume --rebranch) the latest
+        # checkpoint stays on the old branch's model until the new one trains (prod-v1 2026-10-19: KeyError prod-v1-b2).
+        branches = {ckpt["branch"] for ckpt in self.state["checkpoints"].values()} | {self.state["branch"]}
+        for b in sorted(branches - {0}):
+            await self.backend.open(self._model_of(b))
         self.base_model = self.backend.inference_name(self._model_of(0), 0)
         self.client = ModelClient(self.backend.openai_client(), subcall_model=self.base_model, retry=self.retry,
                                   pacer=self.pacer,  # None: the client's own, which spaces out sub-calls (client.py)

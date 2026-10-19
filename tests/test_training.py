@@ -541,6 +541,24 @@ class TaskShiftTest(LoopCase):
             self.assertEqual(st["steps"][-1]["step"], 4)
 
 
+class ReseedTest(LoopCase):
+    async def test_a_new_process_resumes_a_re_seed_whose_checkpoint_is_on_the_old_branch(self):
+        """prod-v1 2026-10-19: after `resume --rebranch` the latest checkpoint stays on the old branch's model until
+        the new one trains, so a later resume must open that model too (it crashed with KeyError prod-v1-b2)."""
+        st = await self.run_("rs", cfg=second_seed("rs", 5), stop_after=1).start()
+        st = await self.run_("rs", stop_after=2).resume(rebranch=True)  # step 2 trains on branch 1
+        ckpt = st["checkpoints"]["2"]
+        self.assertEqual(ckpt["branch"], 1)
+        old = st["branches"][1]["model"]
+        st = await self.run_("rs", stop_after=2).resume(rebranch=True)  # branch 2, stopped before it trains
+        self.assertEqual((st["branch"], st["checkpoints"]["2"]["branch"]), (2, 1))
+        self.dry.backend.opened = set()  # a new process: only the models resume opens can serve
+        st = await self.run_("rs", stop_after=3).resume()
+        self.assertEqual(st["steps"][-1]["step"], 3)
+        self.assertEqual(st["steps"][-1]["sampled_from"]["model"], f"{old}:step{ckpt['backend_step']}")
+        self.assertEqual(self.dry.backend.trained[-1]["model"], st["branches"][2]["model"])
+
+
 class EvalRerunTest(unittest.TestCase):
     def test_an_eval_that_lost_many_episodes_to_infra_is_due_again_twice_at_most(self):
         from types import SimpleNamespace

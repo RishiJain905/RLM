@@ -178,6 +178,12 @@ At checkpoint 20 sub-calls were flat (about 0.3 an episode, nearly all in aggreg
 
 **Next lever:** if coding sub-calls stay near 0 after 10 steps, pause at that checkpoint and warm-start: a short SFT on correct, delegating coding attempts (sampling ~$10 of the $15 approved; the SFT on the training credit).
 
+**The re-seed, a PC crash and the restart (2026-10-19).** Step 21 could only retry: W&B answered HTTP 500 to every call to any checkpoint of prod-v1-b2. At 00:00 UTC the run was re-seeded on a new model, prod-v1-b3 (`resume --rebranch`, same weights, fresh optimizer). Its state stopped updating at 00:01, while the 19 baseline episodes W&B had dropped were starting, and the PC went down uncleanly at 00:13 (Windows logged Kernel-Power 41, no cause). It rebooted at 00:29 and sat at the login screen until 06:08, so nothing ran for 6 hours.
+
+- **The next resume crashed at once** with `KeyError: 'prod-v1-b2'`. A re-seed leaves the latest checkpoint on the old model until the new one trains, and `_open` opened only the base model and the current branch's. It now opens every model a checkpoint is on (`ReseedTest`, which fails on the old code).
+- **What W&B serves (probes at 06:20, a few cents' worth of tokens):** prod-v1-b2:step8 answered again in 3 s, while prod-v1-b3:step0, the seeded copy, still answered only 500s. So the baseline re-run and step 21 sample from prod-v1-b2:step8, and only training moves to prod-v1-b3; step 22 samples from prod-v1-b3's first checkpoint.
+- **Sandbox folder:** the WSL restart cleared /tmp, and Docker re-created `/tmp/rlm-sandbox-1000` as root for the run's leftover containers, so graders would fail. The run resumes with `RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b` until that folder is removed as root (`wsl -d Ubuntu -u root rm -rf /tmp/rlm-sandbox-1000`).
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |
