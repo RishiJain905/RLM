@@ -201,6 +201,13 @@ RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b .venv-linux/bin/python scripts/train.py s
 | Ceilings | steps $95.63, evals $12.27 | what prod-v1's ceilings had left ($97.19 and $10.77, less the $0.06 pilot overrun), with $1.50 moved to evals so both selection rounds fit (Rishi: yes) |
 | Delegation bonus | fades to 0 by step 25 (was 50) | ~25-30 steps fit the budget, so the last steps train on right answers alone (Rishi: yes) |
 
+**Where it stands (2026-10-19 16:15 UTC): paused on W&B.** Started 15:06 with `--base-inference prod-v1` added: W&B 500'd on prod-v2:step0, so step 1's sampling, the sub-calls and the KL check use prod-v1:step0, the same base weights (training still goes to prod-v2). Step 1 trained ($5.36, 53% pass, 2 of 6 groups trainable, probs_corr 0.998); build from a spec cost $3.07 of it, 0 of 12 right, every episode at the 30-turn cap (base Qwen read the file in 30-130 line slices and made its first edit at turn 18-28 or never). Step 2's warm-up got 500s from prod-v2:step1 for 45 minutes, like every LoRA W&B trained for us since 18 Oct; W&B told Rishi it's an internal fault they're fixing. The run was stopped at once (Ctrl-C twice, nothing spent on step 2) and resumes when W&B serves prod-v2:step1. Two fixes are built and tested for that resume (Rishi: "one and two for sure"):
+
+- **Pacing nudge** (`resume --pace-nudge`, `bridge.pace_message`): an edit episode's observations say "write your implementation now" from half its turns while no file has changed, and "run the tests and submit" at 5 turns left.
+- **Coding warm start** (`scripts/warm_start.py sample|report|train`, `rlm_rl/warmstart.py`): coding tasks run on the base model with a delegating workflow in the system prompt (sampling up to the $10 approved, counted in the step spend); the right, delegating episodes become SFT data with the hint stripped, one sample per kept turn (its thinking and reply the only target); one SFT job on prod-v2 (training credit), after which the latest checkpoint points at the result. Order at the resume: `sample`, `report`, `train`, then `resume prod-v2 --live --pace-nudge`.
+
+W&B storage: the account held 68.6 GB against Serverless RL's ~5 GB included; Rishi deleted prod-v1-b1, -b2 and -b3 with `scripts/wandb_storage.py` (it refuses prod-v1, which prod-v2 serves its base from). It didn't change the 500s.
+
 With only two selection points the overfitting and plateau rules can't act mid-run; the per-step signals (pass rate, the collapse rule, broken replies, infra) and the capability check still do. The dashboard keeps its link and runs with `--pot-left 118.91` (177.68 less prod-v1's $58.71 and the $0.06 overrun). The W&B outage note for W&B support is in the thread.
 
 ## 8. What changed for step 12 ($0, tested)
