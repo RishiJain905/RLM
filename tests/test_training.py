@@ -577,6 +577,19 @@ class FreshStartTest(LoopCase):
             await self.run_("fs2", cfg=second_seed("fs2", 2)).start(baseline=[{**base[0], "checkpoint": 5}],
                                                                      baseline_from="src")
 
+    async def test_the_base_model_can_be_served_under_another_models_step_0(self):
+        """prod-v2 (2026-10-19): W&B 500'd on prod-v2:step0, so step 1 samples, sub-calls and the KL re-score use
+        prod-v1:step0, the same base weights; training still goes to the run's own model."""
+        cfg = config.RunConfig.from_dict({**second_seed("bi", 3).as_dict(), "base_inference": "older"})
+        self.dry.backend.opened = set()
+        run = self.run_("bi", cfg=cfg, stop_after=2)
+        st = await run.start()
+        self.assertEqual((st["steps"][0]["sampled_from"]["model"], run.client.subcall_model, run.base_model),
+                         ("older:step0",) * 3)
+        self.assertEqual(self.dry.backend.trained[0]["model"], "bi")
+        self.assertEqual(st["checkpoints"]["1"], {"branch": 0, "backend_step": 1})  # step 1 trained the run's model
+        self.assertEqual(st["steps"][1]["sampled_from"]["model"], "bi:step1")
+
 
 class SelectionBySpendTest(LoopCase):
     def test_the_selection_set_runs_at_its_spend_shares_and_at_the_end(self):

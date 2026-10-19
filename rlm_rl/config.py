@@ -102,6 +102,10 @@ class RunConfig:
     # train ceiling stops the run if `selection_at_end`. eval_every then times only the capability check.
     selection_at_spend: list | None = None
     selection_at_end: bool = False
+    # The model whose step 0 serves the base model's inference: sub-calls, the KL re-score, and sampling from checkpoint
+    # 0. None is the run's own. prod-v2 (2026-10-19): W&B answered 500 to every call to prod-v2:step0 while
+    # prod-v1:step0, the same base weights, answered at once.
+    base_inference: str | None = None
     selection: str | None = None  # eval set name (rlm_rl/evals.py)
     final_eval: str | None = None  # an eval run once, at max_steps
     capability_set: str | None = None  # path to the capability prompts (plan step 7 builds them)

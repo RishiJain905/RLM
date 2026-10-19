@@ -143,6 +143,8 @@ def build_config(args) -> config.RunConfig:
         change["selection_at_end"] = True
     if args.delegation_bonus_until is not None:
         change["delegation_bonus_until"] = args.delegation_bonus_until
+    if args.base_inference:
+        change["base_inference"] = args.base_inference
     if change:
         cfg = config.RunConfig.from_dict({**cfg.as_dict(), **change})  # validates them
     return cfg
@@ -214,6 +216,9 @@ def main() -> int:
                            help="run the selection set on the last checkpoint when the train ceiling stops the run")
             p.add_argument("--delegation-bonus-until", type=int,
                            help="the step the delegation bonus has faded to 0 by")
+            p.add_argument("--base-inference", metavar="MODEL",
+                           help="serve the base model (sub-calls, KL, checkpoint 0) from this model's step 0, e.g. "
+                                "prod-v1 when the backend can't serve the new model's own step 0")
         else:
             p.add_argument("--from", dest="from_checkpoint", help="latest (default), best, or a kept checkpoint")
             p.add_argument("--retrain-pending", action="store_true", help="train a step's saved batch again")

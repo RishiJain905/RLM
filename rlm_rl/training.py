@@ -383,6 +383,8 @@ class TrainingRun:
 
     def _model_for(self, c: int) -> str:
         ckpt = self._ckpt(c)
+        if ckpt["branch"] == 0 and ckpt["backend_step"] == 0 and self.cfg.base_inference:
+            return self.base_model  # the base model, served under RunConfig.base_inference
         return self.backend.inference_name(self._model_of(ckpt["branch"]), ckpt["backend_step"])
 
     def _model_of(self, branch: int) -> str:
@@ -423,7 +425,9 @@ class TrainingRun:
         branches = {ckpt["branch"] for ckpt in self.state["checkpoints"].values()} | {self.state["branch"]}
         for b in sorted(branches - {0}):
             await self.backend.open(self._model_of(b))
-        self.base_model = self.backend.inference_name(self._model_of(0), 0)
+        if self.cfg.base_inference:
+            await self.backend.open(self.cfg.base_inference)
+        self.base_model = self.backend.inference_name(self.cfg.base_inference or self._model_of(0), 0)
         self.client = ModelClient(self.backend.openai_client(), subcall_model=self.base_model, retry=self.retry,
                                   pacer=self.pacer,  # None: the client's own, which spaces out sub-calls (client.py)
                                   root_thinking=self.cfg.root_thinking)  # production: medium (decision 11b)
