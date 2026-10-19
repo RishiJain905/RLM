@@ -186,6 +186,16 @@ class PaceNudgeTest(EditEnvCase):
         ep = await self.episode(LOOK, limits_override={"max_turns": 12})
         self.assertFalse(any(bridge.OBS_PACE_EDIT in (t.observation or "") for t in ep.turns))
 
+    async def test_a_teacher_hint_is_appended_to_the_system_prompt(self):
+        """Warm-start sampling (rlm_rl/warmstart.py) runs with a teacher hint that SFT strips again."""
+        from rlm_rl import warmstart
+
+        ep = await self.episode(LOOK, system_extra=warmstart.TEACHER_EDIT, limits_override={"max_turns": 2})
+        self.assertTrue(ep.messages[0]["content"].endswith(warmstart.SEPARATOR + warmstart.TEACHER_EDIT))
+        self.assertEqual(warmstart.strip_teacher(ep.messages[0]["content"]),
+                         bridge.initial_messages(self.task.question, self.task.context, bridge.PROMPT_VERSION,
+                                                 bridge.limits(self.task.family), edit=self.task.edit)[0]["content"])
+
     def test_pace_message(self):
         self.assertIsNone(bridge.pace_message(16, 30, edited=False))
         self.assertEqual(bridge.pace_message(15, 30, edited=False), bridge.OBS_PACE_EDIT)

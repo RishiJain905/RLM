@@ -55,6 +55,15 @@ class ArtBackend:
         result = await self.backend.train(self.models[name], groups, **kwargs)
         return result.step, dict(result.metrics)
 
+    async def train_sft(self, name: str, trajectories: list, *, learning_rate: float, batch_size="auto") -> int:
+        """One SFT job on model `name` (the warm start, rlm_rl/warmstart.py), training only each trajectory's last
+        assistant turn; returns the model's new latest step. It bills training GPU-hours, not inference."""
+        import art
+
+        config = art.TrainSFTConfig(learning_rate=learning_rate, batch_size=batch_size, assistant_turns="last")
+        await self.models[name].train_sft(trajectories, config=config)
+        return await self.latest_step(name)
+
     async def latest_step(self, name: str) -> int:
         return await self.backend._get_step(self.models[name])
 

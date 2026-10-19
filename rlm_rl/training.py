@@ -103,6 +103,7 @@ class Backend(Protocol):
     async def list_steps(self, name: str) -> list[int]: ...
     async def delete_steps(self, name: str, steps: list[int]) -> None: ...
     async def branch_from(self, name: str, source: str, step: int) -> None: ...
+    async def train_sft(self, name: str, trajectories: list, *, learning_rate: float) -> int: ...
     async def log(self, name: str, groups: list | None, *, split: str, step: int, metrics: dict) -> None: ...
     def art_model(self, name: str) -> Any: ...
 
@@ -336,6 +337,48 @@ class TrainingRun:
                                f"{self.state['branch']} at learning rate {self.state['lr']['current']:g}")
         self._save()
         return await self._loop()
+
+    async def warm_start(self, trajectories: list, *, learning_rate: float, sampling_usd: float = 0.0,
+                         source: str = "", counts: dict | None = None) -> dict:
+        """One SFT job on the run's model between steps (rlm_rl/warmstart.py), then the latest checkpoint points at its
+        result, so the next step samples from the warm-started weights and the trainer continues from them.
+        `sampling_usd`, the inference the samples cost, counts toward the train ceiling (step-12 plan: up to $15 of the
+        step budget). The run must not be running; resume it afterwards as usual."""
+        self.state = load_state(self.results, self.run)
+        age = time.time() - float(self.state.get("updated_at") or 0)
+        if self.state.get("status") == "running" and age < LIVE_GUARD_S:
+            raise ResumeBlocked(f"the run's state says it is running and was written {age:.0f} s ago: stop it first")
+        if not trajectories:
+            raise ValueError("a warm start needs at least one SFT sample")
+        self.cfg = RunConfig.from_dict(self.state["config"])
+        await self._open()
+        c, st = self._latest(), self.state
+        ckpt = self._ckpt(c)
+        if ckpt["branch"] != st["branch"]:
+            raise ValueError(f"checkpoint {c} is on branch {ckpt['branch']}, not the run's model ({self._branch}): "
+                             "train a step on it first")
+        before = await self.backend.latest_step(self._branch)
+        if before != ckpt["backend_step"]:
+            raise RuntimeError(f"{self._branch} is at step {before}, but checkpoint {c} is its step "
+                               f"{ckpt['backend_step']}: nothing was trained")
+        after = await self.backend.train_sft(self._branch, trajectories, learning_rate=learning_rate)
+        if after <= before:
+            raise RuntimeError(f"the SFT job made no new checkpoint of {self._branch} (still step {before})")
+        st["checkpoints"][str(c)] = {"branch": ckpt["branch"], "backend_step": after,
+                                     "warm_start": {"from_backend_step": before}}
+        spend = st["spend"]
+        spend["train_usd"] = round(spend["train_usd"] + sampling_usd, 6)
+        spend["warm_start_usd"] = round(spend.get("warm_start_usd", 0.0) + sampling_usd, 6)
+        spend["total_usd"] = round(spend["train_usd"] + spend["eval_usd"], 6)
+        st.setdefault("warm_starts", []).append({"checkpoint": c, "from_backend_step": before, "backend_step": after,
+                                                 "samples": len(trajectories), "learning_rate": learning_rate,
+                                                 "sampling_usd": sampling_usd, "source": source,
+                                                 "counts": counts or {}, "at": time.time()})
+        self._notice("warm_start", f"warm start after checkpoint {c}: SFT on {len(trajectories)} turns of correct, "
+                                   f"delegating coding episodes ({source or 'sampled'}, ${sampling_usd:.2f} of sampling), "
+                                   f"learning rate {learning_rate:g}; checkpoint {c} is now {self._branch}:step{after}")
+        self._save()
+        return st
 
     # ------------------------------------------------------------------ state
 

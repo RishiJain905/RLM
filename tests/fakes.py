@@ -163,6 +163,7 @@ class FakeBackend:
         self.deleted: list[tuple[str, list[int]]] = []
         self.branched: list[tuple[str, str, int]] = []  # (new model, source model, source step)
         self.opened: set[str] | None = None  # set it to an empty set to act as a new process: only opened models serve
+        self.sft: list[dict] = []  # warm-start SFT jobs
         self.fail_next_train: BaseException | None = None
         self.fail_after_next_train: BaseException | None = None  # the job finishes, then the client loses it
         self.train_metrics = lambda name, step: {"loss/grad_norm": 0.7, "loss/probs_corr": 0.997,
@@ -212,6 +213,20 @@ class FakeBackend:
             exc, self.fail_after_next_train = self.fail_after_next_train, None
             raise exc
         return step, self.train_metrics(name, step)
+
+    async def train_sft(self, name: str, trajectories: list, *, learning_rate: float) -> int:
+        """The warm start's SFT job: a new checkpoint, as W&B makes one."""
+        assert trajectories, "an SFT job needs data"
+        for traj in trajectories:
+            messages = traj.messages()
+            assert messages[-1]["role"] == "assistant", "each SFT sample ends on its target turn"
+        model = self.models[name]
+        step = model["next"]
+        model["steps"].append(step)
+        model["next"] = step + 1
+        self._persist()
+        self.sft.append({"model": name, "step": step, "samples": len(trajectories), "learning_rate": learning_rate})
+        return step
 
     async def latest_step(self, name: str) -> int:
         return max(self.models[name]["steps"], default=0)

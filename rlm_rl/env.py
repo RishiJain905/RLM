@@ -232,7 +232,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                       sandbox_factory: Callable[..., Any] = Sandbox, prompt_version: str = bridge.PROMPT_VERSION,
                       edit_sandbox_factory: Callable[..., Any] | None = None, edit_sandbox_kwargs: dict | None = None,
                       grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, resample_broken: int = 0,
-                      limits_override: dict | None = None, pace_nudge: bool = False, **sandbox_kwargs) -> Episode:
+                      limits_override: dict | None = None, pace_nudge: bool = False, system_extra: str | None = None,
+                      **sandbox_kwargs) -> Episode:
     """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
 
     A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
@@ -241,7 +242,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     reward for each broken reply, before the detectors (reward.broken_replies). `resample_broken` draws a broken reply
     again, up to that many times a turn, before it enters the conversation: the model never sees it, so it can't
     snowball, and nothing trains on it (the Turn keeps what was dropped). `pace_nudge` adds an edit episode's pacing
-    line to its observations (bridge.pace_message).
+    line to its observations (bridge.pace_message). `system_extra` is appended to the system prompt: warm-start
+    sampling's teacher hint (rlm_rl/warmstart.py), which is stripped again before the episode becomes SFT data.
 
     An edit task (spec §12) runs in the edit sandbox (`edit_sandbox_factory`, editbox.EditSandbox by
     default) under the edit limits. After the last turn the host takes the repository's diff, and a
@@ -265,6 +267,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
         ep.repo = (task.edit or {}).get("repo") or task.grading.get("repo")
     ep.messages = bridge.initial_messages(task.question, task.context, prompt_version, lim,
                                           edit=task.edit if edit else None)
+    if system_extra:
+        ep.messages[0] = {**ep.messages[0], "content": ep.messages[0]["content"] + "\n\n" + system_extra}
     subcall_failures: list[RequestFailed] = []
     serve = client.subcaller(ep.usage, max_tokens=lim.subcall_max_tokens, thinking=lim.subcall_thinking)
     subcall_kwargs = {}
