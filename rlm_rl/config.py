@@ -97,6 +97,11 @@ class RunConfig:
     max_steps: int | None = None
     eval_every: int | None = None  # the selection set and the capability check
     eval_at_start: bool = False  # evaluate checkpoint 0 too, for the baselines the stop rules compare against
+    # The selection set by spend instead of every eval_every steps (prod-v2, Rishi 2026-10-19: two rounds fit the eval
+    # budget): once as the train spend passes each of these shares of its ceiling, and on the last checkpoint when the
+    # train ceiling stops the run if `selection_at_end`. eval_every then times only the capability check.
+    selection_at_spend: list | None = None
+    selection_at_end: bool = False
     selection: str | None = None  # eval set name (rlm_rl/evals.py)
     final_eval: str | None = None  # an eval run once, at max_steps
     capability_set: str | None = None  # path to the capability prompts (plan step 7 builds them)
@@ -139,6 +144,12 @@ class RunConfig:
             raise ValueError("resample_broken must be between 0 and 3 draws a turn")
         if not 0.0 <= self.delegation_bonus <= 0.3 or self.delegation_bonus_every < 1:
             raise ValueError("delegation_bonus must be between 0 and 0.3, every 1 or more steps")
+        if self.selection_at_spend is not None:
+            self.selection_at_spend = sorted(float(f) for f in self.selection_at_spend)
+            if not all(0.0 < f < 1.0 for f in self.selection_at_spend):
+                raise ValueError("selection_at_spend shares must be between 0 and 1 of the train ceiling")
+            if "train" not in self.ceilings:
+                raise ValueError("selection_at_spend needs a train ceiling to take shares of")
 
     def as_dict(self) -> dict:
         return dataclasses.asdict(self)

@@ -131,6 +131,25 @@ def load_state(results: Path, run: str) -> dict:
     return json.loads(state_path(results, run).read_text(encoding="utf-8"))
 
 
+def baseline_evals(results: Path, source: str, cfg: RunConfig) -> list[dict]:
+    """Checkpoint 0's evals from run `source` that a new run with `cfg` can reuse instead of paying for them again:
+    checkpoint 0 is the base model, so its scores carry over when the base model, the project and the eval set match
+    (prod-v2, 2026-10-19: the capability check from prod-v1). Raises when nothing carries over."""
+    src = load_state(results, source)
+    scfg = src.get("config") or {}
+    if (scfg.get("base_model"), scfg.get("project")) != (cfg.base_model, cfg.project):
+        raise ValueError(f"{source} ran on {scfg.get('base_model')} in {scfg.get('project')}, not {cfg.base_model} "
+                         f"in {cfg.project}: its checkpoint 0 isn't this run's")
+    same = {"capability": bool(cfg.capability_set) and scfg.get("capability_set") == cfg.capability_set}
+    if cfg.selection:
+        same[cfg.selection] = scfg.get("selection") == cfg.selection or any(
+            s.get("after", {}).get("selection") == cfg.selection for s in src.get("task_shifts") or [])
+    out = [dict(e) for e in src.get("evals") or [] if e.get("checkpoint") == 0 and same.get(e.get("name"))]
+    if not out:
+        raise ValueError(f"{source} has no checkpoint 0 eval this run can reuse (wanted {sorted(same)})")
+    return out
+
+
 # What counts as really delegating, for the delegation bonus. A read episode's sub-calls must have read at least
 # DELEGATED_READ_SHARE of its context between them (the pilot's roots grepped a few lines and read them alone); an edit
 # episode needs DELEGATED_EDIT_CALLS sub-calls that each sent at least DELEGATED_EDIT_PROMPT_CHARS (code, a spec, a
@@ -197,7 +216,9 @@ class TrainingRun:
 
     # ------------------------------------------------------------------ entry points
 
-    async def start(self) -> dict:
+    async def start(self, *, baseline: list[dict] | None = None, baseline_from: str | None = None) -> dict:
+        """Start a new run. `baseline`: checkpoint 0 evals reused from run `baseline_from` (`baseline_evals`); they
+        count as checkpoint 0's own, at no cost to this run, so only the evals they don't cover run at checkpoint 0."""
         if self.cfg is None:
             raise ValueError("start() needs a RunConfig")
         if state_path(self.results, self.run).exists():
@@ -211,7 +232,18 @@ class TrainingRun:
         self._load_capability()
         await self._open()
         self._notice("start", f"{self.cfg.kind} run started at learning rate {self.cfg.learning_rate:g}, "
-                              f"ceilings {self._ceilings_text()}")
+                              f"ceilings {self._ceilings_text()}; mix {_mix_text(self.cfg.mix)}, prompt "
+                              f"{self.cfg.prompt_version}, {self.cfg.tasks_per_step} tasks x {self.cfg.rollouts} rollouts")
+        for e in baseline or []:
+            if e.get("checkpoint") != 0:
+                raise ValueError("a baseline eval must be checkpoint 0's")
+            entry = {**e, "copied_from": baseline_from, "copied_cost_usd": e.get("cost_usd", 0.0), "cost_usd": 0.0}
+            self.state["evals"].append(entry)
+            acc = (entry.get("summary") or {}).get("accuracy")
+            self._notice("eval", f"{entry['name']} at checkpoint 0 reused from {baseline_from} (the same base model)"
+                                 + (f": accuracy {acc:.1%}" if isinstance(acc, (int, float)) else ""))
+        if baseline:
+            self._update_best()
         self._save()
         return await self._loop()
 
@@ -853,10 +885,27 @@ class TrainingRun:
         infra, episodes = summary.get("infra_episodes") or 0, summary.get("episodes") or 0
         return not (episodes and infra > EVAL_RERUN_INFRA * episodes and done[-1].get("reruns", 0) < EVAL_MAX_RERUNS)
 
-    def _due_evals(self, c: int) -> list[str]:
+    def _selection_by_spend_due(self, c: int) -> bool:
+        """RunConfig.selection_at_spend: the selection set is due once the train spend has passed more of its ceiling's
+        shares than there are selection evals after checkpoint 0 (the end eval only comes as the run stops)."""
+        cfg = self.cfg
+        if not cfg.selection or not cfg.selection_at_spend or c == 0:
+            return False
+        spent, ceiling = self.state["spend"]["train_usd"], cfg.ceilings.get("train") or 0
+        passed = sum(spent >= share * ceiling for share in cfg.selection_at_spend)
+        done = {e["checkpoint"] for e in self.state["evals"] if e["name"] == cfg.selection and 0 < e["checkpoint"] < c}
+        return passed > len(done)
+
+    def _due_evals(self, c: int, *, end: bool = False) -> list[str]:
+        """The evals due at checkpoint c. `end`: the train ceiling is stopping the run (RunConfig.selection_at_end)."""
         cfg, names = self.cfg, []
-        if cfg.selection and cfg.eval_every and ((c > 0 and c % cfg.eval_every == 0) or (c == 0 and cfg.eval_at_start)):
-            names.append(cfg.selection)
+        periodic = bool(cfg.eval_every) and ((c > 0 and c % cfg.eval_every == 0) or (c == 0 and cfg.eval_at_start))
+        by_spend = cfg.selection_at_spend is not None
+        selection = cfg.selection and ((periodic and not by_spend) or self._selection_by_spend_due(c)
+                                       or (end and cfg.selection_at_end))
+        if selection or (by_spend and periodic):
+            if selection:
+                names.append(cfg.selection)
             if self.capability_items:
                 names.append("capability")
             elif not self.state.get("capability_noted"):
@@ -871,8 +920,8 @@ class TrainingRun:
         past = [e["cost_usd"] for e in self.state["evals"] if e["name"] == name and e.get("ran", 1)]
         return max(past[-2:]) if past else items * per_item
 
-    async def _run_due_evals(self, c: int) -> str | None:
-        due = self._due_evals(c)
+    async def _run_due_evals(self, c: int, *, end: bool = False) -> str | None:
+        due = self._due_evals(c, end=end)
         model = self._model_for(c)
         for name in due:
             if name == "capability":
@@ -1203,6 +1252,11 @@ class TrainingRun:
             estimate = self._next_step_estimate()
             if not self._affordable("train", estimate):
                 text = self._budget_text("train", estimate, f"step {c + 1}")
+                if cfg.selection_at_end:  # the last checkpoint gets its selection eval before the run stops
+                    blocked = await self._run_due_evals(c, end=True)
+                    if blocked:
+                        return blocked
+                    points = stoprules.eval_points(st["evals"], cfg.selection or "")
                 recent = stoprules.new_bests(points)[-2:]
                 if len(recent) == 2 and all(recent):
                     text += ". The last 2 evals were both new bests, so the research would spend the reserve: your call (12a)"

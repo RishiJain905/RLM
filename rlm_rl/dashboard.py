@@ -284,6 +284,9 @@ def _config(cfg: dict) -> dict:
             "prompt_version")
     out = {k: cfg.get(k) for k in keep if isinstance(cfg.get(k), (int, float, str, bool)) or cfg.get(k) is None}
     out["mix"] = {k: _num(v) for k, v in (cfg.get("mix") or {}).items() if re.fullmatch(r"[a-z0-9_]{1,40}", k)}
+    if isinstance(cfg.get("selection_at_spend"), list):  # prod-v2: the selection set by spend share, not every N steps
+        out["selection_at_spend"] = [_num(v) for v in cfg["selection_at_spend"]]
+        out["selection_at_end"] = bool(cfg.get("selection_at_end"))
     out["ceilings"] = {k: _num(v) for k, v in (cfg.get("ceilings") or {}).items() if k in ("train", "eval")}
     out["has_capability_set"] = bool(cfg.get("capability_set"))
     return out

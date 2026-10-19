@@ -184,6 +184,25 @@ At checkpoint 20 sub-calls were flat (about 0.3 an episode, nearly all in aggreg
 - **What W&B serves (probes at 06:20, a few cents' worth of tokens):** prod-v1-b2:step8 answered again in 3 s, while prod-v1-b3:step0, the seeded copy, still answered only 500s. So the baseline re-run and step 21 sample from prod-v1-b2:step8, and only training moves to prod-v1-b3; step 22 samples from prod-v1-b3's first checkpoint.
 - **Sandbox folder:** the WSL restart cleared /tmp, and Docker re-created `/tmp/rlm-sandbox-1000` as root for the run's leftover containers, so graders would fail. The run resumes with `RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b` until that folder is removed as root (`wsl -d Ubuntu -u root rm -rf /tmp/rlm-sandbox-1000`).
 
+## 7d. prod-v2: a fresh start on the new families (2026-10-19, Rishi: "pick up from step 0, fully fresh")
+
+prod-v1 ended paused at step 22. Step 21 trained on prod-v1-b3 (79% pass, $3.18), then W&B answered HTTP 500 to every call to every checkpoint of prod-v1-b1, -b2 and -b3 from about 07:40 UTC, 15 probes over 4 hours, while every checkpoint of prod-v1 itself (steps 0, 5, 10) and second-seed-v1-b1:step1 answered in under a second. Checkpoints 20 and 21 exist only on those models, so nothing could sample from them. Continuing prod-v1 wasn't an option either: W&B trains a model from its newest checkpoint, and prod-v1's is step 16, the broken-reply policy branch 0 was rolled back from; going back to step 10 needs a new branch, the kind that was failing. Rishi left the choice to Claude, which picked a fresh model. Its final dashboard is frozen at [step-12-prod-v1-dashboard.html](step-12-prod-v1-dashboard.html).
+
+```bash
+RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b .venv-linux/bin/python scripts/train.py start --kind production --run prod-v2 --lr 1e-5 --task-shift v4 --baseline-from prod-v1 --no-start-eval --selection-at-spend 0.5 --selection-at-end --delegation-bonus-until 25 --ceiling-train 95.63 --ceiling-eval 12.27 --live
+```
+
+| Setting | Value | Why |
+|---|---|---|
+| Model | prod-v2, a new model from the base | no copied-in step 0, like the models W&B still serves |
+| Set-up | the v4 task shift from step 1 (7c), learning rate 1e-5 from the start, masking and redraws on | prod-v1's lessons: 2e-5 failed the probs_corr gate, broken replies need masking |
+| Checkpoint 0 | prod-v1's capability check reused (`--baseline-from`, same base model and prompt set, $0); no selection eval at 0 (`--no-start-eval`) | saves ~$6 of the eval budget |
+| Selection set | once when the step spend passes 50% of its ceiling, once on the last checkpoint when the step ceiling stops the run (`RunConfig.selection_at_spend`, `selection_at_end`) | Rishi: two rounds fit the eval budget; the capability check still runs every 10 steps (~$0.09) as the early alarm for frying |
+| Ceilings | steps $95.63, evals $12.27 | what prod-v1's ceilings had left ($97.19 and $10.77, less the $0.06 pilot overrun), with $1.50 moved to evals so both selection rounds fit (Rishi: yes) |
+| Delegation bonus | fades to 0 by step 25 (was 50) | ~25-30 steps fit the budget, so the last steps train on right answers alone (Rishi: yes) |
+
+With only two selection points the overfitting and plateau rules can't act mid-run; the per-step signals (pass rate, the collapse rule, broken replies, infra) and the capability check still do. The dashboard keeps its link and runs with `--pot-left 118.91` (177.68 less prod-v1's $58.71 and the $0.06 overrun). The W&B outage note for W&B support is in the thread.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |

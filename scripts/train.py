@@ -4,6 +4,9 @@ Run inside WSL2 (Ubuntu) from the repo root, with Docker Desktop running:
 
     .venv-linux/bin/python scripts/train.py start --kind second_seed --run second-seed-v1 --live
     .venv-linux/bin/python scripts/train.py start --kind production --run prod-v1 --lr 2e-5 --live
+    .venv-linux/bin/python scripts/train.py start --kind production --run prod-v2 --lr 1e-5 --task-shift v4 \
+        --baseline-from prod-v1 --no-start-eval --selection-at-spend 0.5 --selection-at-end \
+        --delegation-bonus-until 25 --ceiling-train 95.63 --ceiling-eval 12.27 --live   # prod-v2, 2026-10-19
     .venv-linux/bin/python scripts/train.py stop prod-v1 --reason "checking a transcript"
     .venv-linux/bin/python scripts/train.py resume prod-v1 --live                 # from the latest checkpoint
     .venv-linux/bin/python scripts/train.py resume prod-v1 --from best --live     # or --from 40, any kept checkpoint
@@ -34,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rlm_rl import config, sandbox, training  # noqa: E402
+from rlm_rl import config, sandbox, tasks, training  # noqa: E402
 
 DRY_RESULTS = ROOT / "results" / "dry"
 
@@ -102,7 +105,8 @@ def parse_mix(text: str | None) -> dict | None:
 
 async def go(run: training.TrainingRun, args, cfg) -> dict:
     if args.command == "start":
-        return await run.start()
+        baseline = training.baseline_evals(results_dir(args), args.baseline_from, cfg) if args.baseline_from else None
+        return await run.start(baseline=baseline, baseline_from=args.baseline_from)
     ceilings = {k: v for k, v in (("train", args.ceiling_train), ("eval", args.ceiling_eval)) if v is not None}
     return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, format_penalty=args.format_penalty,
                             mask_broken=args.mask_broken, resample_broken=args.resample_broken,
@@ -118,6 +122,12 @@ def build_config(args) -> config.RunConfig:
         if args.lr is None:
             raise SystemExit("production needs --lr: 2e-5 if the second seed's checks passed, else 1e-5 (spec §5.2)")
         cfg = config.production(args.run, args.lr, tasks_from="tickets" if args.ticket_tasks else "7a")
+    if args.task_shift:  # prod-v2 (2026-10-19): a fresh model on the families prod-v1 shifted to at checkpoint 20
+        cfg = config.RunConfig.from_dict({**cfg.as_dict(), **config.TASK_SHIFTS[args.task_shift]})
+        if cfg.kind == "production":
+            tasks.check_mix(cfg.mix)
+    if args.no_start_eval:
+        cfg.eval_at_start = False
     if args.max_steps is not None:
         cfg.max_steps = args.max_steps
     if args.ceiling_train is not None:
@@ -126,6 +136,15 @@ def build_config(args) -> config.RunConfig:
         cfg.ceilings["eval"] = args.ceiling_eval
     if args.capability_set:
         cfg.capability_set = args.capability_set
+    change = {}
+    if args.selection_at_spend:
+        change["selection_at_spend"] = [float(s) for s in args.selection_at_spend.split(",") if s.strip()]
+    if args.selection_at_end:
+        change["selection_at_end"] = True
+    if args.delegation_bonus_until is not None:
+        change["delegation_bonus_until"] = args.delegation_bonus_until
+    if change:
+        cfg = config.RunConfig.from_dict({**cfg.as_dict(), **change})  # validates them
     return cfg
 
 
@@ -180,6 +199,21 @@ def main() -> int:
                                                     "data:<path> relative to the data root")
             p.add_argument("--ticket-tasks", action="store_true",
                            help="production: step 6's ticket stand-in instead of the production families (dry runs)")
+            p.add_argument("--task-shift", choices=sorted(config.TASK_SHIFTS),
+                           help="start on a named set of families, prompt and group shape (config.TASK_SHIFTS)")
+            p.add_argument("--baseline-from", metavar="RUN",
+                           help="reuse another run's checkpoint 0 evals (same base model and eval sets) instead of "
+                                "paying for them again")
+            p.add_argument("--no-start-eval", action="store_true",
+                           help="don't evaluate checkpoint 0 (what --baseline-from doesn't cover waits for checkpoint "
+                                "eval_every)")
+            p.add_argument("--selection-at-spend", metavar="SHARES",
+                           help="run the selection set as the train spend passes these shares of its ceiling, e.g. "
+                                "0.5, instead of every eval_every steps (which then times only the capability check)")
+            p.add_argument("--selection-at-end", action="store_true",
+                           help="run the selection set on the last checkpoint when the train ceiling stops the run")
+            p.add_argument("--delegation-bonus-until", type=int,
+                           help="the step the delegation bonus has faded to 0 by")
         else:
             p.add_argument("--from", dest="from_checkpoint", help="latest (default), best, or a kept checkpoint")
             p.add_argument("--retrain-pending", action="store_true", help="train a step's saved batch again")

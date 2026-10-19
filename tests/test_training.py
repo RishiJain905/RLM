@@ -559,6 +559,82 @@ class ReseedTest(LoopCase):
         self.assertEqual(self.dry.backend.trained[-1]["model"], st["branches"][2]["model"])
 
 
+class FreshStartTest(LoopCase):
+    async def test_a_fresh_run_reuses_checkpoint_0_evals_from_another_run(self):
+        """prod-v2 (2026-10-19): a fresh model on the shifted families, with prod-v1's checkpoint 0 capability check
+        reused, so checkpoint 0 costs nothing."""
+        cfg = second_seed("fs", 2)
+        cfg.eval_at_start = False
+        base = [{"checkpoint": 0, "name": "capability", "summary": {"items": 100, "accuracy": 0.76}, "ran": 100,
+                 "branch": 0, "model": "src:step0", "at": 1.0, "cost_usd": 0.09}]
+        st = await self.run_("fs", cfg=cfg, stop_after=1).start(baseline=base, baseline_from="src")
+        at0 = [(e["name"], e["copied_from"], e["cost_usd"], e["copied_cost_usd"]) for e in st["evals"] if e["checkpoint"] == 0]
+        self.assertEqual(at0, [("capability", "src", 0.0, 0.09)])
+        self.assertEqual(st["spend"]["eval_usd"], 0)
+        self.assertEqual(st["steps"][-1]["step"], 1)
+        self.assertTrue(any(n["kind"] == "eval" and "reused from src" in n["text"] for n in st["notices"]))
+        with self.assertRaises(ValueError):
+            await self.run_("fs2", cfg=second_seed("fs2", 2)).start(baseline=[{**base[0], "checkpoint": 5}],
+                                                                     baseline_from="src")
+
+
+class SelectionBySpendTest(LoopCase):
+    def test_the_selection_set_runs_at_its_spend_shares_and_at_the_end(self):
+        """prod-v2 (Rishi, 2026-10-19): the selection set at half the step budget and on the last checkpoint, the
+        capability check every 10 steps."""
+        cfg = config.RunConfig.from_dict({**second_seed("ss", 30).as_dict(), "selection": "sel", "eval_every": 10,
+                                          "eval_at_start": False, "final_eval": None,
+                                          "ceilings": {"train": 100.0, "eval": 12.0},
+                                          "selection_at_spend": [0.5], "selection_at_end": True})
+        run = training.TrainingRun.__new__(training.TrainingRun)
+        run.cfg, run.capability_items = cfg, ["a prompt"]
+        run.state = {"spend": {"train_usd": 20.0}, "evals": [{"checkpoint": 0, "name": "capability", "summary": {}}]}
+        due = run._due_evals
+        self.assertEqual((due(0), due(5), due(10)), ([], [], ["capability"]))  # selection waits for half the budget
+        run.state["spend"]["train_usd"] = 50.0
+        self.assertEqual(due(13), ["sel", "capability"])
+        run.state["evals"] += [{"checkpoint": 13, "name": n, "summary": {}} for n in ("sel", "capability")]
+        self.assertEqual((due(13), due(14), due(20)), ([], [], ["capability"]))
+        self.assertEqual(due(27, end=True), ["sel", "capability"])
+        with self.assertRaises(ValueError):
+            config.RunConfig.from_dict({**cfg.as_dict(), "selection_at_spend": [1.5]})
+
+    async def test_the_train_ceiling_runs_the_end_eval_before_stopping(self):
+        cfg = config.production("se", config.LR_FLOOR, tasks_from="tickets")
+        cfg = config.RunConfig.from_dict({**cfg.as_dict(), "eval_at_start": False, "selection_at_spend": [0.5],
+                                          "selection_at_end": True, "ceilings": {"train": 0.5, "eval": 10.0}})
+        st = await self.run_("se", cfg=cfg).start()  # step 1's first estimate ($1) is over the $0.50 ceiling
+        self.assertEqual((st["status"], st["stop"]["rule"]), ("stopped", "budget"))
+        self.assertEqual(sorted(e["name"] for e in st["evals"] if e["checkpoint"] == 0),
+                         ["capability", cfg.selection])
+        self.assertEqual(st["best"]["checkpoint"], 0)
+
+
+class BaselineEvalsTest(unittest.TestCase):
+    def test_checkpoint_0_evals_carry_over_only_for_the_same_base_model_and_eval_sets(self):
+        import tempfile
+        from types import SimpleNamespace
+
+        def ev(c, name):
+            return {"checkpoint": c, "name": name, "summary": {"accuracy": 0.5}, "cost_usd": 1.0}
+
+        src = {"config": {"base_model": "B", "project": "P", "capability_set": "cap.jsonl", "selection": "sel-v3"},
+               "task_shifts": [{"name": "v4", "after": {"selection": "sel-v4"}}],
+               "evals": [ev(0, "capability"), ev(0, "sel-v3"), ev(10, "capability"), ev(20, "sel-v4")]}
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "src.json").write_text(json.dumps(src), encoding="utf-8")
+            cfg = SimpleNamespace(base_model="B", project="P", capability_set="cap.jsonl", selection="sel-v4")
+            got = training.baseline_evals(Path(tmp), "src", cfg)
+            self.assertEqual([(e["checkpoint"], e["name"]) for e in got], [(0, "capability")])  # sel-v3 isn't sel-v4
+            cfg.selection = "sel-v3"
+            self.assertEqual(len(training.baseline_evals(Path(tmp), "src", cfg)), 2)
+            with self.assertRaises(ValueError):  # another base model's checkpoint 0
+                training.baseline_evals(Path(tmp), "src", SimpleNamespace(**{**vars(cfg), "base_model": "C"}))
+            with self.assertRaises(ValueError):  # nothing matches
+                training.baseline_evals(Path(tmp), "src", SimpleNamespace(base_model="B", project="P",
+                                                                          capability_set="other", selection="sel-v5"))
+
+
 class EvalRerunTest(unittest.TestCase):
     def test_an_eval_that_lost_many_episodes_to_infra_is_due_again_twice_at_most(self):
         from types import SimpleNamespace

@@ -662,7 +662,7 @@ footer p { margin: 0; max-width: 92ch; }
     tile((run.best ? "Best " : "Latest ") + selName, F.pct(run.best ? run.best.accuracy : latestE.summary.accuracy), null,
          (run.best ? "checkpoint " + run.best.checkpoint + " · " : "") + "latest " + F.pct(latestE.summary.accuracy) + " at checkpoint " + latestE.checkpoint + (base0 ? " · base model " + F.pct(base0.summary.accuracy) : ""),
          selPts.map(function (e) { return [e.checkpoint, e.summary.accuracy]; }), "var(--c1)");
-  } else tile(selName ? selName : "Evals", "–", null, selName ? "No eval yet. " + (cfg.eval_every ? "It runs every " + cfg.eval_every + " steps." : "It runs at step " + cfg.max_steps + ".") : "No eval configured.");
+  } else tile(selName ? selName : "Evals", "–", null, selName ? "No eval yet. " + (cfg.selection_at_spend && cfg.selection_at_spend.length ? "It runs once the step spend passes " + Math.round(cfg.selection_at_spend[0] * 100) + "% of its ceiling." : cfg.eval_every ? "It runs every " + cfg.eval_every + " steps." : "It runs at step " + cfg.max_steps + ".") : "No eval configured.");
   var sp = D.spend || {}, ceil = sp.ceilings || {};
   tile("Inference spent this run", F.usd(sp.total_usd), null, "steps " + F.usd(sp.train_usd) + " of " + F.usd(ceil.train) + " · evals " + F.usd(sp.eval_usd) + " of " + F.usd(ceil.eval));
   var rules = D.stop_rules || {}, rnames = Object.keys(rules), fired = rnames.filter(function (k) { return rules[k].state === "fired"; }), watch = rnames.filter(function (k) { return rules[k].state === "watch"; });
@@ -961,7 +961,11 @@ footer p { margin: 0; max-width: 92ch; }
   var evalNames = []; evals.forEach(function (e) { if (evalNames.indexOf(e.name) < 0) evalNames.push(e.name); });
   var sub = [];
   var selRuns = evals.filter(function (e) { return e.name === cfg.selection; }), selSize = selRuns.length ? get(selRuns[selRuns.length - 1], ["summary", "episodes"]) : null;
-  if (cfg.selection) sub.push("The selection set (" + cfg.selection + (isNum(selSize) ? ", " + F.int(selSize) + " fixed tasks" : "") + ") runs every " + cfg.eval_every + " steps, with the capability check, and picks the best checkpoint.");
+  var selLabel = "The selection set (" + cfg.selection + (isNum(selSize) ? ", " + F.int(selSize) + " fixed tasks" : "") + ")";
+  if (cfg.selection && cfg.selection_at_spend && cfg.selection_at_spend.length)
+    sub.push(selLabel + " runs once the step spend passes " + cfg.selection_at_spend.map(function (s) { return Math.round(s * 100) + "%"; }).join(" and ") + " of its ceiling" +
+             (cfg.selection_at_end ? ", and on the last checkpoint when the step budget runs out" : "") + ", and picks the best checkpoint. The capability check runs with it and every " + cfg.eval_every + " steps.");
+  else if (cfg.selection) sub.push(selLabel + " runs every " + cfg.eval_every + " steps, with the capability check, and picks the best checkpoint.");
   if (cfg.final_eval) sub.push("The final eval (" + cfg.final_eval + ") runs once at step " + cfg.max_steps + ".");
   sub.push("Checkpoint 0 is the base model. Bars show ±1 standard error.");
   $("evals-sub").textContent = sub.join(" ");
