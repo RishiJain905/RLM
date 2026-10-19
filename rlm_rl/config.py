@@ -106,6 +106,9 @@ class RunConfig:
     # 0. None is the run's own. prod-v2 (2026-10-19): W&B answered 500 to every call to prod-v2:step0 while
     # prod-v1:step0, the same base weights, answered at once.
     base_inference: str | None = None
+    # Edit episodes' observations carry a pacing line (bridge.pace_message), in rollouts and evals alike (prod-v2,
+    # Rishi 2026-10-19: every build-from-spec episode of step 1 hit the 30-turn cap before testing anything).
+    pace_nudge: bool = False
     selection: str | None = None  # eval set name (rlm_rl/evals.py)
     final_eval: str | None = None  # an eval run once, at max_steps
     capability_set: str | None = None  # path to the capability prompts (plan step 7 builds them)

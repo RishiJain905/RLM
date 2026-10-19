@@ -251,7 +251,8 @@ class TrainingRun:
                      retrain_pending: bool = False, discard_pending: bool = False,
                      ceilings: dict | None = None, format_penalty: float | None = None,
                      mask_broken: bool | None = None, resample_broken: int | None = None,
-                     mix: dict | None = None, task_shift: str | None = None, rebranch: bool = False) -> dict:
+                     mix: dict | None = None, task_shift: str | None = None, rebranch: bool = False,
+                     pace_nudge: bool | None = None) -> dict:
         """Continue the run: from the latest checkpoint, or from `from_checkpoint` ("best" or a kept checkpoint).
         `format_penalty` changes the reward taken off per broken reply in the rollouts from here on (0 turns it off);
         `mask_broken` whether broken replies take a gradient; `resample_broken` how many times a broken reply is drawn
@@ -296,6 +297,12 @@ class TrainingRun:
             self._shift_tasks(task_shift)
         if mix:
             self._set_mix(mix)
+        if pace_nudge is not None and pace_nudge != self.cfg.pace_nudge:
+            self.cfg.pace_nudge = pace_nudge
+            self.state["config"]["pace_nudge"] = pace_nudge
+            self._notice("format", "edit episodes' observations " + (
+                "carry a pacing line from here on: write the change from half the turns, test it at "
+                f"{bridge.PACE_TEST_AT} turns left" if pace_nudge else "no longer carry a pacing line"))
         if resample_broken is not None and resample_broken != self.cfg.resample_broken:
             self.cfg = RunConfig.from_dict({**self.cfg.as_dict(), "resample_broken": resample_broken})  # validates it
             self.state["config"]["resample_broken"] = resample_broken
@@ -538,6 +545,7 @@ class TrainingRun:
         groups = await run_groups(batch, cfg.rollouts, client=self.client, root_model=root_model, run_id=cfg.run,
                                   sandbox_factory=self.sandbox_factory, prompt_version=cfg.prompt_version,
                                   format_penalty=cfg.format_penalty, resample_broken=cfg.resample_broken,
+                                  **({"pace_nudge": True} if cfg.pace_nudge else {}),
                                   **self.sandbox_kwargs)
         t_rollouts = time.monotonic() - t0
         TranscriptLog(path).extend([episode_record(ep, split="train", run=cfg.run, step=n, sample=sample,
@@ -948,7 +956,7 @@ class TrainingRun:
                 result = await run_eval(tasks, name=name, step=c, run_dir=self.run_dir, run=self.run, client=self.client,
                                         root_model=model, samples=samples, art_model=self.backend.art_model(self._branch),
                                         sandbox_factory=self.sandbox_factory, prompt_version=self.cfg.prompt_version,
-                                        **self.sandbox_kwargs)
+                                        **({"pace_nudge": True} if self.cfg.pace_nudge else {}), **self.sandbox_kwargs)
                 entry = {"checkpoint": c, "name": name, "summary": result.summary, "ran": result.ran}
             entry.update(branch=self.state["branch"], model=model, at=time.time(), cost_usd=round(self._commit_spend("eval"), 6))
             earlier = [e for e in self.state["evals"] if e["checkpoint"] == c and e["name"] == name]

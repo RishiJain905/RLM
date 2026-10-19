@@ -232,7 +232,7 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                       sandbox_factory: Callable[..., Any] = Sandbox, prompt_version: str = bridge.PROMPT_VERSION,
                       edit_sandbox_factory: Callable[..., Any] | None = None, edit_sandbox_kwargs: dict | None = None,
                       grade: Callable[..., Any] | None = None, format_penalty: float = 0.0, resample_broken: int = 0,
-                      limits_override: dict | None = None, **sandbox_kwargs) -> Episode:
+                      limits_override: dict | None = None, pace_nudge: bool = False, **sandbox_kwargs) -> Episode:
     """Run one episode to a submit, the turn limit or an infra error. Never raises, except on cancellation.
 
     A finished episode is scored (spec §3 steps 1-3) and then checked by every hack detector. If
@@ -240,7 +240,8 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
     turns the detectors off, for tests only. `format_penalty` (training runs that turn it on) takes that much off the
     reward for each broken reply, before the detectors (reward.broken_replies). `resample_broken` draws a broken reply
     again, up to that many times a turn, before it enters the conversation: the model never sees it, so it can't
-    snowball, and nothing trains on it (the Turn keeps what was dropped).
+    snowball, and nothing trains on it (the Turn keeps what was dropped). `pace_nudge` adds an edit episode's pacing
+    line to its observations (bridge.pace_message).
 
     An edit task (spec §12) runs in the edit sandbox (`edit_sandbox_factory`, editbox.EditSandbox by
     default) under the edit limits. After the last turn the host takes the repository's diff, and a
@@ -292,6 +293,7 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                 sandbox_kwargs = {"max_subcalls": lim.max_subcalls, **subcall_kwargs, **sandbox_kwargs}
             box = sandbox_factory(task.context, complete, run_id=run_id, **sandbox_kwargs)
         async with box:
+            edited = False  # an edit episode has changed a file in its repository (pace_nudge)
             for index in range(lim.max_turns):
                 t0 = time.monotonic()
                 dropped: list = []
@@ -319,14 +321,16 @@ async def run_episode(task: Task, *, client: ModelClient, root_model: str, score
                             reasoning_tokens=int(extra.get("reasoning_tokens") or 0), reasoning=reasoning_text(choice),
                             resampled=dropped)
                 ep.turns.append(turn)
+                edited = edited or bool(result.repo_changed)
                 if result.submitted:
                     ep.submitted, ep.answer, ep.answer_valid = True, result.answer, result.answer_valid
                     break
                 turns_left = lim.max_turns - index - 1
                 if turns_left:
+                    pace = bridge.pace_message(turns_left, lim.max_turns, edited) if edit and pace_nudge else None
                     turn.observation = bridge.observation(result.stdout, result.stdout_chars, result.error, turns_left,
                                                           box.bridge.max_subcalls - box.bridge.subcalls_used,
-                                                          max_chars=lim.output_max_chars)
+                                                          max_chars=lim.output_max_chars, pace=pace)
                     ep.messages.append({"role": "user", "content": turn.observation})
             if edit:
                 ep.diff = await box.diff()

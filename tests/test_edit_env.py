@@ -165,6 +165,35 @@ class EditEpisodeTest(EditEnvCase):
         self.assertNotIn("edit", read_only)  # absent, not null, when a step drew no edit task
 
 
+@linux_only
+class PaceNudgeTest(EditEnvCase):
+    """prod-v2 (2026-10-19): every build-from-spec episode of step 1 read for 18-28 turns before its first edit."""
+
+    async def test_an_episode_that_never_edits_is_told_to_write_from_half_its_turns(self):
+        ep = await self.episode(LOOK, pace_nudge=True, limits_override={"max_turns": 12})
+        seen = [(i, bridge.OBS_PACE_EDIT in (t.observation or "")) for i, t in enumerate(ep.turns, 1) if t.observation]
+        self.assertEqual([i for i, nudged in seen if nudged], [6, 7, 8, 9, 10])  # 6 turns left and fewer, not the last
+        self.assertNotIn(bridge.OBS_PACE_EDIT, ep.turns[-2].observation)  # the last turn's message stays as it was
+        self.assertIn(bridge.OBS_LAST_TURN, ep.turns[-2].observation)
+
+    async def test_an_episode_that_edited_is_told_to_test_near_the_end_and_no_nudge_without_the_switch(self):
+        gold = writes(self.task.grading["gold_files"])
+        ep = await self.episode(gold, LOOK, pace_nudge=True, limits_override={"max_turns": 12})
+        nudges = {i: t.observation for i, t in enumerate(ep.turns, 1)
+                  if t.observation and (bridge.OBS_PACE_EDIT in t.observation or "run the tests, fix" in t.observation)}
+        self.assertEqual(list(nudges), [7])  # 5 turns left
+        self.assertIn(bridge.OBS_PACE_TEST.format(turns_left=5), nudges[7])
+        ep = await self.episode(LOOK, limits_override={"max_turns": 12})
+        self.assertFalse(any(bridge.OBS_PACE_EDIT in (t.observation or "") for t in ep.turns))
+
+    def test_pace_message(self):
+        self.assertIsNone(bridge.pace_message(16, 30, edited=False))
+        self.assertEqual(bridge.pace_message(15, 30, edited=False), bridge.OBS_PACE_EDIT)
+        self.assertIsNone(bridge.pace_message(15, 30, edited=True))
+        self.assertIn("5 turns left", bridge.pace_message(5, 30, edited=True))
+        self.assertIsNone(bridge.pace_message(4, 30, edited=True))
+
+
 class RetirementTest(unittest.TestCase):
     def group(self, task_id, rewards, family="edit_real"):
         return [Episode(task_id, family, 1, "q", None, "m", "s", reward=r) for r in rewards]

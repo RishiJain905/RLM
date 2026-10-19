@@ -340,9 +340,29 @@ def no_code_error(version: str = PROMPT_VERSION) -> str:
     return NO_CODE_BLOCK_ERROR_V3 if version in ("v3", "v4") else NO_CODE_BLOCK_ERROR
 
 
+# Pacing for edit episodes (RunConfig.pace_nudge; prod-v2, Rishi 2026-10-19). Base Qwen read a 1,800-line file in
+# 30-130 line slices and made its first edit at turn 18-28 or never, so all 12 build-from-spec episodes of prod-v2's
+# step 1 hit the 30-turn cap with nothing tested; "N turns left" alone didn't change that.
+OBS_PACE_EDIT = ("Half your turns are gone and no file has changed yet. Write your implementation now with edit_file or "
+                 "write_file (you can read more afterwards), then run the tests.")
+OBS_PACE_TEST = "{turns_left} turns left: run the tests, fix what fails, and call submit()."
+PACE_TEST_AT = 5
+
+
+def pace_message(turns_left: int, max_turns: int, edited: bool) -> str | None:
+    """The pacing line an edit episode's observation gets: from half its turns while no file has changed, and once at
+    PACE_TEST_AT turns left after a change."""
+    if not edited and turns_left <= max_turns // 2:
+        return OBS_PACE_EDIT
+    if edited and turns_left == PACE_TEST_AT:
+        return OBS_PACE_TEST.format(turns_left=turns_left)
+    return None
+
+
 def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: int, subcalls_left: int,
-                max_chars: int = OUTPUT_MAX_CHARS) -> str:
-    """The user message after a turn. `stdout_chars` is how much the cell printed before truncation."""
+                max_chars: int = OUTPUT_MAX_CHARS, pace: str | None = None) -> str:
+    """The user message after a turn. `stdout_chars` is how much the cell printed before truncation; `pace` is an edit
+    episode's pacing line (pace_message)."""
     out = stdout[:max_chars]
     if stdout_chars > len(out):
         out += OBS_TRUNCATED.format(n=stdout_chars - len(out))
@@ -350,6 +370,8 @@ def observation(stdout: str, stdout_chars: int, error: str | None, turns_left: i
     if error:
         parts.append(OBS_ERROR.format(error=error))
     parts.append(OBS_COUNTERS.format(turns_left=turns_left, subcalls_left=subcalls_left))
+    if pace and turns_left > 1:
+        parts.append(pace)
     if turns_left == 1:
         parts.append(OBS_LAST_TURN)
     return "\n".join(parts)

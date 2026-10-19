@@ -111,6 +111,7 @@ async def go(run: training.TrainingRun, args, cfg) -> dict:
     return await run.resume(from_checkpoint=args.from_checkpoint, lr=args.lr, format_penalty=args.format_penalty,
                             mask_broken=args.mask_broken, resample_broken=args.resample_broken,
                             mix=parse_mix(args.mix), task_shift=args.task_shift, rebranch=args.rebranch,
+                            pace_nudge=args.pace_nudge,
                             retrain_pending=args.retrain_pending,
                             discard_pending=args.discard_pending, ceilings=ceilings or None)
 
@@ -229,6 +230,9 @@ def main() -> int:
                            help="broken replies take no gradient from here on (production's default)")
             p.add_argument("--mix", help="new shares for some families, e.g. edit_real=0.35,edit_synth=0.05 "
                                          "(the shares must still add up to 1)")
+            p.add_argument("--pace-nudge", action=argparse.BooleanOptionalAction, default=None,
+                           help="edit episodes' observations carry a pacing line (write the change from half the "
+                                "turns, test it near the end)")
             p.add_argument("--rebranch", action="store_true",
                            help="continue from the checkpoint on a new branch model even if it is the latest "
                                 "(when the backend can't serve the current branch's model)")
