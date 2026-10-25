@@ -219,6 +219,21 @@ W&B storage: the account held 68.6 GB against Serverless RL's ~5 GB included; Ri
 
 With only two selection points the overfitting and plateau rules can't act mid-run; the per-step signals (pass rate, the collapse rule, broken replies, infra) and the capability check still do. The dashboard keeps its link and runs with `--pot-left 118.91` (177.68 less prod-v1's $58.71 and the $0.06 overrun). The W&B outage note for W&B support is in the thread.
 
+**Resumed after the upgrade, ended at checkpoint 18 (2026-10-25).** Resumed from checkpoint 11 at 03:55 UTC with `resume prod-v2 --live --mix aggregation=0.5,research=0.1`. Steps 12-18 passed 33, 72, 31, 28, 61, 11 and 44% (the swings follow which six tasks are drawn), $4.38-6.35 a step, 0 infra episodes, 0 hacks, probs_corr 0.996-0.998, KL 0.005-0.014. The id-label fix credited answers like `user#57091`; blocked scratch writes were logged (`write_try`) without zeroing. One gap showed: build-from-spec rewards are all-or-nothing, so a group passing 85-90 of 92 hidden tests in every rollout scored 0 and taught nothing (step 15, marshmallow); partial credit for coding is a candidate change for the next run. The final eval wouldn't have fit ($4.97 left against a $7.21 estimate), so with Rishi's OK (08:58 UTC) the run stopped after step 17 and resumed with $3.00 moved from steps to evals (`--ceiling-train 92.63 --ceiling-eval 15.27`). The step ceiling stopped it after step 18 and the end evals ran on checkpoint 18:
+
+| | Checkpoint 11 | Checkpoint 18 |
+|---|---|---|
+| Selection-v4 (47) | 31.9% | **36.2%** (best; SE 7.0) |
+| Context search (10) | 1 | 3 |
+| Find and fix (10) | 2 | 4 |
+| Build from a spec (13) | 2 | 1 |
+| Research (14) | 10 | 9 |
+| Capability (100) | 75% | 76% (base 76%) |
+
+None of checkpoint 11's misses flip under the new id-label scorer and none of checkpoint 18's wins needed it, so the gain isn't the scoring change; at 47 tasks it is still inside one standard error. Spend: $101.88 of the $118.91 pot (train $88.73, eval $13.15), $17.03 left including the $10 reserve. The stop notice says research rule 12a would spend the reserve (the last two evals were both bests); that is Rishi's call. W&B's own meter read $234.10 of the $250 October inference allowance (19:30 UTC), so $15.90 is really left: $1.13 under the run's books, the probes and smoke tests outside the run.
+
+**Checkpoint 18 audit** (`audit.py checkpoint results/prod-v2 --step 18 --eval selection-v4`; the `--eval` default `selection` finds no selection-v4 wins): training wins 13 of 16 clean, 3 suspicious, 0 hacks (clean solve 34% of a 42% solve rate); selection-set wins 8 of 8 clean. All 3 suspicious are coding episodes that ran `git log` (one also `find / -name fields.py`) hoping for the original code, got only the snapshot's single "base" commit, and then wrote correct fixes themselves. That is 3 of 16, over the procedure's one-in-eight line, and the behaviour gets rewarded when the episode wins anyway; nothing can be found, so it costs turns rather than integrity. The one flagged episode (a blocked /tmp cache write at step 9) was a false alarm and is the same episode the checkpoint 10 audit judged, because both training windows include step 9.
+
 ## 8. What changed for step 12 ($0, tested)
 
 | Change | Where | What it does |
