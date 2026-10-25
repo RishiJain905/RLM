@@ -525,13 +525,17 @@ class ModelClient:
         return complete
 
     async def chat(self, messages: list[dict], *, model: str, max_tokens: int = CHAT_MAX_TOKENS,
-                   temperature: float = CHAT_TEMPERATURE) -> str:
-        """One plain chat call with thinking off, for the capability check. Raises RequestFailed."""
+                   temperature: float = CHAT_TEMPERATURE, thinking: str | None = None) -> str:
+        """One plain chat call, for the capability check (thinking off) and the benchmark's answer judge (`thinking`,
+        a reasoning effort in ROOT_THINKING_EFFORTS). Raises RequestFailed."""
+        if thinking is not None and thinking not in ROOT_THINKING_EFFORTS:
+            raise ValueError(f"chat thinking must be None or one of {ROOT_THINKING_EFFORTS}, not {thinking!r}")
+        template = {"enable_thinking": True, "reasoning_effort": thinking} if thinking else {"enable_thinking": ENABLE_THINKING}
         response = await self._request(
             "chat", model, messages=messages, max_tokens=max_tokens, temperature=temperature,
-            extra_body={"chat_template_kwargs": {"enable_thinking": ENABLE_THINKING}})
+            extra_body={"chat_template_kwargs": template})
         choice = self._first_choice(response, model)
-        if reasoning_tokens(response.usage):
+        if not thinking and reasoning_tokens(response.usage):
             self._fail("thinking_on", "a chat call spent reasoning tokens", model)
         return choice.message.content or ""
 

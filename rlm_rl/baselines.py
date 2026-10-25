@@ -66,13 +66,17 @@ DEFAULT_RESERVE_USD = {("rlm", "read"): 0.08, ("rlm", "edit"): 0.40, ("direct", 
                        ("prod_v3", "read"): 0.10, ("prod_v3", "edit"): 0.20,  # from rlm_medium's measured costs
                        # prompt v4 (step-12 task shift): sub-calls read 60K characters, so a read episode can cost more
                        ("pilot_on", "read"): 0.30, ("pilot_on", "edit"): 0.40, ("pilot_off", "read"): 0.10,
-                       ("pilot_off", "edit"): 0.25, ("pilot_on_c0", "read"): 0.30, ("pilot_on_c0", "edit"): 0.40}
+                       ("pilot_off", "edit"): 0.25, ("pilot_on_c0", "read"): 0.30, ("pilot_on_c0", "edit"): 0.40,
+                       # AA-LCR's ~100K-token document sets: prod-v2's context-search evals cost up to $0.41
+                       ("bench_ckpt", "read"): 0.35, ("bench_base", "read"): 0.35}
 # What the projection before a run assumes for an episode not yet measured: the plan's estimates.
 DEFAULT_PROJECT_USD = {("rlm", "read"): 0.04, ("rlm", "edit"): 0.11, ("direct", "read"): 0.03,
                        ("rlm_medium", "read"): 0.065, ("rlm_medium", "edit"): 0.18,
                        ("prod_v3", "read"): 0.04, ("prod_v3", "edit"): 0.06,  # step 11: medium $0.036 / $0.042
                        ("pilot_on", "read"): 0.10, ("pilot_on", "edit"): 0.12, ("pilot_off", "read"): 0.04,
-                       ("pilot_off", "edit"): 0.08, ("pilot_on_c0", "read"): 0.10, ("pilot_on_c0", "edit"): 0.12}
+                       ("pilot_off", "edit"): 0.08, ("pilot_on_c0", "read"): 0.10, ("pilot_on_c0", "edit"): 0.12,
+                       # prod-v2 checkpoint 18's selection eval: $0.17 a context-search episode *(mine: AA-LCR alike)*
+                       ("bench_ckpt", "read"): 0.17, ("bench_base", "read"): 0.17}
 
 SPEND_EVERY_S = 5.0
 TOOL_CALL_MARK = "<tool_call>"  # Qwen3.8's native tool-call tag, which the REPL can't run (step 11 results)
@@ -104,6 +108,10 @@ ARMS = {
     "pilot_off": Arm("pilot_off", "rlm", "medium", 2, prompt_version="v4", checkpoint="ckpt20", read_samples=2,
                      limits_override=(("max_subcalls", 0),)),
     "pilot_on_c0": Arm("pilot_on_c0", "rlm", "medium", 1, prompt_version="v4", checkpoint="base", read_samples=1),
+    # The post-training benchmark (scripts/benchmark.py): production's set-up (prompt v4, root thinking medium,
+    # sub-calls to the base model) with a trained checkpoint as the root, and the base model in the same set-up
+    "bench_ckpt": Arm("bench_ckpt", "rlm", "medium", 1, prompt_version="v4", checkpoint="ckpt"),
+    "bench_base": Arm("bench_base", "rlm", "medium", 1, prompt_version="v4", checkpoint="base"),
 }
 
 

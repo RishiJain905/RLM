@@ -69,6 +69,14 @@ SOURCES = {
         "licence": "CC-BY-4.0", "permissive": True, "role": EVAL,  # permissive, but held out by design (H7)
         "files": ["hf/heegyu__news-category-dataset/data.json"],
     },
+    "aa-lcr": {
+        "what": "AA-LCR v1.1: 100 long-context reasoning questions over ~100K-token document sets (benchmark)",
+        "origin": "hf:ArtificialAnalysis/AA-LCR", "revision": "9a77ef56b717057ade24ceab4d273712a0b4f19e",
+        "licence": "Apache-2.0 (questions); documents are public texts with no licence claimed", "permissive": False,
+        "role": EVAL,
+        "files": ["hf/ArtificialAnalysis__AA-LCR/AA-LCR_Dataset.csv", "hf/ArtificialAnalysis__AA-LCR/README.md",
+                  "hf/ArtificialAnalysis__AA-LCR/extracted_text/AA-LCR_extracted-text.zip"],
+    },
     "oolong-synth": {
         "what": "OOLONG-synth test split: 5,200 aggregation questions over 8 source sets, 1K-4M tokens",
         "origin": "hf:oolongbench/oolong-synth", "revision": "f0d59eaf0febf130664cfceb710436c8e3216b2b",

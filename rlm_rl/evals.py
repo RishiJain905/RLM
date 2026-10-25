@@ -157,6 +157,10 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         v1, _ = eval_set("heldout-test-v1")
         synth = _synth_set(f"{name}-edit_synth_heldout", "edit_synth_heldout", HELDOUT_V2_SYNTH)
         return v1 + synth + editreal.eval_tasks("test", "edit_real_test"), 1
+    if name == "aa-lcr-v1":  # post-training benchmark (plan step 13): AA-LCR v1.1's 100 questions, in a fixed order
+        from .tasks import aalcr
+
+        return list(aalcr.load()), 1
     raise KeyError(f"no eval set named {name!r}")
 
 
