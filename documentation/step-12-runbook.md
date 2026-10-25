@@ -208,6 +208,15 @@ RLM_SANDBOX_DIR=/tmp/rlm-sandbox-1000b .venv-linux/bin/python scripts/train.py s
 
 W&B storage: the account held 68.6 GB against Serverless RL's ~5 GB included; Rishi deleted prod-v1-b1, -b2 and -b3 with `scripts/wandb_storage.py` (it refuses prod-v1, which prod-v2 serves its base from). It didn't change the 500s.
 
+**Resumed 2026-10-24 20:00 UTC, paused again at checkpoint 11 for an upgrade (2026-10-25).** W&B served prod-v2:step1 again from 19:16 UTC. The warm start was skipped: with the teacher hint and the pacing nudge base Qwen solved 8 of 12 build-from-spec episodes, but delegated in none of 24 coding episodes, so there was nothing to imitate ($3.55 of sampling, counted in the step spend). Steps 2-11 ran with the nudge: pass 53-72%, build from a spec 0 of 12 at step 1 and 33% over steps 2-10, research and find-and-fix climbing to levels 5 and 4, context search stuck at level 1 at about 39%, probs_corr 0.996-0.998, KL rising to 0.009. Checkpoint 10: capability 78% (base 76%), audit 15 of 16 wins clean, 1 suspicious (looked for the reference solution through git history and a sub-call's memory), 0 hacks; all 4 flagged episodes were blocked scratch writes to /tmp. Checkpoint 11's selection eval: **31.9% of 47** (research 10/14, find and fix 2/10, build from a spec 2/13, context search 1/10), level with prod-v1's checkpoint 20 (28.2%) and under the 35% bar agreed with Rishi, so the run stopped (stop switch) for the fixes he approved in advance:
+
+| Fix | Where | Why |
+|---|---|---|
+| Id answers may carry the log's label ("user 11952", "user#11952|user#62016") | `reward.strip_id_labels` | 12 of 166 context-search answers had the right set written that way and scored 0 |
+| A read episode's blocked write outside /scratch is `write`, logged only (`write_try`), and its error says where files can go | `repl_worker._check_write`, `detectors.write_try` | the 4 flagged episodes at checkpoint 10, and 6 zeroed episodes over the first 10 steps (1 of them right), were sub-call caches written to /tmp |
+| Build from a spec's training split is levelled by the size of the code to write (`gold_lines`, five equal bins) | `editspec.relevel_by_rank`, `Pool(relevel_train=)` | level 1 mixed tasks solved 11 of 12 with tasks never solved; up to 21 lines all but one were solved at least 4 of 6 times, from 26 lines all but one at most twice. The eval splits keep their levels |
+| Mix: research 20% → 10%, context search 40% → 50% | `resume --mix` | research sat at its top level at 100% (no signal); context search is the family the run is about and the weakest in the eval |
+
 With only two selection points the overfitting and plateau rules can't act mid-run; the per-step signals (pass rate, the collapse rule, broken replies, infra) and the capability check still do. The dashboard keeps its link and runs with `--pot-left 118.91` (177.68 less prod-v1's $58.71 and the $0.06 overrun). The W&B outage note for W&B support is in the thread.
 
 ## 8. What changed for step 12 ($0, tested)

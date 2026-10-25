@@ -363,7 +363,13 @@ def _check_read(event: str, path) -> None:
 def _check_write(event: str, path) -> None:
     p = _abspath(path)
     if p is not None and p not in WRITE_FILES and not _under(p, WRITE_PREFIXES):
-        _block("file", event, p)
+        if _edit["on"]:
+            _block("file", event, p)
+        # Read mode: a file written outside /scratch, almost always a cache of sub-call results in /tmp (prod-v2's
+        # checkpoint 10 audit: all 4 flagged episodes). The root is read-only, so it reaches nothing; it is logged as
+        # `write`, which no detector zeroes, and the error says where files can go.
+        _block("write", event, p, shown=f"{p}: only {SCRATCH_DIR} is writable; save files there, or keep results in "
+                                        "variables, which persist between turns")
 
 
 def _on_open(args) -> None:

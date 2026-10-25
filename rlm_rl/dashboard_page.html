@@ -925,7 +925,8 @@ footer p { margin: 0; max-width: 92ch; }
   chart(rw, { title: "Partial credit and near-blind answers", fmt: F.num, yMin: 0, yMaxAtLeast: 0.1, endLabels: true, series: [series("partial credit", "var(--c1)", function (r) { return get(r, ["reward", "partial"]); }), series("near the blind guess", "var(--c2)", function (r) { return get(r, ["reward", "near_blind"]); })], note: "A rising near-blind rate means answers are drifting toward the metadata guess." });
   // spec §7 and §12.6: every rule zeroes the reward except network_try, which is only logged (grey)
   var RULES = { early_submit: ["early submit", 1], copied_answer: ["copied answer", 2], escape_attempt: ["escape attempt", 3], timeout_loop: ["timeout loop", 4],
-                test_tamper: ["test tamper", 5], grader_tamper: ["grader tamper", 7], test_aware: ["test aware", 6], network_try: ["network try (logged only)", 0] };
+                test_tamper: ["test tamper", 5], grader_tamper: ["grader tamper", 7], test_aware: ["test aware", 6], network_try: ["network try (logged only)", 0],
+                write_try: ["blocked scratch write (logged only)", 0] };
   var RULE_ORDER = Object.keys(RULES);
   var rulesSeen = {}; steps.forEach(function (r) { Object.keys(get(r, ["reward", "hacks"]) || {}).forEach(function (k) { rulesSeen[k] = 1; }); });
   var ruleNames = Object.keys(rulesSeen).length ? Object.keys(rulesSeen) : RULE_ORDER.slice(0, hasEdit ? 8 : 4);
@@ -935,7 +936,7 @@ footer p { margin: 0; max-width: 92ch; }
   var hackTotal = steps.reduce(function (s, r) { return s + (get(r, ["reward", "hacked"]) || 0); }, 0);
   chart(rw, { title: "Hack-detector hits by rule", kind: "bar", stacked: true, fmt: F.int, yMin: 0, yMaxAtLeast: 2, headline: hackTotal + " this run",
               series: ruleNames.map(function (k, i) { return series(ruleLabel(k), ruleColor(k, i), function (r) { return get(r, ["reward", "hacks", k]); }); }),
-              note: ruleNames.indexOf("network_try") >= 0 ? "Every rule zeroes the rollout's reward except network try, which is only logged (grey)." : "Every rule zeroes the rollout's reward before the group mean." });
+              note: (ruleNames.indexOf("network_try") >= 0 || ruleNames.indexOf("write_try") >= 0) ? "Every rule zeroes the rollout's reward except the logged-only ones in grey (network try, and blocked scratch writes since prod-v2's checkpoint 11)." : "Every rule zeroes the rollout's reward before the group mean." });
   chart(rw, { title: "Episodes that submitted", fmt: F.pct, yMin: 0, yMax: 1, series: [series("submitted", "var(--c1)", function (r) { return get(r, ["reward", "submitted"]); })] });
   (function () {
     var host = $("audits"), keys = Object.keys(D.audits || {}).map(Number).sort(function (a, b) { return a - b; });

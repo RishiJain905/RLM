@@ -363,6 +363,7 @@ class PoolTest(unittest.TestCase):
             for name in ("make_task", "pool_size", "training_sources", "check_licences", "eval_tasks", "GENERATOR_VERSION"):
                 self.assertTrue(hasattr(mod, name), name)
 
+    @mock.patch.object(editspec.POOL, "relevel_train", None)  # the stored levels; ReleveledPoolTest covers the ranking
     def test_draws_are_deterministic_nearest_level_and_skip_retired(self):
         a = editspec.make_task(5, "edit_spec", 2)
         self.assertEqual(a.task_id, editspec.make_task(5, "edit_spec", 2).task_id)

@@ -187,6 +187,27 @@ def near_miss_credit(err: float, e_blind: float) -> float:
 _UNPARSED = {"parsed": 0.0, "exact": 0.0, "partial": 0.0}
 
 
+# Ids in a list answer ("11952", or pairs "11952|62016"): an item may carry the log's own label, "user 11952" or
+# "user#11952". prod-v2 steps 1-11: 12 of 166 context-search episodes had the right set written that way and scored 0,
+# the same as a wrong count, so the reward couldn't tell a format slip from a counting error.
+_ID_ITEM_RE = re.compile(r"^\d+(\|\d+)*$")
+_ID_LABEL_RE = re.compile(r"\b(?:user|id)\s*#?\s*(?=\d)|#(?=\d)", re.IGNORECASE)
+_PIPE_SPACE_RE = re.compile(r"\s*\|\s*")
+
+
+def strip_id_labels(answer: Any, gold: Any) -> Any:
+    """`answer` with "user"/"user#"/"id"/"#" labels removed before each id, when every gold item is an id or a
+    pair of ids; any other answer is returned as it is."""
+    golds = gold if isinstance(gold, list) else [gold]
+    if not golds or not all(_ID_ITEM_RE.match(str(g).strip()) for g in golds):
+        return answer
+
+    def clean(v: Any) -> Any:
+        return _PIPE_SPACE_RE.sub("|", _ID_LABEL_RE.sub("", v)) if isinstance(v, str) else v
+
+    return [clean(v) for v in answer] if isinstance(answer, list) else clean(answer)
+
+
 def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
     """Score one answer (spec §3 steps 1-3). `answer` is None when nothing valid was submitted."""
     check_grading(grading, gold)
@@ -222,7 +243,7 @@ def score_answer(answer: Any, gold: Any, grading: dict) -> Score:
         return Score(EXACT_REWARD if exact else 0.0, exact, {"parsed": 1.0, "exact": float(exact), "partial": 0.0})
 
     item = grading["item"]
-    predicted, target = normalize_set(answer, item), normalize_set(gold, item)
+    predicted, target = normalize_set(strip_id_labels(answer, gold), item), normalize_set(gold, item)
     if not predicted and target:
         return Score(0.0, False, dict(_UNPARSED))
     exact = predicted == target

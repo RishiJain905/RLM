@@ -60,13 +60,29 @@ def _load(path: str, mtime: float) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def relevel_by_rank(records: list[dict], key: str, levels: int = MAX_LEVEL) -> list[dict]:
+    """Copies of `records` whose levels are their rank by `key` (smallest first, then id) in `levels` equal bins.
+
+    prod-v2 (2026-10-25): level 1 of build from a spec (2-3 functions in one file) held tasks base Qwen solved 11 times in
+    12 and tasks it never solved. What told them apart was the size of the code to write: every task with gold_lines up
+    to 21 but one was solved at least 4 times in 6, every task from 26 lines up but one at most twice. So the training
+    split is levelled by gold_lines instead of the function count."""
+    ranked = sorted(records, key=lambda r: (r.get(key) or 0, r["id"]))
+    n = len(ranked)
+    return [{**r, "level": min(levels, 1 + i * levels // n), "stored_level": r.get("level")} for i, r in enumerate(ranked)]
+
+
 class Pool:
     """A fixed, validated task pool read from an index on the data drive, drawn like edit_real's (seed, nearest level,
     retired ids excluded). Records have edit_real's index format, so its workspace builder and the grader take them."""
 
-    def __init__(self, name: str, families: tuple, split: dict, index: str, version: str, prefix: str):
+    def __init__(self, name: str, families: tuple, split: dict, index: str, version: str, prefix: str,
+                 relevel_train: str | None = None):
         self.name, self.families, self.split, self.index_rel = name, families, split, index
         self.version, self.prefix = version, prefix
+        # A record field whose rank sets the training split's levels, in equal bins (relevel_by_rank); the eval
+        # splits keep their stored levels, so the selection set is unchanged.
+        self.relevel_train = relevel_train
 
     def index_path(self) -> Path:
         from .. import data
@@ -80,7 +96,10 @@ class Pool:
         return _load(str(path), path.stat().st_mtime)
 
     def records(self, split: str) -> list[dict]:
-        return [r for r in self.index()["tasks"] if r["split"] == split]
+        records = [r for r in self.index()["tasks"] if r["split"] == split]
+        if self.relevel_train and split == self.split[self.families[0]]:
+            records = relevel_by_rank(records, self.relevel_train)
+        return records
 
     def training_sources(self) -> tuple[str, ...]:
         """The data sources the training split reads (rlm_rl/data.py SOURCES), for the licence bar (7b)."""
@@ -141,7 +160,7 @@ class Pool:
                     workspace=Workspace(key, functools.partial(_build_workspace, record)))
 
 
-POOL = Pool("edit_spec", FAMILIES, SPLIT, INDEX, GENERATOR_VERSION, "spec")
+POOL = Pool("edit_spec", FAMILIES, SPLIT, INDEX, GENERATOR_VERSION, "spec", relevel_train="gold_lines")
 
 
 def index_path() -> Path:

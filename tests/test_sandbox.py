@@ -149,7 +149,7 @@ attempt("symlink to /proc", lambda: os.symlink("/proc/self/environ", "/scratch/l
     async def test_writes_only_in_scratch(self):
         writes = ["/x", "/tmp/x", "/etc/x", "/opt/rlm/x", "/episode/x", "/episode/context.txt", "/dev/shm/x",
                   "/var/tmp/x", "/home/x", "/usr/local/lib/python3.12/x.py", "/scratch/../tmp/x", "/dev/x"]
-        results, _ = await self.probe(f"import os\nWRITES = {writes!r}\n" + r'''
+        results, box = await self.probe(f"import os\nWRITES = {writes!r}\n" + r'''
 for p in WRITES:
     attempt("write " + p, lambda p=p: open(p, "w").write("x"))
 attempt("mkdir /tmp/d", lambda: os.mkdir("/tmp/d"))
@@ -157,6 +157,10 @@ attempt("remove context", lambda: os.remove("/episode/context.txt"))
 attempt("rename context", lambda: os.rename("/episode/context.txt", "/scratch/c.txt"))
 ''')
         self.assertAllBlocked(results)
+        # prod-v2: a blocked write is `write`, which no detector zeroes, and its error says where files can go
+        self.assertEqual({e["kind"] for e in box.events}, {"write"})
+        (shown,), _ = await self.cells("try:\n    open('/tmp/cache.json', 'w')\nexcept PermissionError as e:\n    print(e)")
+        self.assertIn("only /scratch is writable", shown.stdout)
         (result,), _ = await self.cells(
             "import os, tempfile\n"
             "open('/scratch/a.txt', 'w').write('kept')\n"

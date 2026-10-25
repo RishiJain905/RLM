@@ -110,6 +110,18 @@ class OtherTypesTest(unittest.TestCase):
         ints = {"type": "list", "item": "int", "blind": [1]}
         self.assertEqual(score_answer(["3", 2, "$1"], [1, 2, 3], ints).reward, 1.0)
 
+    def test_id_answers_may_carry_the_logs_user_label(self):
+        """prod-v2 steps 1-11: 12 of 166 context-search answers had the right ids written "user#11952" and scored 0."""
+        grading = {"type": "list", "item": "entity", "blind": ["1"]}
+        pairs = ["11952|62016", "11952|84209"]
+        self.assertEqual(score_answer(["user#11952|user#62016", "user 11952 | user 84209"], pairs, grading).reward, 1.0)
+        self.assertEqual(score_answer("user 32926, User #91089", ["32926", "91089"], grading).reward, 1.0)
+        self.assertEqual(score_answer(["id 7", "#8"], ["7", "8"], grading).reward, 1.0)
+        self.assertLess(score_answer(["user 32926"], ["32926", "91089"], grading).reward, 1.0)  # a missing id still costs
+        names = {"type": "list", "item": "entity", "blind": ["x"]}  # not ids: nothing is stripped
+        self.assertEqual(score_answer(["user alpha"], ["alpha"], names).reward, 0.0)
+        self.assertEqual(score_answer(["user 5"], ["user 5"], names).reward, 1.0)
+
     def test_grading_must_carry_a_blind_guess(self):
         for grading, gold in (({"type": "int"}, 3), ({"type": "list", "item": "entity"}, ["a"]),
                               ({"type": "list", "item": "thing", "blind": []}, ["a"]), ({"type": "count"}, 3),

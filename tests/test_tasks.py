@@ -90,3 +90,22 @@ class PoolFallbackTest(unittest.TestCase):
         self.assertEqual(len(bug_draws[-1] - {"old"}), 2)  # and so do this step's earlier draws
         with mock.patch.object(rtasks, "make_task", fake), self.assertRaises(rtasks.PoolEmpty):
             rtasks.draw(1, {"edit_spec": 1.0}, {"edit_spec": 2})  # no partner in the run
+
+
+class ReleveledPoolTest(unittest.TestCase):
+    def test_the_build_from_spec_training_split_is_levelled_by_code_size(self):
+        """prod-v2 (2026-10-25): code size, not the function count, told solvable level-1 tasks from unsolvable ones."""
+        from rlm_rl.tasks import editspec
+
+        records = [{"id": f"t{i:02d}", "level": 1 + i % 5, "gold_lines": g} for i, g in
+                   enumerate([40, 9, 120, 30, 30, 55, 12, 80, 200, 61])]
+        out = editspec.relevel_by_rank(records, "gold_lines")
+        by_id = {r["id"]: r for r in out}
+        self.assertEqual([r["gold_lines"] for r in sorted(out, key=lambda r: (r["level"], r["gold_lines"]))],
+                         sorted(r["gold_lines"] for r in records))
+        self.assertEqual([by_id["t01"]["level"], by_id["t06"]["level"], by_id["t08"]["level"]], [1, 1, 5])
+        self.assertEqual(sorted(r["level"] for r in out), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5])  # equal bins
+        self.assertEqual((by_id["t03"]["level"], by_id["t04"]["level"]), (2, 2))  # a tie stays in id order
+        self.assertEqual(by_id["t01"]["stored_level"], 2)
+        self.assertEqual(records[1]["level"], 2)  # the stored records are not changed
+        self.assertEqual(editspec.POOL.relevel_train, "gold_lines")
