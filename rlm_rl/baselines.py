@@ -68,7 +68,8 @@ DEFAULT_RESERVE_USD = {("rlm", "read"): 0.08, ("rlm", "edit"): 0.40, ("direct", 
                        ("pilot_on", "read"): 0.30, ("pilot_on", "edit"): 0.40, ("pilot_off", "read"): 0.10,
                        ("pilot_off", "edit"): 0.25, ("pilot_on_c0", "read"): 0.30, ("pilot_on_c0", "edit"): 0.40,
                        # AA-LCR's ~100K-token document sets: prod-v2's context-search evals cost up to $0.41
-                       ("bench_ckpt", "read"): 0.35, ("bench_base", "read"): 0.35}
+                       ("bench_ckpt", "read"): 0.35, ("bench_base", "read"): 0.35,
+                       ("bench_ckpt_xhigh", "read"): 0.35, ("bench_base_xhigh", "read"): 0.35}
 # What the projection before a run assumes for an episode not yet measured: the plan's estimates.
 DEFAULT_PROJECT_USD = {("rlm", "read"): 0.04, ("rlm", "edit"): 0.11, ("direct", "read"): 0.03,
                        ("rlm_medium", "read"): 0.065, ("rlm_medium", "edit"): 0.18,
@@ -76,7 +77,9 @@ DEFAULT_PROJECT_USD = {("rlm", "read"): 0.04, ("rlm", "edit"): 0.11, ("direct", 
                        ("pilot_on", "read"): 0.10, ("pilot_on", "edit"): 0.12, ("pilot_off", "read"): 0.04,
                        ("pilot_off", "edit"): 0.08, ("pilot_on_c0", "read"): 0.10, ("pilot_on_c0", "edit"): 0.12,
                        # prod-v2 checkpoint 18's selection eval: $0.17 a context-search episode *(mine: AA-LCR alike)*
-                       ("bench_ckpt", "read"): 0.17, ("bench_base", "read"): 0.17}
+                       ("bench_ckpt", "read"): 0.17, ("bench_base", "read"): 0.17,
+                       # AA-LCR measured $0.034-0.044 at medium; OOLONG labels every line through sub-calls
+                       ("bench_ckpt_xhigh", "read"): 0.10, ("bench_base_xhigh", "read"): 0.10}
 
 SPEND_EVERY_S = 5.0
 TOOL_CALL_MARK = "<tool_call>"  # Qwen3.8's native tool-call tag, which the REPL can't run (step 11 results)
@@ -112,6 +115,11 @@ ARMS = {
     # sub-calls to the base model) with a trained checkpoint as the root, and the base model in the same set-up
     "bench_ckpt": Arm("bench_ckpt", "rlm", "medium", 1, prompt_version="v4", checkpoint="ckpt"),
     "bench_base": Arm("bench_base", "rlm", "medium", 1, prompt_version="v4", checkpoint="base"),
+    # the same at Qwen3.8's default effort, xhigh (Rishi, 2026-10-25), with room for its longer thinking in a turn
+    "bench_ckpt_xhigh": Arm("bench_ckpt_xhigh", "rlm", "xhigh", 1, prompt_version="v4", checkpoint="ckpt",
+                            limits_override=(("root_max_tokens", 16384),)),
+    "bench_base_xhigh": Arm("bench_base_xhigh", "rlm", "xhigh", 1, prompt_version="v4", checkpoint="base",
+                            limits_override=(("root_max_tokens", 16384),)),
 }
 
 

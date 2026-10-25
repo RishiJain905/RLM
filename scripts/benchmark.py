@@ -34,13 +34,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rlm_rl import baselines, config, evals  # noqa: E402
+from rlm_rl import baselines, config, evals, reward  # noqa: E402
 from rlm_rl.client import ModelClient, RequestFailed  # noqa: E402
 from rlm_rl.tasks import aalcr  # noqa: E402
 
 RESULTS = ROOT / "results"
 EVAL_SET = "aa-lcr-v1"
-ARMS = ("bench_ckpt", "bench_base")
+SETS = ("aa-lcr-v1", "oolong-short-v1")  # OOLONG's answers are exact (counts, labels, ids): scored as they run, no judge
+ARMS = ("bench_ckpt", "bench_base", "bench_ckpt_xhigh", "bench_base_xhigh")
+OOLONG_DECAY = 0.75  # OOLONG's own partial credit for a count: 0.75 ** |error|
 JUDGE_THINKING = "low"
 JUDGE_MAX_TOKENS = 4096
 JUDGE_AT_ONCE = 8
@@ -171,7 +173,7 @@ async def run_live(args) -> None:
     load_dotenv(ROOT / ".env")  # provides WANDB_API_KEY; never printed
     from rlm_rl.backend import ArtBackend
 
-    tasks, _ = evals.eval_set(EVAL_SET)
+    tasks, _ = evals.eval_set(args.set)
     if args.limit:
         tasks = tasks[:args.limit]
     arms = args.arms.split(",")
@@ -181,12 +183,13 @@ async def run_live(args) -> None:
     try:
         base, ckpt = await open_models(backend, args)
         run = baselines.BaselineRun(args.run, RESULTS, openai_client=backend.openai_client(), base_model=base,
-                                    ceiling=args.ceiling, eval_set=EVAL_SET, models={"ckpt": ckpt},
+                                    ceiling=args.ceiling, eval_set=args.set, models={"ckpt": ckpt},
                                     max_read=args.max_read)
-        if "bench_ckpt" in arms and not await attached(run.clients["bench_ckpt"], base, ckpt):
+        ckpt_arms = [a for a in arms if baselines.ARMS[a].checkpoint == "ckpt"]
+        if ckpt_arms and not await attached(run.clients[ckpt_arms[0]], base, ckpt):
             raise SystemExit("not started: the checkpoint's LoRA doesn't look attached")
-        write_meta(run.run_dir, {"eval_set": EVAL_SET, "source": aalcr.VERSION, "base_model": base,
-                                 "checkpoint_model": ckpt, "source_run": args.source_run,
+        write_meta(run.run_dir, {"eval_set": args.set, "source": aalcr.VERSION if args.set == EVAL_SET else args.set,
+                                 "base_model": base, "checkpoint_model": ckpt, "source_run": args.source_run,
                                  "checkpoint": args.checkpoint})
         proj = baselines.project(run.run_dir, tasks, [baselines.ARMS[a] for a in arms])
         spent = run.budget.spent()
@@ -252,6 +255,8 @@ async def judge(args) -> None:
 
     out = run_dir(args.run)
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+    if meta["eval_set"] != EVAL_SET:
+        raise SystemExit(f"{meta['eval_set']} is scored exactly as it runs; only {EVAL_SET} needs the judge")
     judged = load_judged(out)
     rows = question_rows()
     todo = [r for r in episodes(out) if r["key"] not in judged["verdicts"]]
@@ -314,27 +319,51 @@ def mcnemar_p(b: int, c: int) -> float | None:
     return min(1.0, 2 * tail)
 
 
-def summarize(name: str) -> dict:
-    out = run_dir(name)
-    verdicts = load_judged(out)["verdicts"]
-    rows = question_rows()
-    arms: dict = {}
-    correct_by_arm: dict[str, dict[tuple[int, int], bool]] = {}  # (question, sample) -> judged right
-    for rec in episodes(out):
+def oolong_score(rec: dict) -> float:
+    """OOLONG's own metric: a count earns 0.75 ** |error|, every other answer exact match."""
+    gold = rec.get("gold")
+    if isinstance(gold, int) and not isinstance(gold, bool):
+        got = reward.parse_number(rec.get("answer"))
+        return OOLONG_DECAY ** abs(got - gold) if got is not None else 0.0
+    return 1.0 if rec.get("correct") else 0.0
+
+
+def outcome(rec: dict, meta: dict, verdicts: dict, rows: dict) -> tuple | None:
+    """(question, right, category, OOLONG score) for one episode; None if AA-LCR's judge hasn't graded it yet."""
+    if meta["eval_set"] == EVAL_SET:
         v = verdicts.get(rec["key"])
         if v is None:
-            continue
-        arm = rec["arm"]
+            return None
         qid = question_id(rec["task_id"])
-        ok = v["verdict"] == "CORRECT"
+        return qid, v["verdict"] == "CORRECT", rows[qid]["document_category"], None
+    return rec["task_id"], bool(rec.get("correct")), rec["task_id"].split("-")[2], oolong_score(rec)
+
+
+def summarize(name: str) -> dict:
+    out = run_dir(name)
+    meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+    aalcr_set = meta["eval_set"] == EVAL_SET
+    verdicts = load_judged(out)["verdicts"]
+    rows = question_rows() if aalcr_set else {}
+    arms: dict = {}
+    correct_by_arm: dict[str, dict[tuple, bool]] = {}  # (question, sample) -> right
+    for rec in episodes(out):
+        got = outcome(rec, meta, verdicts, rows)
+        if got is None:
+            continue
+        qid, ok, category, score = got
+        arm = rec["arm"]
         correct_by_arm.setdefault(arm, {})[(qid, rec.get("sample") or 0)] = ok
-        a = arms.setdefault(arm, {"n": 0, "correct": 0, "usd": [], "subcalls": [], "turns": [], "by_category": {}})
+        a = arms.setdefault(arm, {"n": 0, "correct": 0, "usd": [], "subcalls": [], "turns": [], "by_category": {},
+                                  "scores": []})
         a["n"] += 1
         a["correct"] += ok
         a["usd"].append((rec.get("usage") or {}).get("est_cost_usd") or 0.0)
         a["subcalls"].append(rec.get("subcalls_used") or 0)
         a["turns"].append(len(rec.get("turns") or []))
-        cat = a["by_category"].setdefault(rows[qid]["document_category"], [0, 0])
+        if score is not None:
+            a["scores"].append(score)
+        cat = a["by_category"].setdefault(category, [0, 0])
         cat[0] += ok
         cat[1] += 1
     table = {}
@@ -349,18 +378,22 @@ def summarize(name: str) -> dict:
                       "total_usd": round(sum(a["usd"]), 3), "mean_subcalls": round(statistics.fmean(a["subcalls"]), 1),
                       "mean_turns": round(statistics.fmean(a["turns"]), 1),
                       "by_category": {k: f"{v[0]}/{v[1]}" for k, v in sorted(a["by_category"].items())}}
-    paired = None
-    ck, bs = correct_by_arm.get("bench_ckpt", {}), correct_by_arm.get("bench_base", {})
-    both = sorted(set(ck) & set(bs))
-    if both:
-        b = sum(ck[q] and not bs[q] for q in both)
-        c = sum(bs[q] and not ck[q] for q in both)
-        paired = {"pairs": len(both), "questions": len({q for q, _ in both}),
-                  "checkpoint": sum(ck[q] for q in both), "base": sum(bs[q] for q in both),
-                  "only_checkpoint": b, "only_base": c, "mcnemar_p": mcnemar_p(b, c)}
-    meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
-    result = {"run": name, "meta": meta, "arms": table, "paired": paired, "published": PUBLISHED,
-              "judge": {"model": meta["base_model"], "thinking": JUDGE_THINKING, "prompts": "AA-LCR v1.1"}}
+        if a["scores"]:
+            table[arm]["oolong_score"] = round(statistics.fmean(a["scores"]), 4)
+    paired = {}
+    for ck_name, bs_name in (("bench_ckpt", "bench_base"), ("bench_ckpt_xhigh", "bench_base_xhigh")):
+        ck, bs = correct_by_arm.get(ck_name, {}), correct_by_arm.get(bs_name, {})
+        both = sorted(set(ck) & set(bs), key=str)
+        if both:
+            b = sum(ck[q] and not bs[q] for q in both)
+            c = sum(bs[q] and not ck[q] for q in both)
+            paired[f"{ck_name} vs {bs_name}"] = {
+                "pairs": len(both), "questions": len({q for q, _ in both}), "checkpoint": sum(ck[q] for q in both),
+                "base": sum(bs[q] for q in both), "only_checkpoint": b, "only_base": c, "mcnemar_p": mcnemar_p(b, c)}
+    result = {"run": name, "meta": meta, "arms": table, "paired": paired,
+              "published": PUBLISHED if aalcr_set else {},
+              "judge": ({"model": meta["base_model"], "thinking": JUDGE_THINKING, "prompts": "AA-LCR v1.1"}
+                        if aalcr_set else None)}
     baselines.write_json(out / "summary.json", result)
     return result
 
@@ -379,6 +412,7 @@ def main() -> int:
             p.add_argument("--limit", type=int, help="only the first N questions of the fixed order")
             p.add_argument("--max-read", type=int, default=16, help="episodes at once")
             p.add_argument("--samples", type=int, default=1, help="samples a question (sampling seeds)")
+            p.add_argument("--set", default=EVAL_SET, choices=SETS, help="the benchmark")
         p.add_argument("--source-run", default="prod-v2")
         p.add_argument("--checkpoint", type=int, default=18)
         p.add_argument("--base-run", default="prod-v1", help="whose step 0 is the base model")
@@ -408,14 +442,16 @@ def main() -> int:
         print(json.dumps(result, indent=1))
         return 0
     for arm, row in result["arms"].items():
-        print(f"{arm:11} {row['correct']}/{row['n']} = {row['accuracy']:.1%} (±{row['se']:.1%}), ${row['mean_usd']:.3f} "
-              f"an episode, {row['mean_subcalls']} sub-calls, {row['mean_turns']} turns  {row['by_category']}")
-    if result["paired"]:
-        p = result["paired"]
-        print(f"paired on {p['pairs']} (question, sample) pairs over {p['questions']} questions: checkpoint "
+        extra = f", OOLONG score {row['oolong_score']:.3f}" if "oolong_score" in row else ""
+        print(f"{arm:16} {row['correct']}/{row['n']} = {row['accuracy']:.1%} (±{row['se']:.1%}){extra}, "
+              f"${row['mean_usd']:.3f} an episode, {row['mean_subcalls']} sub-calls, {row['mean_turns']} turns  "
+              f"{row['by_category']}")
+    for name, p in result["paired"].items():
+        print(f"{name}: {p['pairs']} (question, sample) pairs over {p['questions']} questions: checkpoint "
               f"{p['checkpoint']}, base {p['base']}; only checkpoint "
               f"{p['only_checkpoint']}, only base {p['only_base']}, McNemar p = {p['mcnemar_p']}")
-    print("published (read directly):", ", ".join(f"{k} {v:.0%}" for k, v in PUBLISHED.items()))
+    if result["published"]:
+        print("published (read directly):", ", ".join(f"{k} {v:.0%}" for k, v in result["published"].items()))
     return 0
 
 

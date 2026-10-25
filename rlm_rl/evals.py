@@ -161,7 +161,27 @@ def eval_set(name: str) -> tuple[list[Task], int]:
         from .tasks import aalcr
 
         return list(aalcr.load()), 1
+    if name == "oolong-short-v1":  # post-training benchmark: OOLONG-synth's test split at 16K and 32K tokens
+        return oolong_short(OOLONG_SHORT_PER_BUCKET), 1
     raise KeyError(f"no eval set named {name!r}")
+
+
+OOLONG_SHORT_PER_BUCKET = 40
+OOLONG_SHORT_BUCKETS = (16_384, 32_768)
+
+
+def oolong_short(per_bucket: int) -> list[Task]:
+    """OOLONG-synth's held-out test items at the two shortest lengths, the buckets alternating, with the order in the
+    task id (baselines.plan_jobs starts read episodes in task-id order), so a run the ceiling stops covers both."""
+    import dataclasses
+
+    from .tasks import oolong
+
+    tasks = list({t.task_id: t for t in oolong.load(per_bucket, buckets=OOLONG_SHORT_BUCKETS)}.values())  # load() may draw an item twice
+    by_bucket = [[t for t in tasks if t.level == oolong.BUCKETS.index(b) + 1] for b in OOLONG_SHORT_BUCKETS]
+    order = [t for pair in zip(*by_bucket) for t in pair]
+    return [dataclasses.replace(t, task_id=f"oolong-{rank:03d}-{t.task_id.split('-', 1)[1]}")
+            for rank, t in enumerate(order)]
 
 
 def episode_key(name: str, step: int, task_id: str, sample: int) -> str:

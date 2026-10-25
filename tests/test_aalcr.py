@@ -116,6 +116,13 @@ class JudgeHelpersTest(unittest.TestCase):
         self.assertIn("Reply as JSON, with a verdict of CORRECT or INCORRECT.", self.b.JUDGE_USER)
         self.assertTrue(self.b.JUDGE_SYSTEM.startswith("Decide whether the CANDIDATE ANSWER is correct"))
 
+    def test_oolong_score(self):
+        self.assertAlmostEqual(self.b.oolong_score({"gold": 10, "answer": "12"}), 0.5625)
+        self.assertEqual(self.b.oolong_score({"gold": 10, "answer": 10}), 1.0)
+        self.assertEqual(self.b.oolong_score({"gold": 10, "answer": None}), 0.0)
+        self.assertEqual(self.b.oolong_score({"gold": "spam", "answer": "spam", "correct": True}), 1.0)
+        self.assertEqual(self.b.oolong_score({"gold": "spam", "answer": "ham", "correct": False}), 0.0)
+
     def test_attached_needs_a_real_difference(self):
         self.assertIsNone(self.b.mean_abs_diff([None], [None]))
         self.assertAlmostEqual(self.b.mean_abs_diff([None, -1.0, -2.0], [None, -1.5, -2.0]), 0.25)

@@ -66,7 +66,7 @@ ENABLE_THINKING = False  # root and sub-calls (spec §5.1)
 # Root thinking for one baseline arm only (plan step 11, decision 11b; step 2 §6): the base model as an RLM with its
 # root at reasoning effort `medium`. Training keeps thinking off, sub-calls stay off whatever the root does, and
 # `xhigh` is never used (it broke the turn cap and once never answered).
-ROOT_THINKING_EFFORTS = ("low", "medium")
+ROOT_THINKING_EFFORTS = ("low", "medium", "xhigh")  # Qwen3.8's levels; xhigh is its default, used by the benchmark
 
 # Qwen/Qwen3.8-27B special tokens, from its tokenizer_config.json. vLLM reports no logprob for a
 # prompt's first token, which is always <|im_start|>.
