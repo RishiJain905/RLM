@@ -23,6 +23,7 @@ carries on in the same fixed order. `judge` has a ceiling of its own and resumes
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import math
 import re
@@ -174,6 +175,8 @@ async def run_live(args) -> None:
     if args.limit:
         tasks = tasks[:args.limit]
     arms = args.arms.split(",")
+    for a in arms:  # more samples a question: a rerun keeps sample 0 and runs the new ones
+        baselines.ARMS[a] = dataclasses.replace(baselines.ARMS[a], read_samples=args.samples)
     backend = ArtBackend(project=config.PROJECT, base_model=config.BASE_MODEL)
     try:
         base, ckpt = await open_models(backend, args)
@@ -316,7 +319,7 @@ def summarize(name: str) -> dict:
     verdicts = load_judged(out)["verdicts"]
     rows = question_rows()
     arms: dict = {}
-    correct_by_arm: dict[str, dict[int, bool]] = {}
+    correct_by_arm: dict[str, dict[tuple[int, int], bool]] = {}  # (question, sample) -> judged right
     for rec in episodes(out):
         v = verdicts.get(rec["key"])
         if v is None:
@@ -324,7 +327,7 @@ def summarize(name: str) -> dict:
         arm = rec["arm"]
         qid = question_id(rec["task_id"])
         ok = v["verdict"] == "CORRECT"
-        correct_by_arm.setdefault(arm, {})[qid] = ok
+        correct_by_arm.setdefault(arm, {})[(qid, rec.get("sample") or 0)] = ok
         a = arms.setdefault(arm, {"n": 0, "correct": 0, "usd": [], "subcalls": [], "turns": [], "by_category": {}})
         a["n"] += 1
         a["correct"] += ok
@@ -337,7 +340,11 @@ def summarize(name: str) -> dict:
     table = {}
     for arm, a in arms.items():
         acc = a["correct"] / a["n"]
+        samples = {}
+        for (_, s), ok in correct_by_arm[arm].items():
+            samples.setdefault(s, []).append(ok)
         table[arm] = {"n": a["n"], "correct": a["correct"], "accuracy": round(acc, 4),
+                      "by_sample": {s: f"{sum(v)}/{len(v)}" for s, v in sorted(samples.items())},
                       "se": round(math.sqrt(acc * (1 - acc) / a["n"]), 4), "mean_usd": round(statistics.fmean(a["usd"]), 4),
                       "total_usd": round(sum(a["usd"]), 3), "mean_subcalls": round(statistics.fmean(a["subcalls"]), 1),
                       "mean_turns": round(statistics.fmean(a["turns"]), 1),
@@ -348,7 +355,8 @@ def summarize(name: str) -> dict:
     if both:
         b = sum(ck[q] and not bs[q] for q in both)
         c = sum(bs[q] and not ck[q] for q in both)
-        paired = {"questions": len(both), "checkpoint": sum(ck[q] for q in both), "base": sum(bs[q] for q in both),
+        paired = {"pairs": len(both), "questions": len({q for q, _ in both}),
+                  "checkpoint": sum(ck[q] for q in both), "base": sum(bs[q] for q in both),
                   "only_checkpoint": b, "only_base": c, "mcnemar_p": mcnemar_p(b, c)}
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
     result = {"run": name, "meta": meta, "arms": table, "paired": paired, "published": PUBLISHED,
@@ -370,6 +378,7 @@ def main() -> int:
             p.add_argument("--allow-partial", action="store_true", help="start even if the projection is over the ceiling")
             p.add_argument("--limit", type=int, help="only the first N questions of the fixed order")
             p.add_argument("--max-read", type=int, default=16, help="episodes at once")
+            p.add_argument("--samples", type=int, default=1, help="samples a question (sampling seeds)")
         p.add_argument("--source-run", default="prod-v2")
         p.add_argument("--checkpoint", type=int, default=18)
         p.add_argument("--base-run", default="prod-v1", help="whose step 0 is the base model")
@@ -403,7 +412,8 @@ def main() -> int:
               f"an episode, {row['mean_subcalls']} sub-calls, {row['mean_turns']} turns  {row['by_category']}")
     if result["paired"]:
         p = result["paired"]
-        print(f"paired on {p['questions']} questions: checkpoint {p['checkpoint']}, base {p['base']}; only checkpoint "
+        print(f"paired on {p['pairs']} (question, sample) pairs over {p['questions']} questions: checkpoint "
+              f"{p['checkpoint']}, base {p['base']}; only checkpoint "
               f"{p['only_checkpoint']}, only base {p['only_base']}, McNemar p = {p['mcnemar_p']}")
     print("published (read directly):", ", ".join(f"{k} {v:.0%}" for k, v in PUBLISHED.items()))
     return 0
