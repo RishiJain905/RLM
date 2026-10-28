@@ -1,0 +1,1462 @@
+<title>RL Post-Training Book</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a contents rail on the left (a scrolling chip bar on phones) and one reading column on the right; figures and tables use the full column, prose stops at about 70 characters.
+   Colour roles are fixed across every figure: teal = the small trained piece (LoRA adapter), blue = sampler, amber = trainer / fully trained weights, slate = frozen base and reference, green = reward. */
+:root{
+  --bg:#f3f6f7;
+  --surface:#ffffff;
+  --surface-2:#e8eef0;
+  --ink:#10212b;
+  --ink-2:#465963;
+  --rule:#cdd8dd;
+  --link:#1d5ca6;
+  --lora:#0a766f;      --lora-t:#d2eeeb;
+  --full:#a9540b;      --full-t:#f7e2cb;
+  --sampler:#2a67b3;   --sampler-t:#d8e7f8;
+  --ref:#5b6e79;       --ref-t:#e0e8eb;
+  --reward:#2d7a3c;    --reward-t:#d9efdc;
+  --bad:#b5382b;       --bad-t:#f7d9d5;
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1920; --surface:#13242c; --surface-2:#1b2e38; --ink:#e6eef2; --ink-2:#9db0bb; --rule:#2a3e49; --link:#8bb9f0;
+    --lora:#48c6bb; --lora-t:#113d3b;
+    --full:#f1a45c; --full-t:#47301b;
+    --sampler:#78afee; --sampler-t:#15304f;
+    --ref:#a0b2bc; --ref-t:#233741;
+    --reward:#74c883; --reward-t:#173820;
+    --bad:#f08376; --bad-t:#45221e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1920; --surface:#13242c; --surface-2:#1b2e38; --ink:#e6eef2; --ink-2:#9db0bb; --rule:#2a3e49; --link:#8bb9f0;
+  --lora:#48c6bb; --lora-t:#113d3b;
+  --full:#f1a45c; --full-t:#47301b;
+  --sampler:#78afee; --sampler-t:#15304f;
+  --ref:#a0b2bc; --ref-t:#233741;
+  --reward:#74c883; --reward-t:#173820;
+  --bad:#f08376; --bad-t:#45221e;
+  color-scheme: dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:auto}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 1.0625rem/1.65 var(--font-body);
+  padding-block:0 5rem;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-text-size-adjust:100%;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+:focus-visible{outline:2px solid var(--sampler);outline-offset:2px;border-radius:3px}
+
+h1,h2,h3,h4{font-family:var(--font-display);line-height:1.15;text-wrap:balance;margin:0;color:var(--ink)}
+h1{font-size:clamp(2.05rem,5.4vw,3.2rem);font-weight:700;letter-spacing:-.022em}
+h2{font-size:clamp(1.55rem,3.4vw,2.05rem);font-weight:650;letter-spacing:-.015em}
+h3{font-size:1.2rem;font-weight:600;letter-spacing:-.005em;margin-top:2.2rem}
+p{margin:0 0 1rem;text-wrap:pretty}
+a{color:var(--link);text-underline-offset:.2em}
+strong{font-weight:600}
+code,.mono{font-family:var(--font-mono);font-size:.86em;background:var(--surface-2);padding:.08em .35em;border-radius:4px;overflow-wrap:anywhere}
+ul,ol{margin:0 0 1rem;padding-left:1.25rem}
+li{margin-bottom:.35rem}
+.eyebrow{font:500 .74rem/1.2 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin:0 0 .65rem}
+.small{font-size:.875rem;color:var(--ink-2)}
+.num{font-variant-numeric:tabular-nums}
+
+/* page frame */
+.shell{max-width:76rem;margin-inline:auto;display:grid;grid-template-columns:minmax(0,1fr);gap:0 3rem;align-items:start}
+.book{min-width:0;max-width:56rem}
+.book .sec>:where(p,ul,ol,dl.terms,.callout,h3,.formula,.eyebrow,h2){max-width:44rem}
+
+/* contents: chip bar on phones, rail on wide screens */
+.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:var(--bg);border-bottom:1px solid var(--rule);padding-block:.5rem;min-width:0}
+.toc-title{display:none}
+.toc ol{list-style:none;margin:0;padding:0;display:flex;gap:.3rem;overflow-x:auto;white-space:nowrap;position:relative;scrollbar-width:thin}
+.toc ol::-webkit-scrollbar{display:none}
+.toc ol{scrollbar-width:none}
+.toc li{margin:0}
+.toc a{display:block;text-decoration:none;color:var(--ink);font-size:.85rem;padding:.4rem .7rem;border-radius:6px;border:1px solid var(--rule);background:var(--surface)}
+.toc li.g a{font-weight:600}
+.toc a[aria-current="location"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+@media (min-width:1000px){
+  .shell{grid-template-columns:15.5rem minmax(0,1fr)}
+  .toc{top:1.5rem;max-height:calc(100vh - 3rem);overflow-y:auto;border:0;padding:0 .25rem 0 0;align-self:start;margin-top:2.5rem}
+  .toc-title{display:block;font:500 .72rem/1.2 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin:0 0 .6rem}
+  .toc ol{display:block;overflow:visible;white-space:normal}
+  .toc li{margin:0}
+  .toc a{border:0;background:none;border-radius:0;padding:.22rem .5rem;font-size:.86rem;color:var(--ink-2);border-left:2px solid var(--rule)}
+  .toc li.g{margin-top:.9rem}
+  .toc li.g:first-child{margin-top:0}
+  .toc li.g a{font:600 .74rem/1.3 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink);border-left-color:var(--ink-2)}
+  .toc a:hover{color:var(--ink);border-left-color:var(--ink)}
+  .toc a[aria-current="location"]{background:none;color:var(--ink);border-left-color:var(--sampler);font-weight:600;border-left-width:3px;padding-left:calc(.5rem - 1px)}
+}
+
+/* masthead */
+.masthead{padding-block:2.5rem 1.5rem;max-width:46rem}
+.dek{font-size:1.15rem;line-height:1.55;color:var(--ink-2);margin:1.1rem 0 0}
+.legend{display:flex;flex-wrap:wrap;gap:.45rem .5rem;margin:1.25rem 0 0;padding:0;list-style:none}
+.legend li{margin:0;display:flex;align-items:center;gap:.4rem;font-size:.82rem;border:1px solid var(--rule);background:var(--surface);border-radius:999px;padding:.2rem .7rem .2rem .5rem}
+.legend i{width:.8rem;height:.8rem;border-radius:3px;border:1.5px solid;display:inline-block}
+.sw-lora{background:var(--lora-t);border-color:var(--lora)!important}
+.sw-sampler{background:var(--sampler-t);border-color:var(--sampler)!important}
+.sw-trainer{background:var(--full-t);border-color:var(--full)!important}
+.sw-ref{background:var(--ref-t);border-color:var(--ref)!important}
+.sw-reward{background:var(--reward-t);border-color:var(--reward)!important}
+
+/* chapters */
+.sec{padding-block:3rem 1rem;border-top:1px solid var(--rule);scroll-margin-top:4.75rem}
+@media (min-width:1000px){.sec{scroll-margin-top:1.5rem}}
+.part-head{margin-top:4rem;padding:1.9rem clamp(1rem,3vw,2.1rem) 1.6rem;border-radius:10px;background:var(--lora-t);scroll-margin-top:4.75rem}
+.part-head.full{background:var(--full-t)}
+.part-head h2{font-size:clamp(1.95rem,4.8vw,2.8rem);letter-spacing:-.02em}
+.part-head p{max-width:42rem}
+.part-head .lede{font-size:1.1rem;margin:.9rem 0 0}
+.part-head ul.in-part{list-style:none;padding:0;margin:1.1rem 0 0;display:flex;flex-wrap:wrap;gap:.4rem}
+.part-head ul.in-part li{margin:0}
+.part-head ul.in-part a{display:block;font-size:.84rem;padding:.25rem .65rem;border-radius:999px;background:var(--surface);color:var(--ink);text-decoration:none;border:1px solid var(--rule)}
+.part-head+.sec{border-top:0}
+@media (min-width:1000px){.part-head{scroll-margin-top:1.5rem}}
+#intro{border-top:0;padding-top:1rem}
+
+/* callouts */
+.callout{background:var(--surface-2);border-radius:8px;padding:1rem 1.15rem .6rem;margin-block:1.4rem}
+.callout .tag{display:flex;align-items:center;gap:.45rem;font:500 .72rem/1 var(--font-mono);text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2);margin:0 0 .6rem}
+.callout .tag::before{content:"";width:.7rem;height:.7rem;border-radius:2px;background:var(--ref);display:inline-block}
+.callout.run{background:var(--lora-t)}
+.callout.run .tag::before{background:var(--lora)}
+.callout.watch{background:var(--full-t)}
+.callout.watch .tag::before{background:var(--full)}
+.callout p:last-child,.callout ul:last-child{margin-bottom:.5rem}
+.formula{font:400 .88rem/1.7 var(--font-mono);background:var(--surface-2);border-radius:8px;padding:.85rem 1rem;margin:1.1rem 0;overflow-x:auto;white-space:pre;max-width:44rem}
+.formula .c{color:var(--ink-2)}
+
+/* terms list */
+dl.terms{display:grid;grid-template-columns:minmax(0,9.5rem) minmax(0,1fr);gap:.55rem 1.1rem;margin:1.2rem 0 1.5rem}
+dl.terms dt{font-weight:600}
+dl.terms dd{margin:0}
+@media (max-width:560px){dl.terms{grid-template-columns:minmax(0,1fr);gap:.1rem}dl.terms dd{margin-bottom:.7rem}}
+
+/* figures */
+.fig{margin:1.75rem 0;background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1rem 1rem .9rem;min-width:0}
+.fig .scroll{overflow-x:auto;min-width:0}
+.fig svg{display:block;width:100%;height:auto;min-width:var(--minw,640px);color:var(--ink-2)}
+.fig figcaption{font-size:.875rem;line-height:1.55;color:var(--ink-2);margin-top:.8rem;max-width:46rem}
+.fig figcaption b{color:var(--ink);font-weight:600}
+.fig .swipe{display:none;font-size:.78rem;color:var(--ink-2);margin:0 0 .5rem}
+@media (max-width:760px){.fig .swipe{display:block}}
+svg text{font-family:var(--font-body);font-size:13px;fill:var(--ink)}
+svg .b{font-weight:600}
+svg .halo{paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+svg .s{font-size:11.5px;fill:var(--ink-2)}
+svg .m{font-family:var(--font-mono);font-size:11.5px}
+svg .c{text-anchor:middle}
+svg .r{text-anchor:end}
+svg .bx{stroke-width:1.5}
+svg .k-sampler{fill:var(--sampler-t);stroke:var(--sampler)}
+svg .k-trainer{fill:var(--full-t);stroke:var(--full)}
+svg .k-lora{fill:var(--lora-t);stroke:var(--lora)}
+svg .k-ref{fill:var(--ref-t);stroke:var(--ref)}
+svg .k-reward{fill:var(--reward-t);stroke:var(--reward)}
+svg .k-bad{fill:var(--bad-t);stroke:var(--bad)}
+svg .k-plain{fill:var(--surface);stroke:var(--ref)}
+svg .k-lane{fill:var(--surface-2);stroke:none}
+svg .k-idle{stroke:var(--rule);stroke-width:1}
+svg .k-outline{fill:none;stroke:var(--ref);stroke-width:1.5;stroke-dasharray:6 4}
+svg .ar{fill:none;stroke:var(--ink-2);stroke-width:1.6}
+svg .ar-f{fill:none;stroke:var(--full);stroke-width:2.2}
+svg .ar-l{fill:none;stroke:var(--lora);stroke-width:2}
+svg .ar-d{stroke-dasharray:5 4}
+svg .grid{stroke:var(--rule);stroke-width:1;fill:none}
+svg .axis{stroke:var(--ink-2);stroke-width:1.2;fill:none}
+svg .t-lora{fill:var(--lora)}
+svg .t-full{fill:var(--full)}
+svg .t-bad{fill:var(--bad)}
+svg .t-good{fill:var(--reward)}
+svg .t-sampler{fill:var(--sampler)}
+.mh{fill:var(--ink-2)}
+.mh-f{fill:var(--full)}
+.mh-l{fill:var(--lora)}
+.hatch-ln{stroke:var(--ink-2);stroke-width:1;opacity:.5}
+
+/* stacked memory bars (CSS, to scale) */
+.mwrap{min-width:640px}
+.mruler{display:grid;grid-template-columns:11.5rem minmax(0,1fr);gap:.75rem;font:400 .7rem var(--font-mono);color:var(--ink-2)}
+.mruler .tr{position:relative;height:1.1rem;border-bottom:1px solid var(--ink-2)}
+.mruler .tr span{position:absolute;bottom:.15rem;transform:translateX(-50%);white-space:nowrap}
+.mruler .tr span:first-child{transform:none}
+.mruler .tr span:last-child{transform:translateX(-100%)}
+.mruler .tr span:empty::after{display:none}
+.mruler .tr span::after{content:"";position:absolute;left:50%;bottom:-.3rem;height:.3rem;border-left:1px solid var(--ink-2)}
+.mrow{display:grid;grid-template-columns:11.5rem minmax(0,1fr);gap:.75rem;align-items:center;margin-block:.65rem}
+.mrow .lab{font-size:.84rem;line-height:1.3}
+.mrow .lab b{display:block;font-weight:600}
+.mrow .lab span{color:var(--ink-2)}
+.mbar{display:flex;height:2.2rem;border:1px solid var(--ink-2);border-radius:4px;overflow:hidden;width:calc(var(--gb) / var(--cap,80) * 100%);background:var(--surface)}
+.mbar>span{flex:var(--v) 1 0px;min-width:0;display:flex;align-items:center;justify-content:center;font:500 .72rem var(--font-mono);overflow:hidden;white-space:nowrap;border-right:2px solid var(--surface);color:var(--ink)}
+.mbar>span:last-child{border-right:0}
+.sg-base{background:var(--ref-t)}
+.sg-lora{background:var(--lora)}
+.sg-act{background:var(--full-t)}
+.sg-kv{background:var(--sampler-t)}
+.sg-bad{background:var(--bad-t)}
+.sg-w{background:var(--ref-t)}
+.sg-g{background:var(--sampler-t)}
+.sg-m{background:var(--full-t)}
+.sg-o{background:var(--lora-t)}
+.track{position:relative}
+.track::after{content:"";position:absolute;inset:-.35rem 0;pointer-events:none;opacity:.55;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(18.5185% - 1px),var(--ink-2) calc(18.5185% - 1px),var(--ink-2) 18.5185%)}
+.mkey{display:flex;flex-wrap:wrap;gap:.35rem 1rem;font-size:.8rem;color:var(--ink-2);margin:.9rem 0 0;padding:0;list-style:none}
+.mkey li{margin:0;display:flex;align-items:center;gap:.4rem}
+.mkey i{width:.85rem;height:.85rem;border:1px solid var(--ink-2);border-radius:2px;display:inline-block}
+
+/* tables */
+.table-wrap{overflow-x:auto;margin:1.5rem 0;border:1px solid var(--rule);border-radius:8px;background:var(--surface);min-width:0}
+table.t{border-collapse:collapse;width:100%;min-width:620px;font-size:.9rem;line-height:1.45}
+table.t th,table.t td{padding:.65rem .8rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+table.t thead th{background:var(--surface-2);font-weight:600;position:sticky;top:0}
+table.t tbody tr:last-child th,table.t tbody tr:last-child td{border-bottom:0}
+table.t tbody th{font-weight:600;background:var(--surface);position:sticky;left:0;min-width:7.5rem}
+table.t th.h-lora{box-shadow:inset 0 3px 0 var(--lora)}
+table.t th.h-full{box-shadow:inset 0 3px 0 var(--full)}
+table.t td.num{font-variant-numeric:tabular-nums}
+.table-note{font-size:.84rem;color:var(--ink-2);margin:-.6rem 0 1.4rem;max-width:44rem}
+
+/* calculator */
+.calc{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1.1rem 1.1rem 1rem;margin:1.75rem 0}
+.calc h4{font:600 1.05rem var(--font-display);margin:0 0 .2rem}
+.calc .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.8rem;margin:.9rem 0 1rem}
+.calc label{display:flex;flex-direction:column;gap:.3rem;font-size:.8rem;color:var(--ink-2);min-width:0}
+.calc select,.calc input{font:inherit;font-size:1rem;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:.45rem .55rem;min-height:2.5rem;width:100%;min-width:0}
+.calc .out{margin-top:.5rem}
+.calc .verdict{font-weight:600;margin:.9rem 0 .2rem}
+.calc .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.4rem 1rem;font-size:.86rem;color:var(--ink-2);margin:0;padding:0;list-style:none}
+.calc .nums li{margin:0}
+.calc .nums b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* two-up compare panels */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin:1.5rem 0}
+.two>div{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1rem 1.1rem .5rem;min-width:0}
+.two h4{font:600 1.02rem var(--font-display);margin:0 0 .5rem;padding-bottom:.45rem;border-bottom:3px solid var(--lora)}
+.two .b-ref h4{border-bottom-color:var(--ref)}
+.two .b-full h4{border-bottom-color:var(--full)}
+.two .b-sampler h4{border-bottom-color:var(--sampler)}
+.two p,.two ul{font-size:.93rem}
+
+/* case study spec */
+dl.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.7rem 1.4rem;margin:.2rem 0 .8rem}
+dl.spec>div{min-width:0}
+dl.spec dt{font:500 .7rem/1.2 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);margin-bottom:.2rem}
+dl.spec dd{margin:0;font-weight:500;line-height:1.4}
+.pair{display:grid;grid-template-columns:minmax(0,13rem) minmax(0,1fr);gap:.35rem .9rem;align-items:center;margin-block:.8rem}
+.pair .lab{font-size:.85rem;line-height:1.3}
+.pair .lab span{display:block;color:var(--ink-2)}
+.pair .bars{display:grid;gap:.25rem}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) 9rem;gap:.6rem;align-items:center;font:500 .78rem var(--font-mono)}
+.hb .tk{display:block;height:1.1rem;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.hb i{display:block;height:100%;width:calc(var(--p) * 1%);min-width:2px;border:1.5px solid;border-radius:3px}
+.hb.before i{background:var(--ref-t);border-color:var(--ref)}
+.hb.after i{background:var(--lora-t);border-color:var(--lora)}
+.hb em{font-style:normal;color:var(--ink-2);font-weight:400}
+@media (max-width:560px){.pair{grid-template-columns:minmax(0,1fr)}}
+
+/* calculator-style inline numbers */
+.hint{font-size:.85rem;color:var(--ink-2)}
+
+/* glossary */
+dl.gloss{display:grid;gap:0;margin:1.5rem 0;max-width:46rem}
+dl.gloss dt{font-family:var(--font-display);font-weight:600;font-size:1.05rem;margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--rule)}
+dl.gloss dt:first-of-type{border-top:0;margin-top:0;padding-top:0}
+dl.gloss dd{margin:.2rem 0 0}
+.refs{font-size:.9rem;color:var(--ink-2);max-width:46rem}
+.refs li{margin-bottom:.25rem}
+footer.end{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--rule);max-width:46rem}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mh" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ah-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mh-f" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ah-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mh-l" d="M0,0 L10,5 L0,10 z"/></marker>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-ln" x1="0" y1="0" x2="0" y2="6"/></pattern>
+  </defs>
+</svg>
+
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <p class="toc-title">Contents</p>
+  <ol>
+    <li class="g"><a href="#intro">Start here</a></li>
+    <li class="g"><a href="#lora">Part 1 &middot; RL with LoRA</a></li>
+    <li><a href="#basics">1.1 What RL post-training is</a></li>
+    <li><a href="#mechanics">1.2 LoRA mechanics</a></li>
+    <li><a href="#low-rank">1.3 Why low rank is enough</a></li>
+    <li><a href="#one-gpu">1.4 The one-GPU loop</a></li>
+    <li><a href="#step-end">1.5 The end of a step</a></li>
+    <li><a href="#memory">1.6 Memory on one GPU</a></li>
+    <li><a href="#mismatch">1.7 Sampler/trainer mismatch</a></li>
+    <li><a href="#monitor">1.8 Monitoring and knobs</a></li>
+    <li><a href="#reward">1.9 Rewards and hacking</a></li>
+    <li><a href="#serverless">1.10 Serverless vs local</a></li>
+    <li><a href="#case">1.11 Case study: prod-v2</a></li>
+    <li class="g"><a href="#full">Part 2 &middot; Full fine-tuning RL</a></li>
+    <li><a href="#full-memory">2.1 What full FT must hold</a></li>
+    <li><a href="#arch">2.2 Architecture</a></li>
+    <li><a href="#sync">2.3 Sync vs async</a></li>
+    <li><a href="#precision">2.4 Precision</a></li>
+    <li><a href="#why-full">2.5 Why labs do it</a></li>
+    <li class="g"><a href="#compare">Compare</a></li>
+    <li class="g"><a href="#decide">Decide</a></li>
+    <li class="g"><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<main class="book">
+
+<header class="masthead">
+  <p class="eyebrow">Reference &middot; RL post-training</p>
+  <h1>RL post-training, from one GPU to a cluster</h1>
+  <p class="dek">How policy-gradient RL is run on a large language model, and what it costs in memory, hardware and care. Part 1 is the practical route, LoRA on one GPU or a serverless service. Part 2 is full fine-tuning, the way large labs usually build it. Then a side-by-side comparison and a guide for choosing.</p>
+</header>
+
+<section class="sec" id="intro">
+  <p class="eyebrow">Start here</p>
+  <h2>How to read this book</h2>
+  <p>It is written for someone who knows machine learning and has run an RL job, but is still learning the systems underneath: where the weights live, which process generates text, which one trains, and what has to move between them. Every chapter stands alone, so jump in from the contents.</p>
+  <p>Three conventions keep the numbers honest. Boxes tagged <strong>Our run</strong> report what happened in prod-v2, a 27B run on W&amp;B Serverless RL. A figure with <strong>&asymp;</strong> in front of it is a typical or computed value, not a measurement. Everything else is general knowledge about how these systems are usually built. Colours mean the same thing in every diagram:</p>
+  <ul class="legend" aria-label="Colour key">
+    <li><i class="sw-lora"></i>LoRA adapter, the small trained piece</li>
+    <li><i class="sw-sampler"></i>Sampler, generates rollouts</li>
+    <li><i class="sw-trainer"></i>Trainer, fully trained weights</li>
+    <li><i class="sw-ref"></i>Frozen base or reference</li>
+    <li><i class="sw-reward"></i>Reward and verifiers</li>
+  </ul>
+
+  <div class="callout">
+    <p class="tag">The short version</p>
+    <ul>
+      <li>An RL episode returns one number. That is little information, so a small LoRA adapter can absorb it, and research on LoRA for RL found it matches full fine-tuning even at very low ranks.</li>
+      <li>On one GPU the frozen base is loaded once and shared by the sampler and the trainer. The adapter is about 100 MB. The KV cache of long episodes, not the adapter, decides what fits.</li>
+      <li>The sampler and the trainer must agree on token probabilities. Watch their correlation (<code>probs_corr</code>) and keep the pass rate in a learnable band.</li>
+      <li>Full fine-tuning updates every weight. With Adam in mixed precision that is about 16 bytes per parameter, so a 27B model needs about 430 GB of training state before activations, and the sampler fleet must receive the new weights after every update.</li>
+      <li>Choose by what you have: one GPU, a service, or a cluster. The decision flowchart near the end does it in three questions.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="part-head" id="lora">
+  <p class="eyebrow">Part 1</p>
+  <h2>RL with LoRA</h2>
+  <p class="lede">The practical route. Freeze the base model, train a small pair of matrices beside each layer, and let one GPU or a hosted service do the rest. Eleven chapters, from what RL is to what our own 27B run looked like.</p>
+  <ul class="in-part" aria-label="Chapters in Part 1">
+    <li><a href="#basics">Foundations</a></li>
+    <li><a href="#mechanics">LoRA mechanics</a></li>
+    <li><a href="#low-rank">Why low rank</a></li>
+    <li><a href="#one-gpu">One-GPU loop</a></li>
+    <li><a href="#step-end">End of a step</a></li>
+    <li><a href="#memory">Memory</a></li>
+    <li><a href="#mismatch">Mismatch</a></li>
+    <li><a href="#monitor">Monitoring</a></li>
+    <li><a href="#reward">Rewards</a></li>
+    <li><a href="#serverless">Serverless</a></li>
+    <li><a href="#case">Case study</a></li>
+  </ul>
+</section>
+
+<section class="sec" id="basics">
+  <p class="eyebrow">1.1 &middot; Foundations</p>
+  <h2>What RL post-training is</h2>
+  <p>RL post-training starts from a language model that can already do the task a little, and pushes it toward replies that score well. Nobody supplies the right answer. The model tries, the attempt is scored, and attempts that scored better than their peers are made more likely.</p>
+
+  <dl class="terms">
+    <dt>Policy</dt><dd>The model being trained, written &pi;<sub>&theta;</sub>. At each position it gives a probability for every possible next token.</dd>
+    <dt>Rollout (episode)</dt><dd>One complete attempt. The model reads a task and writes a reply, or runs a multi-turn exchange with tools, and the attempt ends with a reward.</dd>
+    <dt>Reward</dt><dd>One number for the whole attempt, from a test suite, an exact-match check, a rule or a judge model.</dd>
+    <dt>Group</dt><dd>Several rollouts of the same task. Our run used six per task.</dd>
+    <dt>Advantage</dt><dd>How much better a rollout did than its group. In GRPO-style methods it is the reward minus the group mean, divided by the group's spread. There is no separate value network to train, which saves a model's worth of memory.</dd>
+    <dt>Reference model</dt><dd>The frozen starting model. A KL penalty keeps the policy from wandering far from it.</dd>
+  </dl>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 800 292" style="--minw:700px" role="img" aria-label="The RL loop: tasks go to the policy, which writes a group of rollouts. A verifier scores them, advantages are computed against the group, the trainer updates the policy using a KL anchor to a frozen reference, and the updated weights return to the sampler.">
+        <!-- boxes -->
+        <rect class="bx k-plain" x="12" y="96" width="104" height="64" rx="6"/>
+        <text class="b c" x="64" y="124">Tasks</text><text class="s c" x="64" y="142">prompts, env</text>
+        <rect class="bx k-sampler" x="180" y="96" width="104" height="64" rx="6"/>
+        <text class="b c" x="232" y="124">Policy</text><text class="s c" x="232" y="142">sampler copy</text>
+        <rect class="bx k-reward" x="348" y="96" width="104" height="64" rx="6"/>
+        <text class="b c" x="400" y="124">Verifier</text><text class="s c" x="400" y="142">scores rollouts</text>
+        <rect class="bx k-plain" x="516" y="96" width="104" height="64" rx="6"/>
+        <text class="b c" x="568" y="124">Advantage</text><text class="s c" x="568" y="142">vs group mean</text>
+        <rect class="bx k-trainer" x="684" y="96" width="104" height="64" rx="6"/>
+        <text class="b c" x="736" y="124">Trainer</text><text class="s c" x="736" y="142">clipped update</text>
+        <!-- reference -->
+        <rect class="bx k-ref" x="684" y="10" width="104" height="44" rx="6"/>
+        <text class="b c" x="736" y="29">Reference</text><text class="s c" x="736" y="45">frozen, for KL</text>
+        <path class="ar" d="M736 54 V94" marker-end="url(#ah)"/>
+        <text class="s r" x="728" y="78">KL anchor</text>
+        <!-- forward arrows -->
+        <path class="ar" d="M116 128 H178" marker-end="url(#ah)"/><text class="s c" x="148" y="120">prompt</text>
+        <path class="ar" d="M284 128 H346" marker-end="url(#ah)"/><text class="s c" x="316" y="120">N rollouts</text>
+        <path class="ar" d="M452 128 H514" marker-end="url(#ah)"/><text class="s c" x="484" y="120">rewards</text>
+        <path class="ar" d="M620 128 H682" marker-end="url(#ah)"/><text class="s c" x="652" y="120">advantages</text>
+        <!-- return -->
+        <path class="ar-f" d="M736 160 V230 H232 V162" marker-end="url(#ah-f)"/>
+        <text class="b c t-full" x="484" y="222">updated weights</text>
+        <text class="s c" x="484" y="252">One trip around the loop is one RL step. The next step samples from the improved policy.</text>
+      </svg>
+    </div>
+    <figcaption><b>The RL loop.</b> The policy writes a group of rollouts per task, a verifier scores each, advantages compare each rollout with its group, and the trainer moves the weights. The reference model only supplies the KL anchor.</figcaption>
+  </figure>
+
+  <h3>Advantage, worked on one group</h3>
+  <p>Take one task with six rollouts, two of which pass. The group mean reward is 0.33 and the spread (standard deviation) is 0.47. Each rollout's advantage is its reward minus the mean, divided by the spread, so passes get about +1.41 and failures about &minus;0.71.</p>
+
+  <figure class="fig">
+    <div class="scroll">
+      <svg viewBox="0 0 540 226" style="--minw:460px" role="img" aria-label="Six rollouts of one task. Rollouts 1 and 4 have reward 1 and advantage plus 1.41; the other four have reward 0 and advantage minus 0.71.">
+        <text class="s" x="8" y="22">reward</text>
+        <text class="s" x="8" y="122">advantage</text>
+        <path class="axis" d="M84 118 H520"/>
+        <!-- rollout 1 -->
+        <rect class="bx k-plain" x="92" y="6" width="36" height="22" rx="4"/><text class="b c m" x="110" y="22">1</text>
+        <rect class="bx k-reward" x="90" y="53" width="40" height="65"/><text class="b c t-good" x="110" y="46">+1.41</text>
+        <!-- rollout 2 -->
+        <rect class="bx k-plain" x="162" y="6" width="36" height="22" rx="4"/><text class="b c m" x="180" y="22">0</text>
+        <rect class="bx k-bad" x="160" y="118" width="40" height="33"/><text class="b c t-bad" x="180" y="168">&minus;0.71</text>
+        <!-- rollout 3 -->
+        <rect class="bx k-plain" x="232" y="6" width="36" height="22" rx="4"/><text class="b c m" x="250" y="22">0</text>
+        <rect class="bx k-bad" x="230" y="118" width="40" height="33"/><text class="b c t-bad" x="250" y="168">&minus;0.71</text>
+        <!-- rollout 4 -->
+        <rect class="bx k-plain" x="302" y="6" width="36" height="22" rx="4"/><text class="b c m" x="320" y="22">1</text>
+        <rect class="bx k-reward" x="300" y="53" width="40" height="65"/><text class="b c t-good" x="320" y="46">+1.41</text>
+        <!-- rollout 5 -->
+        <rect class="bx k-plain" x="372" y="6" width="36" height="22" rx="4"/><text class="b c m" x="390" y="22">0</text>
+        <rect class="bx k-bad" x="370" y="118" width="40" height="33"/><text class="b c t-bad" x="390" y="168">&minus;0.71</text>
+        <!-- rollout 6 -->
+        <rect class="bx k-plain" x="442" y="6" width="36" height="22" rx="4"/><text class="b c m" x="460" y="22">0</text>
+        <rect class="bx k-bad" x="440" y="118" width="40" height="33"/><text class="b c t-bad" x="460" y="168">&minus;0.71</text>
+        <!-- labels -->
+        <text class="s c" x="110" y="204">rollout 1</text><text class="s c" x="180" y="204">2</text><text class="s c" x="250" y="204">3</text>
+        <text class="s c" x="320" y="204">4</text><text class="s c" x="390" y="204">5</text><text class="s c" x="460" y="204">6</text>
+      </svg>
+    </div>
+    <figcaption><b>Group-relative advantage.</b> Passing rollouts are pushed up, failing ones pushed down, and the shifts sum to zero. If all six rewards were equal, every advantage would be 0 and the group would teach nothing. That is why chapter 1.8 keeps the pass rate in a middle band.</figcaption>
+  </figure>
+
+  <h3>The update</h3>
+  <p>Every token in a rollout gets its rollout's advantage. The gradient raises the probability of those tokens when the advantage is positive and lowers it when negative. Because the tokens were sampled a moment ago, the update weighs each token by an <strong>importance ratio</strong>: the probability the model gives it now, divided by the probability it had when it was sampled. The ratio is near 1 when nothing has moved.</p>
+  <div class="formula" role="group" aria-label="Loss sketch"><span class="c">// per token t, in a rollout with advantage A</span>
+&rho;_t   = &pi;_&theta;(token_t) / &pi;_sampler(token_t)
+
+PPO    : loss_t = &minus;min( &rho;_t&middot;A ,  clip(&rho;_t, 1&minus;&epsilon;, 1+&epsilon;)&middot;A )
+CISPO  : loss_t = &minus;stopgrad( clip(&rho;_t, ...) ) &middot; A &middot; log &pi;_&theta;(token_t)
+
+total  = mean(loss_t)  +  &beta; &middot; KL( &pi;_&theta; || &pi;_ref )</div>
+  <p>PPO's clip stops the gradient for any token whose ratio has left the band (&epsilon; is often about 0.2), so one batch cannot drag the policy far. CISPO, introduced with MiniMax-M1, clips the importance weight instead and treats it as a constant, so every token still contributes a gradient, including rare tokens that a PPO clip would drop. Both are sketches here; libraries differ in details such as how the average over tokens is taken.</p>
+  <p>The KL term is the average gap between the policy's and the reference's log-probabilities on the sampled tokens. A small coefficient &beta; keeps the model close to where it started, which protects its general abilities.</p>
+</section>
+
+<section class="sec" id="mechanics">
+  <p class="eyebrow">1.2 &middot; LoRA</p>
+  <h2>LoRA mechanics</h2>
+  <p>LoRA (low-rank adaptation) leaves each large weight matrix <strong>W</strong> untouched and learns a small correction beside it. The correction is the product of two thin matrices, <strong>B</strong> and <strong>A</strong>. The layer then computes</p>
+  <div class="formula">h = W&middot;x + (&alpha; / r) &middot; B&middot;(A&middot;x)</div>
+  <p>W is <em>d_out &times; d_in</em> and frozen. A is <em>r &times; d_in</em> and B is <em>d_out &times; r</em>, where the <strong>rank</strong> r is small, often 8 to 64. A starts as small random numbers and B starts at zero, so at step 0 the correction is exactly zero and the model equals the base. The scale <strong>&alpha;/r</strong> multiplies the correction; common choices set &alpha; to one to a few times r. Our run used r = 8 and &alpha; = 32, a scale of 4.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 770 232" style="--minw:680px" role="img" aria-label="Left: the frozen matrix W with the thin matrix B along its right edge and the thin matrix A along its bottom edge, drawn to shape. Right: the input x flows through W and, in parallel, through A then B then a scale of alpha over r, and the two results are added.">
+        <text class="s m" x="60" y="14">weights, drawn to shape</text>
+        <text class="s m" x="400" y="14">forward pass</text>
+        <!-- W -->
+        <text class="s c" x="160" y="32">d_in</text>
+        <rect class="bx k-ref" x="60" y="40" width="200" height="130" rx="3"/>
+        <text class="b c" x="160" y="100" style="font-size:17px">W</text>
+        <text class="s c" x="160" y="120">d_out &times; d_in</text>
+        <text class="s c" x="160" y="138">frozen</text>
+        <text class="s c" transform="translate(46 105) rotate(-90)">d_out</text>
+        <!-- B -->
+        <text class="s c" x="283" y="32">r</text>
+        <rect class="bx k-lora" x="274" y="40" width="18" height="130" rx="2"/>
+        <text class="b" x="302" y="96">B</text>
+        <text class="s" x="302" y="112">d_out &times; r</text>
+        <text class="s t-lora" x="302" y="128">trained</text>
+        <!-- A -->
+        <rect class="bx k-lora" x="60" y="184" width="200" height="18" rx="2"/>
+        <text class="s r" x="50" y="198">r</text>
+        <text class="b" x="274" y="198">A</text>
+        <text class="s" x="290" y="198">r &times; d_in, trained</text>
+        <!-- forward pass -->
+        <circle class="bx k-plain" cx="410" cy="114" r="14"/><text class="b c" x="410" y="119">x</text>
+        <path class="ar" d="M424 114 H444 V64 H466" marker-end="url(#ah)"/>
+        <path class="ar" d="M424 114 H444 V174 H466" marker-end="url(#ah)"/>
+        <rect class="bx k-ref" x="468" y="44" width="116" height="40" rx="5"/><text class="b c" x="526" y="69">W (frozen)</text>
+        <rect class="bx k-lora" x="468" y="154" width="52" height="40" rx="5"/><text class="b c" x="494" y="179">A</text>
+        <path class="ar" d="M520 174 H554" marker-end="url(#ah)"/>
+        <text class="s c" x="538" y="214">r numbers</text>
+        <rect class="bx k-lora" x="556" y="154" width="52" height="40" rx="5"/><text class="b c" x="582" y="179">B</text>
+        <path class="ar" d="M608 174 H630" marker-end="url(#ah)"/>
+        <rect class="bx k-plain" x="632" y="160" width="58" height="28" rx="5"/><text class="m c" x="661" y="179">&times; &alpha;/r</text>
+        <circle class="bx k-plain" cx="724" cy="114" r="14"/>
+        <path class="ar" d="M717 114 H731 M724 107 V121"/>
+        <path class="ar" d="M584 64 H724 V98" marker-end="url(#ah)"/>
+        <path class="ar" d="M690 174 H724 V130" marker-end="url(#ah)"/>
+        <text class="b" x="746" y="119">h</text>
+      </svg>
+    </div>
+    <figcaption><b>Two thin matrices beside a layer.</b> A and B together hold far fewer numbers than W. The input goes through W as usual and, in parallel, through A (which squeezes it to r numbers) and B (which expands it back); the two results are added.</figcaption>
+  </figure>
+
+  <h3>Size grows linearly with rank</h3>
+  <p>An adapted matrix adds <em>r &times; (d_in + d_out)</em> parameters, so the total is r times a constant that depends on which matrices you adapt. As an illustration with made-up dimensions, a 5,120 &times; 5,120 projection holds 26.2 million weights, and a rank-8 adapter on it holds 81,920, about 0.3% as many. For our 27B model, adapting all the linear layers costs about 6.8 million parameters per unit of rank, which is about 13.6 MB per unit of rank in bf16 (2 bytes each).</p>
+
+  <div class="table-wrap">
+    <table class="t">
+      <caption class="small" style="text-align:left;padding:.6rem .8rem 0;caption-side:top">Adapter size for a 27B dense model, all linear layers adapted</caption>
+      <thead><tr><th>Rank r</th><th>Adapter parameters</th><th>File size, bf16</th><th>Share of the 54 GB base</th><th>Training state: weights, grads, Adam</th></tr></thead>
+      <tbody>
+        <tr><td class="num"><strong>8</strong></td><td class="num">&asymp; 54 M</td><td class="num">&asymp; 109 MB</td><td class="num">0.2%</td><td class="num">&asymp; 0.9 GB</td></tr>
+        <tr><td class="num"><strong>16</strong></td><td class="num">&asymp; 109 M</td><td class="num">&asymp; 218 MB</td><td class="num">0.4%</td><td class="num">&asymp; 1.7 GB</td></tr>
+        <tr><td class="num"><strong>32</strong></td><td class="num">&asymp; 218 M</td><td class="num">&asymp; 440 MB</td><td class="num">0.8%</td><td class="num">&asymp; 3.5 GB</td></tr>
+        <tr><td class="num"><strong>64</strong></td><td class="num">&asymp; 436 M</td><td class="num">&asymp; 880 MB</td><td class="num">1.6%</td><td class="num">&asymp; 7 GB</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">The last column assumes about 16 bytes per adapter parameter while training (fp32 weight, gradient and two Adam moments). It is small at rank 8 and starts to matter at rank 64 on a small card.</p>
+
+  <div class="callout">
+    <p class="tag">Target modules</p>
+    <p>The usual choice is every linear layer: the attention projections (q, k, v, o) and the MLP projections (gate, up, down). Adapting only attention is cheaper but, in published comparisons, tends to lag, because the MLP holds most of the weights. If you can only afford one knob, spend it on covering more layers before raising rank.</p>
+  </div>
+</section>
+
+<section class="sec" id="low-rank">
+  <p class="eyebrow">1.3 &middot; Capacity</p>
+  <h2>Why low rank is enough for RL</h2>
+  <p>Supervised fine-tuning (SFT) shows the model the answer. Every token of the target is a label, so one example carries hundreds or thousands of tokens the weights must learn to reproduce. An RL episode returns one number. Whatever that number says about a 3,000-token reply, it says it about the reply as a whole: better than the group, or worse. The information arriving per episode is on the order of a bit.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 720 222" style="--minw:620px" role="img" aria-label="Top: in SFT every token position has its own target label. Bottom: in RL a single reward number is shared across all the tokens of the reply.">
+        <text class="b" x="16" y="58">SFT</text>
+        <g>
+          <rect class="bx k-lora" x="80" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="118" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="156" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="194" y="40" width="34" height="26" rx="3"/>
+          <rect class="bx k-lora" x="232" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="270" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="308" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="346" y="40" width="34" height="26" rx="3"/>
+          <rect class="bx k-lora" x="384" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="422" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="460" y="40" width="34" height="26" rx="3"/><rect class="bx k-lora" x="498" y="40" width="34" height="26" rx="3"/>
+        </g>
+        <text class="s" x="80" y="88">a target token at every position</text>
+        <text class="s" x="548" y="50">hundreds to thousands</text>
+        <text class="s" x="548" y="66">of labels per example</text>
+        <rect class="bx k-reward" x="256" y="104" width="100" height="26" rx="13"/><text class="b c" x="306" y="122">one reward</text>
+        <path class="ar" d="M306 130 V150" marker-end="url(#ah)"/>
+        <text class="b" x="16" y="176">RL</text>
+        <path class="ar" d="M80 160 V152 H532 V160"/>
+        <g>
+          <rect class="bx k-plain" x="80" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="118" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="156" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="194" y="162" width="34" height="26" rx="3"/>
+          <rect class="bx k-plain" x="232" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="270" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="308" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="346" y="162" width="34" height="26" rx="3"/>
+          <rect class="bx k-plain" x="384" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="422" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="460" y="162" width="34" height="26" rx="3"/><rect class="bx k-plain" x="498" y="162" width="34" height="26" rx="3"/>
+        </g>
+        <text class="s" x="80" y="208">the same number is spread over every token of the reply</text>
+        <text class="s" x="548" y="172">one number for</text>
+        <text class="s" x="548" y="188">the whole reply</text>
+      </svg>
+    </div>
+    <figcaption><b>Signal per example.</b> SFT supervises every position. RL gives one reward per episode and the policy gradient spreads it across the sampled tokens. Less information per step means a smaller adapter can hold what is learned.</figcaption>
+  </figure>
+
+  <p>Thinking Machines tested this in <em>LoRA Without Regret</em> (2025). For RL they found LoRA matched full fine-tuning even at very low ranks. For SFT the picture differs. LoRA matches full fine-tuning while the dataset is small enough for the adapter to store, and falls behind once the data carries more information than the adapter has room for. SFT on a large dataset is where a higher rank pays off.</p>
+  <ul>
+    <li><strong>RL on a narrow behaviour:</strong> a low rank such as 8 to 32 is usually plenty. Raising it mostly costs memory and checkpoint size.</li>
+    <li><strong>SFT on lots of data:</strong> start higher, around 64 or more (approximate), and check against the loss on held-out data.</li>
+    <li><strong>Learning rate:</strong> LoRA tends to want a larger learning rate than full fine-tuning, reported to be about ten times larger. That is why 1e-5 to 2e-5 is normal for LoRA RL at this size while full-FT RL often sits near 1e-6 (approximate).</li>
+  </ul>
+</section>
+
+<section class="sec" id="one-gpu">
+  <p class="eyebrow">1.4 &middot; Systems</p>
+  <h2>The one-GPU loop</h2>
+  <p>On one GPU the sampler and the trainer are not two machines. They are two jobs that read the same copy of the frozen base. This arrangement is called <strong>colocating</strong> them. Because the base never changes, sharing it is safe, and the only thing that moves between the jobs is the adapter.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 780 332" style="--minw:700px" role="img" aria-label="One GPU holds a single frozen base. The sampler and the trainer both read it. The LoRA adapter sits between them: the trainer updates it in place and the sampler loads it. The KL reference is the same base with the adapter switched off.">
+        <rect class="k-outline" x="8" y="8" width="764" height="316" rx="12"/>
+        <text class="s m" x="26" y="28">one GPU</text>
+        <rect class="bx k-ref" x="30" y="44" width="290" height="262" rx="8"/>
+        <text class="b c" x="175" y="98" style="font-size:15px">Frozen base weights</text>
+        <text class="s c" x="175" y="118">one copy in memory, read by both jobs</text>
+        <text class="m c" x="175" y="152">bf16 &nbsp;&asymp; 54 GB</text>
+        <text class="m c" x="175" y="172">8-bit &asymp; 27 GB</text>
+        <text class="m c" x="175" y="192">4-bit &asymp; 15 GB (NF4)</text>
+        <text class="b c" x="175" y="240">KL reference</text>
+        <text class="s c" x="175" y="258">= this same block,</text>
+        <text class="s c" x="175" y="274">adapter switched off</text>
+
+        <rect class="bx k-sampler" x="460" y="44" width="290" height="72" rx="8"/>
+        <text class="b c" x="605" y="72">Sampler (e.g. vLLM)</text>
+        <text class="s c" x="605" y="92">writes rollouts; its KV cache grows here</text>
+
+        <rect class="bx k-lora" x="500" y="148" width="210" height="58" rx="8"/>
+        <text class="b c" x="605" y="174">LoRA adapter</text>
+        <text class="s c" x="605" y="192">&asymp; 109 MB at rank 8</text>
+
+        <rect class="bx k-trainer" x="460" y="238" width="290" height="72" rx="8"/>
+        <text class="b c" x="605" y="266">Trainer</text>
+        <text class="s c" x="605" y="286">backward pass; Adam state for the adapter</text>
+
+        <path class="ar" d="M320 80 H458" marker-end="url(#ah)"/><text class="s c" x="389" y="72">reads weights</text>
+        <path class="ar" d="M320 274 H458" marker-end="url(#ah)"/><text class="s c" x="389" y="266">reads weights</text>
+        <text class="s c" x="389" y="294">(adapter off for KL)</text>
+        <path class="ar-l" d="M605 148 V118" marker-end="url(#ah-l)"/><text class="s" x="617" y="138">loaded into sampler</text>
+        <path class="ar-l" d="M605 238 V208" marker-end="url(#ah-l)"/><text class="s" x="617" y="228">updated in place</text>
+      </svg>
+    </div>
+    <figcaption><b>Colocated sampler and trainer.</b> One frozen base serves both. The adapter is the only object that changes hands. The KL reference needs no second model: it is the same base with the adapter turned off.</figcaption>
+  </figure>
+
+  <h3>One step in four phases</h3>
+  <ol>
+    <li><strong>Rollouts.</strong> The sampler runs the base plus the current adapter and writes every episode in the step. It needs the KV cache, which grows with each token of each live episode. In multi-turn tasks it also waits on tools and verifiers.</li>
+    <li><strong>Score and KL.</strong> Verifiers produce rewards. The trainer runs a forward pass over the sampled tokens with the adapter on to get the policy's log-probabilities, then the same pass with the adapter off to get the reference's. No second model is loaded.</li>
+    <li><strong>Train.</strong> The backward pass runs through the whole base to reach the adapter's matrices, but only the adapter gets gradients and optimizer state. The memory this needs is activations, so the sampler's KV cache must be shrunk or released first. Some engines offer a sleep or offload mode for exactly this.</li>
+    <li><strong>Hand off.</strong> The updated adapter, around 100 MB, goes to the sampler. The next step's rollouts come from base plus the new adapter.</li>
+  </ol>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 780 214" style="--minw:680px" role="img" aria-label="Timeline of one RL step on one GPU: rollouts, then scoring and KL, then training, then the adapter hand-off. Below each phase, what the GPU memory holds at that moment.">
+        <text class="s m" x="40" y="30">one RL step</text>
+        <rect class="bx k-sampler" x="40" y="40" width="290" height="54" rx="6"/>
+        <text class="b" x="52" y="63">1  Rollouts</text><text class="s" x="52" y="81">sampler writes every episode</text>
+        <rect class="bx k-ref" x="336" y="40" width="96" height="54" rx="6"/>
+        <text class="b" x="346" y="63">2  Score</text><text class="s" x="346" y="81">+ KL passes</text>
+        <rect class="bx k-trainer" x="438" y="40" width="210" height="54" rx="6"/>
+        <text class="b" x="450" y="63">3  Train the adapter</text><text class="s" x="450" y="81">forward, backward, Adam</text>
+        <rect class="bx k-lora" x="654" y="40" width="86" height="54" rx="6"/>
+        <text class="b" x="664" y="63">4  Hand off</text><text class="s" x="664" y="81">&asymp; 100 MB</text>
+
+        <text class="s m" x="40" y="118">what the GPU holds</text>
+        <rect class="bx k-plain" x="40" y="126" width="290" height="40" rx="4"/><text class="s c" x="185" y="150">base + adapter + a large KV cache</text>
+        <rect class="bx k-plain" x="336" y="126" width="96" height="40" rx="4"/><text class="s c" x="384" y="150">base + logits</text>
+        <rect class="bx k-plain" x="438" y="126" width="210" height="40" rx="4"/><text class="s c" x="543" y="150">base + activations + grads + Adam</text>
+        <rect class="bx k-plain" x="654" y="126" width="86" height="40" rx="4"/><text class="s c" x="697" y="150">swap adapter</text>
+
+        <path class="ar" d="M40 190 H752" marker-end="url(#ah)"/><text class="s" x="40" y="208">time (illustrative widths, not measured; rollouts usually take longest)</text>
+      </svg>
+    </div>
+    <figcaption><b>The GPU alternates.</b> Rollouts and training both want the memory that is left after the base. Rollouts fill it with KV cache, training fills it with activations, so the two phases take turns instead of overlapping.</figcaption>
+  </figure>
+</section>
+
+<section class="sec" id="step-end">
+  <p class="eyebrow">1.5 &middot; Systems</p>
+  <h2>The end of a step: what moves and what stays</h2>
+  <p>After the last optimizer update of an RL step, five things need to be true before the next step starts. Most of them need no work at all, which is the point of the design.</p>
+
+  <dl class="terms">
+    <dt>The trainer</dt><dd>Already holds the new adapter. It trained those exact matrices in place, so nothing is copied back. Its optimizer state, the Adam moments, stays alongside and carries into the next step.</dd>
+    <dt>The sampler</dt><dd>Loads the new adapter in place of the old one. vLLM can load or hot-swap LoRA adapters without reloading the base, so the cost is a file of about 100 MB, not 54 GB. The next step's rollouts come from base plus the new adapter.</dd>
+    <dt>The base</dt><dd>Never changes. The sampler, the trainer and the KL reference all keep reading the same weights.</dd>
+    <dt>The KL reference</dt><dd>Stays the base with the adapter switched off, or a fixed earlier adapter if you want to anchor to a previous stage. It does not move each step. If it did, KL would only measure the last step's movement instead of the total drift.</dd>
+    <dt>The old adapter</dt><dd>Is kept as a checkpoint. Checkpoints are what you evaluate, compare and roll back to.</dd>
+  </dl>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 806 496" style="--minw:720px" role="img" aria-label="Sequence at the end of a step across three lanes: the trainer keeps the updated adapter and its Adam state; the adapter is saved as a checkpoint named prod-v2:step N; the sampler loads it, runs a warm-up call, then samples the next step's rollouts, which are later scored against the KL reference. A bar at the bottom shows the base weights never change.">
+        <text class="s m c" x="218" y="22">Trainer</text>
+        <text class="s m c" x="454" y="22">Checkpoint store</text>
+        <text class="s m c" x="690" y="22">Sampler (vLLM)</text>
+        <rect class="k-lane" x="110" y="32" width="216" height="392" rx="8"/>
+        <rect class="k-lane" x="346" y="32" width="216" height="392" rx="8"/>
+        <rect class="k-lane" x="582" y="32" width="216" height="392" rx="8"/>
+
+        <!-- step markers -->
+        <circle class="bx k-plain" cx="26" cy="82" r="11"/><text class="b c" x="26" y="86">1</text><text class="s" x="44" y="86">keep</text>
+        <circle class="bx k-plain" cx="26" cy="158" r="11"/><text class="b c" x="26" y="162">2</text><text class="s" x="44" y="162">save</text>
+        <circle class="bx k-plain" cx="26" cy="234" r="11"/><text class="b c" x="26" y="238">3</text><text class="s" x="44" y="238">swap</text>
+        <circle class="bx k-plain" cx="26" cy="310" r="11"/><text class="b c" x="26" y="314">4</text><text class="s" x="44" y="314">check</text>
+        <circle class="bx k-plain" cx="26" cy="386" r="11"/><text class="b c" x="26" y="390">5</text><text class="s" x="44" y="390">sample</text>
+
+        <rect class="bx k-lora" x="120" y="56" width="196" height="52" rx="6"/>
+        <text class="b c" x="218" y="78">Adapter already updated</text><text class="s c" x="218" y="96">trained in place; Adam kept</text>
+
+        <rect class="bx k-ref" x="356" y="132" width="196" height="52" rx="6"/>
+        <text class="b c" x="454" y="154">Save prod-v2:step&lt;N&gt;</text><text class="s c" x="454" y="172">kept for evals and rollback</text>
+
+        <rect class="bx k-sampler" x="592" y="208" width="196" height="52" rx="6"/>
+        <text class="b c" x="690" y="230">Load that adapter</text><text class="s c" x="690" y="248">swap in place; base stays</text>
+
+        <rect class="bx k-sampler" x="592" y="284" width="196" height="52" rx="6"/>
+        <text class="b c" x="690" y="306">Warm-up call</text><text class="s c" x="690" y="324">is the checkpoint served?</text>
+
+        <rect class="bx k-sampler" x="592" y="360" width="196" height="52" rx="6"/>
+        <text class="b c" x="690" y="382">Rollouts for step N+1</text><text class="s c" x="690" y="400">base + the new adapter</text>
+
+        <rect class="bx k-ref" x="120" y="360" width="196" height="52" rx="6"/>
+        <text class="b c" x="218" y="382">KL reference</text><text class="s c" x="218" y="400">base, adapter switched off</text>
+
+        <path class="ar" d="M316 82 H336 V158 H354" marker-end="url(#ah)"/>
+        <path class="ar" d="M552 158 H572 V234 H590" marker-end="url(#ah)"/>
+        <path class="ar" d="M690 260 V282" marker-end="url(#ah)"/>
+        <path class="ar" d="M690 336 V358" marker-end="url(#ah)"/>
+        <path class="ar ar-d" d="M590 386 H318" marker-end="url(#ah)"/>
+        <text class="s c" x="454" y="378">next step: KL measured against</text>
+
+        <rect class="bx k-ref" x="16" y="440" width="774" height="44" rx="6"/>
+        <text class="b c" x="403" y="459">The base weights never change</text>
+        <text class="s c" x="403" y="475">trainer, sampler and KL reference all read this same copy</text>
+      </svg>
+    </div>
+    <figcaption><b>What happens between step N and step N+1.</b> The adapter is the only thing that changes. Only the new file travels, from the trainer to a checkpoint and from there into the sampler.</figcaption>
+  </figure>
+
+  <div class="callout run">
+    <p class="tag">Our run</p>
+    <p>Each training step produced a new checkpoint named <code>prod-v2:step&lt;N&gt;</code>, and the next step's rollouts were sampled from that name. Before the rollouts began, a small warm-up call checked that the new checkpoint was actually being served. Checking first is cheap; discovering halfway through a step that rollouts came from the old adapter is not.</p>
+  </div>
+  <div class="callout watch">
+    <p class="tag">Pitfall: rolling back</p>
+    <p>In our earlier run (prod-v1) a rollback reloaded an old adapter with a <em>fresh</em> optimizer, and its first update was unusually large. A plausible reason: Adam rescales each step by running estimates of the gradient's size. With the estimates empty, the first updates are roughly the full learning rate on every parameter, whereas a warmed-up optimizer takes smaller steps on noisy ones. If you may need to roll back, save the optimizer state with the adapter. If you cannot, restart at a lower learning rate and ramp it up.</p>
+  </div>
+</section>
+
+<section class="sec" id="memory">
+  <p class="eyebrow">1.6 &middot; Budgeting</p>
+  <h2>Memory on one GPU for a 27B base</h2>
+  <p>Four things share the card: the base weights, the adapter with its optimizer state, the activations of the training pass, and the KV cache that rollouts need. The base is the biggest fixed cost, and how you store it is your main choice.</p>
+
+  <dl class="terms">
+    <dt>bf16</dt><dd>2 bytes per weight, so &asymp; 54 GB for 27B. No quantization error. The reference choice for quality.</dd>
+    <dt>8-bit</dt><dd>1 byte per weight, &asymp; 27 GB. Saves half the memory. In bitsandbytes the int8 matrix multiplies are often slower than the 4-bit or bf16 paths, so measure before committing.</dd>
+    <dt>4-bit (QLoRA, NF4)</dt><dd>About half a byte per weight, &asymp; 15 GB. The base is stored in NF4, a 4-bit format shaped for normally distributed weights, and each matrix is expanded to bf16 for its multiply. The adapter stays in bf16. This is QLoRA.</dd>
+  </dl>
+
+  <p>The KV cache is the item people underestimate. It stores the keys and values of every token of every live episode. Its size per token is 2 (keys and values) &times; layers &times; KV heads &times; head dimension &times; bytes per number. For a dense model in the 27B to 32B class with grouped-query attention that comes to roughly 0.2 to 0.4 MB per token in bf16 (approximate). At 0.3 MB, one 16,000-token episode holds about 4.8 GB, and six at once hold about 29 GB. Long multi-turn episodes make this the deciding line in the budget. Storing the cache in FP8 halves it, and prefix caching shares the prompt across a group but not the replies that diverge after it. A model that mixes in linear-attention layers keeps a fixed-size state in those layers instead of a growing cache, so its real figure is smaller; our adapter's module names suggest Qwen3.8 is such a model (inferred).</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll"><div class="mwrap">
+      <div class="mruler" aria-hidden="true"><span></span><div class="tr"><span>0</span><span style="left:25%">20 GB</span><span style="left:50%">40 GB</span><span style="left:75%">60 GB</span><span style="left:100%">80 GB</span></div></div>
+
+      <div class="mrow"><div class="lab"><b>80 GB card, bf16 base</b><span>KV room &asymp; 18 GB: about 3 long episodes</span></div>
+        <div class="mbar" style="--gb:80" role="img" aria-label="80 GB card with a bf16 base: 54 GB base, about 1 GB adapter and optimizer, 7 GB activations and overhead, about 18 GB left for KV cache"><span class="sg-base" style="--v:54">base 54</span><span class="sg-lora" style="--v:1"></span><span class="sg-act" style="--v:7">7</span><span class="sg-kv" style="--v:18">KV &asymp;18</span></div></div>
+
+      <div class="mrow"><div class="lab"><b>80 GB card, 8-bit base</b><span>KV room &asymp; 45 GB: about 9 episodes</span></div>
+        <div class="mbar" style="--gb:80" role="img" aria-label="80 GB card with an 8-bit base: 27 GB base, about 1 GB adapter and optimizer, 7 GB activations and overhead, about 45 GB left for KV cache"><span class="sg-base" style="--v:27">base 27</span><span class="sg-lora" style="--v:1"></span><span class="sg-act" style="--v:7">7</span><span class="sg-kv" style="--v:45">KV &asymp;45</span></div></div>
+
+      <div class="mrow"><div class="lab"><b>80 GB card, 4-bit base</b><span>KV room &asymp; 57 GB: about 11 episodes</span></div>
+        <div class="mbar" style="--gb:80" role="img" aria-label="80 GB card with a 4-bit base: 15 GB base, about 1 GB adapter and optimizer, 7 GB activations and overhead, about 57 GB left for KV cache"><span class="sg-base" style="--v:15">base 15</span><span class="sg-lora" style="--v:1"></span><span class="sg-act" style="--v:7">7</span><span class="sg-kv" style="--v:57">KV &asymp;57</span></div></div>
+
+      <div class="mrow"><div class="lab"><b>32 GB card, 4-bit base</b><span>KV room &asymp; 9 GB: about 1 episode</span></div>
+        <div class="mbar" style="--gb:32" role="img" aria-label="32 GB card with a 4-bit base: 15 GB base, about 1 GB adapter and optimizer, 7 GB activations and overhead, about 9 GB left for KV cache"><span class="sg-base" style="--v:15">base 15</span><span class="sg-lora" style="--v:1"></span><span class="sg-act" style="--v:7">7</span><span class="sg-kv" style="--v:9">KV 9</span></div></div>
+
+      <div class="mrow"><div class="lab"><b>24 GB card, 4-bit base</b><span>KV room &asymp; 1 GB: less than one</span></div>
+        <div class="mbar" style="--gb:24" role="img" aria-label="24 GB card with a 4-bit base: 15 GB base, about 1 GB adapter and optimizer, 7 GB activations and overhead, about 1 GB left for KV cache"><span class="sg-base" style="--v:15">base 15</span><span class="sg-lora" style="--v:1"></span><span class="sg-act" style="--v:7">7</span><span class="sg-kv" style="--v:1"></span></div></div>
+
+      <ul class="mkey">
+        <li><i class="sg-base"></i>frozen base</li>
+        <li><i class="sg-lora"></i>adapter + optimizer (rank 8, &asymp; 1 GB)</li>
+        <li><i class="sg-act"></i>activations + CUDA overhead (&asymp; 7 GB)</li>
+        <li><i class="sg-kv"></i>what is left for the KV cache</li>
+      </ul>
+    </div></div>
+    <figcaption><b>Where the memory goes.</b> All bars share one scale in GB, so a smaller card is a shorter bar. Illustrative budgets, not measurements: activations depend on sequence length, micro-batch size and checkpointing, and "episodes" assume 16,000 tokens each at 0.3 MB per token.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>One 80 GB card.</strong> An 8-bit base leaves comfortable room for sampling. A bf16 base fits but is tight: expect a few long episodes at a time, so shorten episodes, lower concurrency or store the KV cache in FP8. A 4-bit base leaves the most room but adds a dequantization step to every multiply.</li>
+    <li><strong>A 24 to 32 GB card.</strong> Only a 4-bit base leaves any room to sample. Keep episodes short and few at once, or the sampler will queue and the step will be slow.</li>
+    <li><strong>Rank.</strong> Raising rank grows the adapter and its optimizer state in line (chapter 1.2). At rank 64 that is about 7 GB, which is noticeable on a small card.</li>
+  </ul>
+
+  <form class="calc" id="calc" aria-labelledby="calc-title" onsubmit="return false">
+    <h4 id="calc-title">Budget calculator</h4>
+    <p class="hint" style="margin:0">Change the inputs to see what is left for the KV cache. The 27B parameter count, the 16 bytes per adapter parameter and every default below are the assumptions used in this chapter.</p>
+    <div class="grid">
+      <label for="c-gpu">GPU memory
+        <select id="c-gpu"><option value="24">24 GB</option><option value="32">32 GB</option><option value="48">48 GB</option><option value="80" selected>80 GB</option><option value="96">96 GB</option></select></label>
+      <label for="c-prec">Base weights
+        <select id="c-prec"><option value="2" selected>bf16 (2 bytes)</option><option value="1">8-bit (1 byte)</option><option value="0.556">4-bit NF4 (&asymp; 0.56 byte)</option></select></label>
+      <label for="c-rank">LoRA rank
+        <select id="c-rank"><option value="8" selected>8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option></select></label>
+      <label for="c-tok">Tokens per episode
+        <input id="c-tok" type="number" inputmode="numeric" min="500" step="500" value="16000"></label>
+      <label for="c-eps">Episodes you want at once
+        <input id="c-eps" type="number" inputmode="numeric" min="1" step="1" value="6"></label>
+      <label for="c-kv">KV cache, MB per token
+        <input id="c-kv" type="number" inputmode="decimal" min="0.05" step="0.05" value="0.3"></label>
+      <label for="c-res">Activations + overhead, GB
+        <input id="c-res" type="number" inputmode="decimal" min="0" step="1" value="7"></label>
+    </div>
+    <div class="out" aria-live="polite">
+      <div class="mbar" id="c-bar" style="--gb:80;--cap:80"></div>
+      <p class="verdict" id="c-verdict"></p>
+      <ul class="nums" id="c-nums"></ul>
+    </div>
+  </form>
+</section>
+
+<section class="sec" id="mismatch">
+  <p class="eyebrow">1.7 &middot; Correctness</p>
+  <h2>Sampler/trainer mismatch</h2>
+  <p>The sampler records the probability of every token it draws. The trainer later recomputes the probability of that same token. In theory they are the same number. In practice they come from two different programs: different kernels, different batching, sometimes different precision, so the numbers drift apart. The importance ratio &rho; = trainer &divide; sampler then starts away from 1 before any learning has happened.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 720 262" style="--minw:640px" role="img" aria-label="Five tokens, each with two bars. For the first two tokens the sampler and trainer probabilities match and the ratio is 1.00. For the third token the sampler says 0.30 and the trainer 0.27, a ratio of 0.90. For the fourth, 0.55 and 0.58, a ratio of 1.05. For the fifth, 0.07 and 0.05, a ratio of 0.71.">
+        <rect class="bx k-sampler" x="60" y="8" width="12" height="12" rx="2"/><text class="s" x="78" y="18">sampler's recorded probability</text>
+        <rect class="bx k-trainer" x="300" y="8" width="12" height="12" rx="2"/><text class="s" x="318" y="18">trainer's recomputed probability</text>
+        <path class="grid" d="M60 56 H690 M60 131 H690"/>
+        <path class="axis" d="M60 206 H690"/>
+        <text class="s r" x="52" y="60">1.0</text><text class="s r" x="52" y="135">0.5</text><text class="s r" x="52" y="210">0</text>
+
+        <rect class="bx k-sampler" x="58" y="60.5" width="38" height="145.5"/><text class="m c" x="77" y="55">0.97</text>
+        <rect class="bx k-trainer" x="104" y="60.5" width="38" height="145.5"/><text class="m c" x="123" y="55">0.97</text>
+
+        <rect class="bx k-sampler" x="188" y="74" width="38" height="132"/><text class="m c" x="207" y="69">0.88</text>
+        <rect class="bx k-trainer" x="234" y="74" width="38" height="132"/><text class="m c" x="253" y="69">0.88</text>
+
+        <rect class="bx k-sampler" x="318" y="161" width="38" height="45"/><text class="m c" x="337" y="156">0.30</text>
+        <rect class="bx k-trainer" x="364" y="165.5" width="38" height="40.5"/><text class="m c" x="383" y="160">0.27</text>
+
+        <rect class="bx k-sampler" x="448" y="123.5" width="38" height="82.5"/><text class="m c" x="467" y="118">0.55</text>
+        <rect class="bx k-trainer" x="494" y="119" width="38" height="87"/><text class="m c" x="513" y="113">0.58</text>
+
+        <rect class="bx k-sampler" x="578" y="195.5" width="38" height="10.5"/><text class="m c" x="597" y="190">0.07</text>
+        <rect class="bx k-trainer" x="624" y="198.5" width="38" height="7.5"/><text class="m c" x="643" y="193">0.05</text>
+
+        <text class="s r" x="52" y="228">token</text>
+        <text class="m c" x="100" y="228">def</text><text class="m c" x="230" y="228">(</text><text class="m c" x="360" y="228">x</text><text class="m c" x="490" y="228">if</text><text class="m c" x="620" y="228">return</text>
+        <text class="s r" x="52" y="250">&rho;</text>
+        <text class="b c" x="100" y="250">1.00</text><text class="b c" x="230" y="250">1.00</text><text class="b c t-bad" x="360" y="250">0.90</text><text class="b c" x="490" y="250">1.05</text><text class="b c t-bad" x="620" y="250">0.71</text>
+      </svg>
+    </div>
+    <figcaption><b>Same token, two probabilities.</b> Illustrative values. With perfect agreement every ratio is 1.00. Real gaps are usually small on likely tokens and large, in relative terms, on unlikely ones. A ratio of 0.71 means the trainer thinks the sampled token was about 30% less likely than the sampler did.</figcaption>
+  </figure>
+
+  <p>Two things go wrong. The ratios become noisy, so clipping fires on tokens for the wrong reason. And the rollouts were drawn from a distribution slightly different from the one being updated, so the gradient is estimated from slightly wrong samples, which adds bias. A small gap is tolerable. A growing one corrupts training quietly, because the run still looks like it is working.</p>
+
+  <h3>How to watch it</h3>
+  <p>Track the correlation between the two probabilities across all tokens in a step. Our dashboard calls it <code>probs_corr</code>. It should sit very close to 1. Pick a gate in advance and stop or slow down when it falls below, instead of finding out from a bad eval.</p>
+  <h3>How to fix it</h3>
+  <ul>
+    <li><strong>Make the two copies the same.</strong> Sample from the same quantized weights you train. If the trainer uses a 4-bit base, load that same 4-bit base in the sampler instead of a bf16 copy.</li>
+    <li><strong>Correct for the gap.</strong> Use the sampler's recorded probabilities as the denominator of the ratio, and use importance-sampling corrections: truncate large weights, or drop tokens whose ratio is far from 1.</li>
+    <li><strong>Use matching kernels.</strong> Where the framework offers deterministic or batch-invariant kernels, they make the two programs compute the same numbers.</li>
+  </ul>
+  <div class="callout">
+    <p class="tag">Ratios also move for a good reason</p>
+    <p>If one RL step takes several optimizer updates on the same batch, later updates see a policy that has already moved, so their ratios differ from 1 even with a perfect sampler. That is expected, and the clip is there to handle it. Mismatch adds to that, which is why the check is on the correlation of the probabilities, not on whether any ratio equals 1.</p>
+  </div>
+  <div class="callout run">
+    <p class="tag">Our run</p>
+    <p>In the earlier run (prod-v1), <code>probs_corr</code> fell to 0.969 to 0.975, below our 0.98 gate, and we cut the learning rate from 2e-5 to 1e-5. In prod-v2 at 1e-5 it stayed between 0.996 and 0.998.</p>
+  </div>
+</section>
+
+<section class="sec" id="monitor">
+  <p class="eyebrow">1.8 &middot; Operating</p>
+  <h2>What to monitor, and the knobs</h2>
+  <p>An RL run can look healthy while learning nothing, or look broken while working. A handful of signals, read together every step, tell the two apart.</p>
+
+  <h3>Keep the pass rate in a learnable band</h3>
+  <p>A group only teaches something if it contains at least one pass and at least one failure. When every rollout in a group gets the same reward, every advantage is zero. If each rollout of a task passes independently with probability p, the chance that a group of six is mixed is 1 &minus; p<sup>6</sup> &minus; (1 &minus; p)<sup>6</sup>.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 560 284" style="--minw:500px" role="img" aria-label="Curve of the chance that a group of six rollouts contains both a pass and a failure, against the per-rollout pass rate. It is 47 percent at a pass rate of 10, 88 percent at 30, 97 percent at 50, and symmetric on the other side. The band from 30 to 70 percent is shaded.">
+        <rect x="203.2" y="32" width="185.6" height="200" fill="var(--lora-t)"/>
+        <path class="grid" d="M64 182 H528 M64 132 H528 M64 82 H528 M64 32 H528"/>
+        <path class="axis" d="M64 232 H528 M64 32 V232"/>
+        <text class="s r" x="56" y="236">0%</text><text class="s r" x="56" y="136">50%</text><text class="s r" x="56" y="36">100%</text>
+        <text class="s c" x="64" y="250">0%</text><text class="s c" x="180" y="250">25%</text><text class="s c" x="296" y="250">50%</text><text class="s c" x="412" y="250">75%</text><text class="s c" x="528" y="250">100%</text>
+        <text class="s c" x="296" y="272">pass rate of a single rollout, p</text>
+        <text class="s c" transform="translate(16 132) rotate(-90)">groups with a mixed result</text>
+        <polyline fill="none" stroke="var(--sampler)" stroke-width="2.4" stroke-linejoin="round" points="64.0,232.0 73.3,209.2 82.6,188.6 91.8,170.0 101.1,153.3 110.4,138.3 119.7,124.9 129.0,112.9 138.2,102.3 147.5,92.8 156.8,84.4 166.1,77.1 175.4,70.6 184.6,64.9 193.9,60.0 203.2,55.7 212.5,52.0 221.8,48.8 231.0,46.2 240.3,44.0 249.6,42.2 258.9,40.7 268.2,39.6 277.4,38.9 286.7,38.4 296.0,38.2 305.3,38.4 314.6,38.9 323.8,39.6 333.1,40.7 342.4,42.2 351.7,44.0 361.0,46.2 370.2,48.8 379.5,52.0 388.8,55.7 398.1,60.0 407.4,64.9 416.6,70.6 425.9,77.1 435.2,84.4 444.5,92.8 453.8,102.3 463.0,112.9 472.3,124.9 481.6,138.3 490.9,153.3 500.2,170.0 509.4,188.6 518.7,209.2 528.0,232.0"/>
+        <circle cx="110.4" cy="138.3" r="4" fill="var(--sampler)"/><text class="b" x="120" y="152">10% &rarr; 47%</text>
+        <circle cx="203.2" cy="55.7" r="4" fill="var(--sampler)"/><text class="b" x="212" y="76">30% &rarr; 88%</text>
+        <circle cx="296" cy="38.2" r="4" fill="var(--sampler)"/><text class="b c" x="296" y="64">50% &rarr; 97%</text>
+        <text class="s c t-lora" x="296" y="224">30 to 70%: the band we kept</text>
+      </svg>
+    </div>
+    <figcaption><b>Why a middle pass rate.</b> This assumes every task is equally hard and rollouts are independent, which is a simplification. Real task sets have a spread of difficulty, so the average pass rate in the batch is only a proxy. It still tells you when the batch is mostly too easy or mostly too hard.</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table class="t">
+      <caption class="small" style="text-align:left;padding:.6rem .8rem 0;caption-side:top">Signals to read every step</caption>
+      <thead><tr><th>Signal</th><th>What it shows</th><th>Healthy</th><th>If it is off</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Pass rate</th><td>Share of rollouts that succeed.</td><td>Inside 30 to 70% (our band).</td><td>High: tasks too easy, many zero-advantage groups. Add harder tasks. Low: too few wins to learn from. Use easier tasks, a larger group or a better starting model.</td></tr>
+        <tr><th scope="row">KL to base</th><td>How far the policy has moved from the starting model.</td><td>Small and slowly rising. Ours: 0.005 to 0.014.</td><td>Rising fast: learning rate too high, or the model is exploiting the reward. Flat at zero for many steps: it is not learning.</td></tr>
+        <tr><th scope="row"><code>probs_corr</code></th><td>Agreement of sampler and trainer probabilities.</td><td>Above your gate (ours 0.98). Ours: 0.996 to 0.998.</td><td>Lower the learning rate, check precision and kernels, sample from the weights you train (chapter 1.7).</td></tr>
+        <tr><th scope="row">Entropy</th><td>How spread out the next-token choices are.</td><td>Falling slowly.</td><td>Falling to near zero fast is collapse: replies become near-identical and groups stop varying. Lower the learning rate, raise group size or temperature, check KL.</td></tr>
+        <tr><th scope="row">Truncated or broken replies</th><td>Replies cut by the length limit or ended early, for example mid-code.</td><td>Low and flat.</td><td>A rising share means more of the batch is unusable. Mask them out of training and re-draw (chapter 1.11).</td></tr>
+        <tr><th scope="row">Training reward vs held-out eval</th><td>Whether reward gains are real gains.</td><td>Both rise.</td><td>Reward up, eval flat: reward hacking or overfitting. Audit the wins (chapter 1.9).</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The knobs</h3>
+  <ul>
+    <li><strong>Learning rate.</strong> Commonly about 1e-5 to 2e-5 for LoRA RL at this size. Lower it first when KL climbs quickly or <code>probs_corr</code> falls.</li>
+    <li><strong>Group size.</strong> Larger groups give a steadier baseline and more mixed groups, at a cost that grows in proportion. Ours was 6.</li>
+    <li><strong>Rollouts per step.</strong> Tasks per step times group size. Ours was 6 &times; 6 = 36. More per step gives a smoother gradient and a slower step.</li>
+    <li><strong>Task mix.</strong> The strongest lever on pass rate. Move it before touching anything else when the pass rate leaves the band.</li>
+    <li><strong>KL coefficient and clip range.</strong> Keep the policy near the reference and limit how far one batch can move it.</li>
+  </ul>
+</section>
+
+<section class="sec" id="reward">
+  <p class="eyebrow">1.9 &middot; Rewards</p>
+  <h2>Reward design and reward hacking</h2>
+  <p>The model optimizes the reward you wrote, not the one you meant. Anything cheaper than doing the task properly will be found eventually. Three habits keep this manageable.</p>
+  <ul>
+    <li><strong>Prefer verifiable rewards.</strong> Something you can run and check: tests pass, an exact match, a valid schema, a checker. It is less noisy than a judge's opinion and harder to argue with.</li>
+    <li><strong>Add rule-based detectors that zero gamed rewards.</strong> Small programs that scan every episode for known tricks, such as editing the tests, hard-coding the expected output, or special-casing the test inputs, and set the reward to zero when one fires. They cost almost nothing and run on every episode.</li>
+    <li><strong>Audit the wins.</strong> Periodically have a person or an LLM read a sample of high-reward episodes and look for tricks you did not anticipate. Read wins, not failures; failures rarely hide anything.</li>
+  </ul>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 792 244" style="--minw:700px" role="img" aria-label="Training path: episode, verifier, gaming detectors that zero the reward, reward, trainer. Audit path: sampled wins, a human or LLM audit, then a fix to the tasks, verifier or detectors, which feeds back into the detectors. A dashed line from the audit to the trainer is crossed out: audit results never reach the reward or the loss.">
+        <text class="s m" x="16" y="26">training path</text>
+        <rect class="bx k-plain" x="16" y="40" width="120" height="56" rx="6"/><text class="b c" x="76" y="64">Episode</text><text class="s c" x="76" y="82">a rollout</text>
+        <rect class="bx k-reward" x="176" y="40" width="120" height="56" rx="6"/><text class="b c" x="236" y="64">Verifier</text><text class="s c" x="236" y="82">tests, checkers</text>
+        <rect class="bx k-bad" x="336" y="40" width="120" height="56" rx="6"/><text class="b c" x="396" y="64">Detectors</text><text class="s c" x="396" y="82">zero it if gamed</text>
+        <rect class="bx k-plain" x="496" y="40" width="120" height="56" rx="6"/><text class="b c" x="556" y="64">Reward</text><text class="s c" x="556" y="82">one number</text>
+        <rect class="bx k-trainer" x="656" y="40" width="120" height="56" rx="6"/><text class="b c" x="716" y="64">Trainer</text><text class="s c" x="716" y="82">policy update</text>
+        <path class="ar" d="M136 68 H174" marker-end="url(#ah)"/><path class="ar" d="M296 68 H334" marker-end="url(#ah)"/>
+        <path class="ar" d="M456 68 H494" marker-end="url(#ah)"/><path class="ar" d="M616 68 H654" marker-end="url(#ah)"/>
+
+        <text class="s m" x="100" y="156">audit path, kept apart from training</text>
+        <rect class="bx k-plain" x="16" y="166" width="120" height="56" rx="6"/><text class="b c" x="76" y="190">Sampled wins</text><text class="s c" x="76" y="208">high-reward episodes</text>
+        <rect class="bx k-ref" x="176" y="166" width="120" height="56" rx="6"/><text class="b c" x="236" y="190">Audit</text><text class="s c" x="236" y="208">human or LLM</text>
+        <rect class="bx k-bad" x="336" y="166" width="120" height="56" rx="6"/><text class="b c" x="396" y="190">Fix the setup</text><text class="s c" x="396" y="208">tasks, detectors</text>
+        <path class="ar" d="M76 96 V164" marker-end="url(#ah)"/><text class="s" x="84" y="124">sample</text>
+        <path class="ar" d="M136 194 H174" marker-end="url(#ah)"/><path class="ar" d="M296 194 H334" marker-end="url(#ah)"/>
+        <path class="ar" d="M396 166 V98" marker-end="url(#ah)"/><text class="s" x="404" y="136">new rule</text>
+
+        <path class="ar ar-d" d="M600 194 H716 V98" marker-end="url(#ah)" style="stroke:var(--bad)"/>
+        <path d="M708 140 l16 16 m0 -16 l-16 16" stroke="var(--bad)" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <text class="s t-bad" x="500" y="198">audit verdicts</text>
+        <text class="s r t-bad" x="776" y="222">never reach the reward or the loss</text>
+      </svg>
+    </div>
+    <figcaption><b>Two paths, deliberately separate.</b> Detectors act inside the reward. Audits act on the setup around it. The crossed-out line is the one you do not build.</figcaption>
+  </figure>
+
+  <div class="callout watch">
+    <p class="tag">Why audits must not feed the reward</p>
+    <p>If an audit verdict becomes a reward signal, the model is trained to avoid being caught. That teaches it to hide the behaviour, not to stop. Use audits to change the tasks, the verifier and the detectors, and nothing else.</p>
+  </div>
+</section>
+
+<section class="sec" id="serverless">
+  <p class="eyebrow">1.10 &middot; Where it runs</p>
+  <h2>Serverless vs local</h2>
+  <p>You can run this loop on a hosted service or on GPUs you control. The difference that matters most for LoRA is who chooses the rank.</p>
+
+  <div class="two">
+    <div>
+      <h4>W&amp;B Serverless RL (ART 0.5.20)</h4>
+      <ul>
+        <li>The service hosts the model and runs the training. You send rollouts and receive checkpoints.</li>
+        <li><strong>Rank and alpha are fixed by the service.</strong> ART's register call sends only the model name, project and base model, so there is no setting for them to travel in.</li>
+        <li>No GPUs to manage, and no memory budget of your own to fit.</li>
+        <li>You pay for inference per step and wait on the service's speed.</li>
+      </ul>
+    </div>
+    <div class="b-sampler">
+      <h4>ART local backend, your GPUs</h4>
+      <ul>
+        <li>You run the sampler and trainer yourself, colocated as in chapter 1.4.</li>
+        <li><strong>You choose the LoRA settings.</strong> ART's <code>TrainableModel(lora_config={...})</code> is honoured by its local backend.</li>
+        <li>You own the memory budget (1.6), the mismatch checks (1.7) and the checkpoint handling (1.5).</li>
+        <li>Your cost is GPU time rather than a per-step bill.</li>
+      </ul>
+    </div>
+  </div>
+  <p>The practical consequence: if you want to test whether a higher rank helps, or which modules to adapt, you need the local backend. On the service you tune everything else, but rank is given.</p>
+</section>
+
+<section class="sec" id="case">
+  <p class="eyebrow">1.11 &middot; Our run</p>
+  <h2>Case study: prod-v2</h2>
+  <p>A 27B model trained with LoRA RL on W&amp;B Serverless RL. These are the settings and what came out.</p>
+
+  <div class="callout run">
+    <p class="tag">Our run &middot; prod-v2 settings</p>
+    <dl class="spec">
+      <div><dt>Model</dt><dd>Qwen3.8-27B</dd></div>
+      <div><dt>Platform</dt><dd>W&amp;B Serverless RL via ART 0.5.20</dd></div>
+      <div><dt>LoRA</dt><dd>rank 8, alpha 32 (scale 4), &asymp; 54 M parameters</dd></div>
+      <div><dt>Checkpoint size</dt><dd>108.9 MB adapter in bf16</dd></div>
+      <div><dt>Loss</dt><dd>CISPO</dd></div>
+      <div><dt>Batch</dt><dd>6 tasks &times; 6 rollouts a step (36 episodes)</dd></div>
+      <div><dt>Learning rate</dt><dd>1e-5</dd></div>
+      <div><dt>probs_corr</dt><dd>0.996 to 0.998</dd></div>
+      <div><dt>KL to base</dt><dd>0.005 to 0.014</dd></div>
+      <div><dt>Cost a step</dt><dd>about $4.4 to $6.4 of inference</dd></div>
+      <div><dt>Time a step</dt><dd>40 to 75 minutes</dd></div>
+      <div><dt>Length</dt><dd>18 steps</dd></div>
+    </dl>
+    <p class="small">The run's own ledger: its 18 steps cost $88.73 of inference in total, including $3.55 of warm-start sampling. At 40 to 75 minutes a step that is roughly 12 to 22 hours of step time (by multiplication).</p>
+  </div>
+
+  <p>One RL step is not one optimizer step. W&amp;B's trainer takes one optimizer step per packed sequence of about 14K tokens, so a single RL step made 30 to 100 optimizer updates. Later updates in a step are therefore slightly off-policy, which the clip is designed to absorb.</p>
+
+  <figure class="fig">
+    <div class="pair"><div class="lab">Held-out selection set<span>checkpoint 11 &rarr; checkpoint 18</span></div>
+      <div class="bars"><div class="hb before"><span class="tk"><i style="--p:31.9"></i></span><span>31.9%<em>checkpoint 11</em></span></div><div class="hb after"><span class="tk"><i style="--p:36.2"></i></span><span>36.2%<em>checkpoint 18</em></span></div></div></div>
+    <div class="pair"><div class="lab">Capability check<span>base &rarr; trained</span></div>
+      <div class="bars"><div class="hb before"><span class="tk"><i style="--p:76"></i></span><span>76%<em>base</em></span></div><div class="hb after"><span class="tk"><i style="--p:76"></i></span><span>76%<em>trained</em></span></div></div></div>
+    <div class="pair"><div class="lab">AA-LCR benchmark<span>base &rarr; trained</span></div>
+      <div class="bars"><div class="hb before"><span class="tk"><i style="--p:79"></i></span><span>79%<em>base</em></span></div><div class="hb after"><span class="tk"><i style="--p:80"></i></span><span>80%<em>trained</em></span></div></div></div>
+    <figcaption><b>Results, on a 0 to 100% scale.</b> The selection set rose 4.3 points. The capability check stayed flat at the base model's 76%, so the training did not cost general ability. Read AA-LCR at 80% against 79% as no loss, not as a gain; a one-point gap is too small to call without knowing how many questions it covers.</figcaption>
+  </figure>
+
+  <div class="callout watch">
+    <p class="tag">Lesson from the earlier run (prod-v1)</p>
+    <p>A growing share of replies ended early, in the middle of code. Adding a format penalty made it worse. What worked better was <strong>masking the broken replies out of training and re-drawing them</strong>: they were dropped from the update, and fresh replies took their place so the batch kept its full count of usable episodes.</p>
+  </div>
+</section>
+
+<section class="part-head full" id="full">
+  <p class="eyebrow">Part 2</p>
+  <h2>Full fine-tuning RL</h2>
+  <p class="lede">Every weight updates. This is how large labs typically build RL post-training, and it changes the shape of the system: a trainer cluster, a separate fleet of samplers, and a weight broadcast between them. What follows describes common architecture patterns. It makes no claim about any specific lab's internals.</p>
+  <ul class="in-part" aria-label="Chapters in Part 2">
+    <li><a href="#full-memory">What the trainer holds</a></li>
+    <li><a href="#arch">Architecture</a></li>
+    <li><a href="#sync">Sync vs async</a></li>
+    <li><a href="#precision">Precision</a></li>
+    <li><a href="#why-full">Why labs do it</a></li>
+  </ul>
+</section>
+
+<section class="sec" id="full-memory">
+  <p class="eyebrow">2.1 &middot; Memory</p>
+  <h2>What a full fine-tuning trainer must hold</h2>
+  <p>With LoRA the trainer carries a frozen base plus a sliver of trainable state. With full fine-tuning every parameter is trained, so every parameter needs a gradient and optimizer state. The standard mixed-precision recipe with Adam keeps, for each parameter:</p>
+  <ul>
+    <li>the weight in bf16 for compute, <strong>2 bytes</strong></li>
+    <li>its gradient in bf16, <strong>2 bytes</strong></li>
+    <li>an fp32 master copy of the weight, <strong>4 bytes</strong>, which is where the small updates actually accumulate</li>
+    <li>Adam's first moment, <strong>4 bytes</strong>, and second moment, <strong>4 bytes</strong></li>
+  </ul>
+  <p>That is about <strong>16 bytes per parameter</strong>. Some stacks keep gradients in fp32 (20 bytes), and some shard or offload parts, but 16 is the usual planning figure. For 27B parameters that is <strong>about 430 GB</strong> before a single activation is stored.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll"><div class="mwrap">
+      <div class="mrow"><div class="lab"><b>Per parameter</b><span>16 bytes in total</span></div>
+        <div class="mbar" style="--gb:16;--cap:16" role="img" aria-label="Bytes per parameter: 2 weight, 2 gradient, 4 fp32 master, 4 Adam first moment, 4 Adam second moment"><span class="sg-w" style="--v:2">w 2</span><span class="sg-g" style="--v:2">g 2</span><span class="sg-m" style="--v:4">fp32 master 4</span><span class="sg-o" style="--v:4">Adam m 4</span><span class="sg-o" style="--v:4">Adam v 4</span></div></div>
+
+      <div class="mruler" style="margin-top:1.4rem" aria-hidden="true"><span></span><div class="tr"><span>0</span><span style="left:18.5185%">80</span><span style="left:37.037%">160</span><span style="left:55.5556%">240</span><span style="left:74.0741%">320</span><span style="left:92.5926%">400 GB</span><span style="left:100%"></span></div></div>
+      <div class="mrow" style="margin-block:.2rem"><div class="lab"><b>LoRA RL trainer, 27B</b><span>&asymp; 55 GB</span></div>
+        <div class="track"><div class="mbar" style="--gb:55;--cap:432" role="img" aria-label="LoRA trainer for 27B: 54 GB frozen bf16 base plus about 1 GB adapter and optimizer"><span class="sg-base" style="--v:54">54</span><span class="sg-lora" style="--v:1"></span></div></div></div>
+      <div class="mrow" style="margin-block:.2rem"><div class="lab"><b>Full FT trainer, 27B</b><span>432 GB, before activations</span></div>
+        <div class="track"><div class="mbar" style="--gb:432;--cap:432" role="img" aria-label="Full fine-tuning trainer for 27B: 54 GB weights, 54 GB gradients, 108 GB fp32 master copy, 108 GB Adam first moment, 108 GB Adam second moment"><span class="sg-w" style="--v:54">w 54</span><span class="sg-g" style="--v:54">g 54</span><span class="sg-m" style="--v:108">fp32 master 108</span><span class="sg-o" style="--v:108">Adam m 108</span><span class="sg-o" style="--v:108">Adam v 108</span></div></div></div>
+      <p class="small" style="margin:.9rem 0 0">Each vertical line marks another 80 GB card.</p>
+    </div></div>
+    <figcaption><b>Memory for the trainer's state, 27B model.</b> The top bar is the 16-byte budget for one parameter. The lower bars apply it to 27 billion parameters on one scale: the LoRA trainer fits on one card, and the full trainer spans more than five.</figcaption>
+  </figure>
+
+  <p>Sharding is what makes this workable. FSDP and ZeRO split the parameters, gradients and optimizer state across data-parallel GPUs and gather what each layer needs just in time. Spread over 8 &times; 80 GB, 432 GB is 54 GB per card, which leaves about 26 GB each for activations and communication buffers. For a model with 400 billion parameters the same arithmetic gives 6.4 TB of state, which is why frontier training is a cluster problem.</p>
+  <p>Two more costs sit beside the trainer. The sampler fleet needs its own copy of the weights, 54 GB in bf16 at 27B, plus KV cache. And the KL term needs a reference model, either a frozen second copy (another 54 GB in bf16) or log-probabilities computed ahead of time.</p>
+</section>
+
+<section class="sec" id="arch">
+  <p class="eyebrow">2.2 &middot; Systems</p>
+  <h2>Architecture: trainer cluster, inference fleet, reward system</h2>
+  <p>At this scale the two jobs that shared a GPU in Part 1 become separate systems, each sized for its own bottleneck. Generation is memory-bandwidth bound and wants many replicas of an inference engine such as vLLM or SGLang. Training is compute and communication bound and wants a tightly connected cluster.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 860 440" style="--minw:780px" role="img" aria-label="Architecture of full fine-tuning RL: tasks go to an inference fleet of vLLM or SGLang replicas, whose episodes go to a reward system of verifiers, sandboxes and reward models; scored rollouts land in a buffer that feeds a trainer cluster using FSDP, ZeRO or Megatron, with a frozen reference model beside it. After each update the trainer broadcasts new weights back to the inference fleet.">
+        <rect class="bx k-plain" x="16" y="64" width="96" height="56" rx="6"/><text class="b c" x="64" y="88">Tasks</text><text class="s c" x="64" y="106">prompts, envs</text>
+
+        <rect class="bx k-sampler" x="170" y="24" width="330" height="148" rx="10"/>
+        <text class="b" x="186" y="48">Inference fleet</text><text class="s" x="186" y="64">vLLM or SGLang, many replicas</text>
+        <rect class="bx k-plain" x="186" y="82" width="88" height="70" rx="6"/><text class="b c" x="230" y="112">replica</text><text class="s c" x="230" y="130">TP inside</text>
+        <rect class="bx k-plain" x="284" y="82" width="88" height="70" rx="6"/><text class="b c" x="328" y="112">replica</text><text class="s c" x="328" y="130">TP inside</text>
+        <rect class="bx k-plain" x="382" y="82" width="88" height="70" rx="6"/><text class="b c" x="426" y="112">replica</text><text class="s c" x="426" y="130">TP inside</text>
+
+        <rect class="bx k-reward" x="580" y="24" width="264" height="148" rx="10"/>
+        <text class="b" x="596" y="48">Reward system</text>
+        <text class="s" x="596" y="74">verifiers and unit tests</text>
+        <text class="s" x="596" y="94">code and tool sandboxes</text>
+        <text class="s" x="596" y="114">reward models, LLM judges</text>
+
+        <path class="ar" d="M112 92 H168" marker-end="url(#ah)"/><text class="s c" x="140" y="84">prompts</text>
+        <path class="ar" d="M500 98 H578" marker-end="url(#ah)"/><text class="s c" x="539" y="90">episodes</text>
+
+        <rect class="bx k-plain" x="580" y="214" width="264" height="52" rx="6"/>
+        <text class="b c" x="712" y="236">Rollout buffer</text><text class="s c" x="712" y="254">tokens, sampler logprobs, rewards</text>
+        <path class="ar" d="M712 172 V212" marker-end="url(#ah)"/><text class="s" x="722" y="196">scored rollouts</text>
+
+        <rect class="bx k-trainer" x="170" y="312" width="674" height="112" rx="10"/>
+        <text class="b" x="186" y="336">Trainer cluster</text><text class="s" x="186" y="352">FSDP / ZeRO or Megatron: data, tensor and pipeline parallel</text>
+        <rect class="bx k-plain" x="186" y="364" width="270" height="48" rx="6"/><text class="b c" x="321" y="384">Policy being trained</text><text class="s c" x="321" y="401">weights, grads, fp32 master, Adam</text>
+        <rect class="bx k-ref" x="540" y="364" width="190" height="48" rx="6"/><text class="b c" x="635" y="384">Reference model</text><text class="s c" x="635" y="401">frozen, supplies KL</text>
+        <path class="ar" d="M538 388 H458" marker-end="url(#ah)"/><text class="s c" x="498" y="380">ref logprobs</text>
+        <path class="ar" d="M712 266 V310" marker-end="url(#ah)"/><text class="s" x="722" y="292">batches</text>
+
+        <path class="ar-f" d="M300 312 V174" marker-end="url(#ah-f)"/>
+        <text class="b t-full" x="312" y="232">new weights</text>
+        <text class="s" x="312" y="250">NCCL broadcast after each update</text>
+        <text class="s" x="312" y="268">&asymp; 54 GB in bf16 at 27B</text>
+      </svg>
+    </div>
+    <figcaption><b>Two clusters and a pipe between them.</b> Rollouts flow right and down to the trainer. The heavy arrow is the new weights flowing back up to every sampler, and it is the cost that Part 1's 109 MB adapter avoids.</figcaption>
+  </figure>
+
+  <dl class="terms">
+    <dt>Data parallel + sharding</dt><dd>Each group of GPUs processes different sequences. FSDP and ZeRO also shard parameters, gradients and optimizer state across that group.</dd>
+    <dt>Tensor parallel (TP)</dt><dd>One weight matrix is split across GPUs, which exchange partial results inside every layer. It needs the fastest links, so it usually stays within a node.</dd>
+    <dt>Pipeline parallel (PP)</dt><dd>Consecutive layers sit on different GPUs and micro-batches flow through them like an assembly line.</dd>
+    <dt>Megatron-style</dt><dd>A trainer that combines data, tensor and pipeline parallelism (and expert parallelism for mixture-of-experts models) in one layout.</dd>
+    <dt>Weight sync</dt><dd>After an update the trainer sends the new weights to every sampler replica, usually with NCCL collectives over the cluster network. The trainer's sharded layout differs from each sampler's, so the weights are regathered and re-split on the way.</dd>
+    <dt>Reference model</dt><dd>A separate frozen copy for the KL term, kept on its own GPUs or replaced by precomputed log-probabilities.</dd>
+  </dl>
+</section>
+
+<section class="sec" id="sync">
+  <p class="eyebrow">2.3 &middot; Scheduling</p>
+  <h2>Synchronous vs asynchronous RL</h2>
+  <p>Rollouts take uneven time. Most episodes are short, and a few run very long. In <strong>synchronous</strong> RL the whole fleet generates with the current weights, waits for the last episode, then the trainer runs while the samplers sit idle, then the new weights go out. Every rollout is on-policy, which is clean, but the slowest episode sets the pace and both halves of the cluster take turns being idle.</p>
+  <p>In <strong>asynchronous</strong> RL the samplers never stop. They keep generating while the trainer consumes whatever is ready, and the new weights reach them between episodes. A rollout may then have been drawn from weights a version or two old. That is off-policy data, and it is corrected with importance weights in the style of IMPALA's V-trace: weight each token by the ratio of the current policy to the policy that generated it, and truncate large weights to keep the variance bounded. Systems also cap staleness, dropping or down-weighting rollouts that are too old.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 780 332" style="--minw:700px" role="img" aria-label="Two timelines. Synchronous: three samplers finish at different times and wait, idle, for the slowest; then the trainer runs while all samplers are idle; then new weights go out and the next round starts. Asynchronous: samplers run continuously and pick up new weight versions between episodes, while the trainer takes batches as they arrive.">
+        <text class="b" x="16" y="16">Synchronous</text>
+        <text class="s r" x="82" y="42">sampler 1</text><text class="s r" x="82" y="66">sampler 2</text><text class="s r" x="82" y="90">sampler 3</text><text class="s r" x="82" y="118">trainer</text>
+        <rect class="bx k-sampler" x="90" y="28" width="300" height="18"/><rect class="k-idle" fill="url(#hatch)" x="390" y="28" width="90" height="18"/><rect class="bx k-sampler" x="480" y="28" width="260" height="18"/>
+        <rect class="bx k-sampler" x="90" y="52" width="220" height="18"/><rect class="k-idle" fill="url(#hatch)" x="310" y="52" width="170" height="18"/><rect class="bx k-sampler" x="480" y="52" width="200" height="18"/><rect class="k-idle" fill="url(#hatch)" x="680" y="52" width="60" height="18"/>
+        <rect class="bx k-sampler" x="90" y="76" width="150" height="18"/><rect class="k-idle" fill="url(#hatch)" x="240" y="76" width="240" height="18"/><rect class="bx k-sampler" x="480" y="76" width="110" height="18"/><rect class="k-idle" fill="url(#hatch)" x="590" y="76" width="150" height="18"/>
+        <rect class="k-idle" fill="url(#hatch)" x="90" y="104" width="300" height="18"/><rect class="bx k-trainer" x="390" y="104" width="90" height="18"/><text class="s c" x="435" y="117">train</text><rect class="k-idle" fill="url(#hatch)" x="480" y="104" width="260" height="18"/>
+        <path class="ar ar-d" d="M480 24 V126"/>
+        <text class="s c" x="480" y="142">new weights go out</text>
+        <text class="s" x="90" y="142">waiting for the slowest rollout</text>
+
+        <text class="b" x="16" y="186">Asynchronous</text>
+        <text class="s r" x="82" y="212">sampler 1</text><text class="s r" x="82" y="236">sampler 2</text><text class="s r" x="82" y="260">sampler 3</text><text class="s r" x="82" y="288">trainer</text>
+        <rect class="bx k-sampler" x="90" y="198" width="210" height="18"/><rect class="bx k-sampler" x="300" y="198" width="220" height="18"/><rect class="bx k-sampler" x="520" y="198" width="220" height="18"/>
+        <text class="m" x="96" y="211">v0</text><text class="m" x="306" y="211">v1</text><text class="m" x="526" y="211">v2</text>
+        <rect class="bx k-sampler" x="90" y="222" width="160" height="18"/><rect class="bx k-sampler" x="250" y="222" width="220" height="18"/><rect class="bx k-sampler" x="470" y="222" width="270" height="18"/>
+        <text class="m" x="96" y="235">v0</text><text class="m" x="256" y="235">v1</text><text class="m" x="476" y="235">v2</text>
+        <rect class="bx k-sampler" x="90" y="246" width="270" height="18"/><rect class="bx k-sampler" x="360" y="246" width="200" height="18"/><rect class="bx k-sampler" x="560" y="246" width="180" height="18"/>
+        <text class="m" x="96" y="259">v0</text><text class="m" x="366" y="259">v1</text><text class="m" x="566" y="259">v2</text>
+        <rect class="bx k-trainer" x="150" y="274" width="100" height="18"/><text class="m c" x="200" y="287">batch 1</text>
+        <rect class="bx k-trainer" x="290" y="274" width="100" height="18"/><text class="m c" x="340" y="287">batch 2</text>
+        <rect class="bx k-trainer" x="430" y="274" width="100" height="18"/><text class="m c" x="480" y="287">batch 3</text>
+        <rect class="bx k-trainer" x="570" y="274" width="100" height="18"/><text class="m c" x="620" y="287">batch 4</text>
+        <text class="s" x="90" y="316">Samplers never wait. Each v-label is the weight version that wrote the episode, so data can be a version or two behind the trainer.</text>
+      </svg>
+    </div>
+    <figcaption><b>Where the idle time goes.</b> Hatched blocks are idle GPUs. Synchronous RL idles samplers behind the slowest rollout and then idles them again during training. Asynchronous RL removes both gaps and pays for it with slightly stale data that needs importance-weight correction.</figcaption>
+  </figure>
+
+  <p>Part 1's one-GPU loop is synchronous by construction: the same GPU cannot sample and train at once. Asynchrony is a luxury of having separate sampler and trainer hardware.</p>
+</section>
+
+<section class="sec" id="precision">
+  <p class="eyebrow">2.4 &middot; Numerics</p>
+  <h2>Precision: what can be small and what cannot</h2>
+  <p>Memory and speed both improve when numbers take fewer bits. The question is which numbers can afford it.</p>
+  <ul>
+    <li><strong>BF16 compute, FP32 master weights.</strong> The matrix multiplies run in bf16. The optimizer updates an fp32 copy and rounds it back to bf16 for the next forward pass. This is the 16-byte recipe from 2.1.</li>
+    <li><strong>FP8 matmuls.</strong> Running the multiplies in 8-bit floating point roughly doubles throughput on hardware that supports it. DeepSeek-V3 trained with FP8 mixed precision, keeping the master weights and optimizer state at higher precision.</li>
+    <li><strong>8-bit optimizers.</strong> Quantizing Adam's two moments from 4 bytes to 1 byte each cuts the optimizer state about fourfold. At 27B that is 216 GB of moments down to about 54 GB.</li>
+  </ul>
+
+  <h3>Why the weights themselves cannot live in 8 bits</h3>
+  <p>A weight update is tiny. With Adam, the change to a weight in one step is about the size of the learning rate, so around 1e-5. Floating-point numbers have gaps between neighbours, and when an update is smaller than half the gap, rounding returns the old value and the update vanishes. 8-bit values have large gaps. Even bf16 loses updates this small, which is why the fp32 master copy exists.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 720 244" style="--minw:660px" role="img" aria-label="Log-scale chart. A typical update of about 1e-5 sits to the right of the FP32 spacing of 6e-8 near a weight of 0.5, so FP32 keeps it. It sits well to the left of the BF16 spacing of about 4e-3 and the FP8 E4M3 spacing of about 6e-2, so both round the update away.">
+        <path d="M314.3 24 V196" stroke="var(--full)" stroke-width="2" stroke-dasharray="5 4" fill="none"/>
+        <!-- update -->
+        <circle cx="314.3" cy="44" r="7" fill="var(--full)"/>
+        <text class="b halo" x="328" y="48">typical update &asymp; learning rate, 1e-5</text>
+        <!-- FP32 -->
+        <path d="M40 84 H111.3" stroke="var(--rule)" stroke-width="3" fill="none"/>
+        <circle cx="111.3" cy="84" r="7" fill="var(--reward)"/>
+        <text class="s halo" x="124" y="88"><tspan class="b" style="fill:var(--ink)">FP32</tspan> spacing &asymp; 6e-8: the update survives</text>
+        <!-- BF16 -->
+        <path d="M40 124 H551.2" stroke="var(--rule)" stroke-width="3" fill="none"/>
+        <circle cx="551.2" cy="124" r="7" fill="var(--bad)"/>
+        <text class="s r halo" x="539" y="114"><tspan class="b" style="fill:var(--ink)">BF16</tspan> spacing &asymp; 4e-3: the update rounds away</text>
+        <!-- FP8 -->
+        <path d="M40 164 H661.4" stroke="var(--rule)" stroke-width="3" fill="none"/>
+        <circle cx="661.4" cy="164" r="7" fill="var(--bad)"/>
+        <text class="s r halo" x="649" y="154"><tspan class="b" style="fill:var(--ink)">FP8 E4M3</tspan> spacing &asymp; 6e-2: the update rounds away</text>
+        <!-- axis -->
+        <path class="axis" d="M40 196 H680"/>
+        <path class="axis" d="M40 196 v5 M131.4 196 v5 M222.9 196 v5 M314.3 196 v5 M405.7 196 v5 M497.1 196 v5 M588.6 196 v5 M680 196 v5"/>
+        <text class="m c" x="40" y="217">1e-8</text><text class="m c" x="131.4" y="217">1e-7</text><text class="m c" x="222.9" y="217">1e-6</text><text class="m c" x="314.3" y="217">1e-5</text>
+        <text class="m c" x="405.7" y="217">1e-4</text><text class="m c" x="497.1" y="217">1e-3</text><text class="m c" x="588.6" y="217">1e-2</text><text class="m c" x="680" y="217">1e-1</text>
+        <text class="s c" x="360" y="237">size of a number (log scale)</text>
+      </svg>
+    </div>
+    <figcaption><b>Spacing between neighbouring numbers near a weight of 0.5, against the size of one update.</b> A dot to the right of the dashed line means the gap is larger than the update, so rounding erases it. The spacing values come from the number of mantissa bits: 23 for FP32, 7 for BF16, 3 for FP8 E4M3.</figcaption>
+  </figure>
+
+  <h3>Precision and the sampler/trainer mismatch</h3>
+  <p>The same issue from chapter 1.7 gets bigger at scale, because the sampler and trainer are different systems running different kernels, and the sampler is tempting to make cheaper. There are two broad answers.</p>
+  <div class="two">
+    <div class="b-ref">
+      <h4>Match the numbers</h4>
+      <ul>
+        <li>Use batch-invariant or deterministic kernels, so the result for a token does not depend on how the batch was packed.</li>
+        <li>Or run the sampler at the same precision as the trainer.</li>
+        <li>Mismatch stays small. You pay in sampling speed.</li>
+      </ul>
+    </div>
+    <div class="b-sampler">
+      <h4>Cheaper sampler, then correct</h4>
+      <ul>
+        <li>Run the sampler in FP8 or another reduced precision, and fix the gap with importance-sampling corrections.</li>
+        <li>This is the approach Modal's 2026 post on mixed-precision samplers examines.</li>
+        <li>Sampling dominates the bill, so this saves real money. You pay in a larger gap to correct.</li>
+      </ul>
+    </div>
+  </div>
+  <p>The motivation is cost. That write-up reports that sampling takes about 80 to 85% of the GPU time in RL for Microsoft's MAI-Thinking-1. When generation is that much of the bill, making the sampler cheaper matters more than making the trainer faster.</p>
+</section>
+
+<section class="sec" id="why-full">
+  <p class="eyebrow">2.5 &middot; Motivation</p>
+  <h2>Why labs do full fine-tuning anyway</h2>
+  <p>Given its cost, the reason to choose it is not obvious from the memory chart. Three reasons usually decide it.</p>
+  <ul>
+    <li><strong>Capacity for large behaviour changes.</strong> When post-training teaches many skills at once, from a large and varied pool of tasks, a rank-limited adapter can run out of room. Full fine-tuning has no such ceiling.</li>
+    <li><strong>No adapter limits.</strong> No choice of rank, no choice of target modules, no learning-rate rule that differs from the rest of training. The same recipe used for pre-training and SFT carries over.</li>
+    <li><strong>The weights are the product.</strong> A lab that ships a model ships its weights. A fully trained checkpoint is the artifact itself, with no base-plus-adapter pairing to manage in serving.</li>
+  </ul>
+  <p>The price is everything in this part: the 16 bytes per parameter, the trainer cluster, the sampler fleet, the weight broadcast and the numerics work. That price is why LoRA is the sensible starting point for anyone without a cluster.</p>
+</section>
+
+<section class="sec" id="compare">
+  <p class="eyebrow">Comparison</p>
+  <h2>LoRA RL against full fine-tuning RL</h2>
+  <p>Figures use a 27B dense model. A value marked &asymp; is typical or computed, not measured.</p>
+
+  <div class="table-wrap">
+    <table class="t" style="min-width:700px">
+      <thead><tr><th></th><th class="h-lora">LoRA RL</th><th class="h-full">Full-FT RL</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">What updates</th><td>Two thin matrices (B and A) beside each frozen layer.</td><td>Every weight in the model.</td></tr>
+        <tr><th scope="row">Trainer memory</th><td>The frozen base (54 GB in bf16, 27 GB in 8-bit, 15 GB in 4-bit) plus &asymp; 1 GB for a rank-8 adapter and its optimizer.</td><td>About 16 bytes a parameter: &asymp; 430 GB before activations.</td></tr>
+        <tr><th scope="row">GPUs</th><td>One 24 to 80 GB card, or a hosted service.</td><td>Several 80 GB cards at 27B (8 gives 54 GB each when sharded); clusters for larger models.</td></tr>
+        <tr><th scope="row">Checkpoint size</th><td>&asymp; 109 MB at rank 8, 440 MB at rank 32, 880 MB at rank 64.</td><td>A full model copy: &asymp; 54 GB in bf16. A resumable checkpoint with optimizer state is about eight times that.</td></tr>
+        <tr><th scope="row">Serving</th><td>Many adapters share one base; each request can pick its adapter.</td><td>One full model copy per variant, deployed on its own.</td></tr>
+        <tr><th scope="row">Sampler sync cost</th><td>None when colocated; about 100 MB when the adapter is handed to a separate sampler.</td><td>The full weights (&asymp; 54 GB at 27B) broadcast to every sampler replica after each update, about 500 times the bytes of a rank-8 adapter.</td></tr>
+        <tr><th scope="row">KL reference</th><td>The same base with the adapter off. No extra memory.</td><td>A second frozen copy (&asymp; 54 GB in bf16) or precomputed log-probabilities.</td></tr>
+        <tr><th scope="row">Capacity</th><td>Limited by rank. Enough for RL on a narrow behaviour; research found it matches full fine-tuning even at very low ranks. Weaker for SFT on large data.</td><td>No adapter limit. Room for large, broad behaviour changes.</td></tr>
+        <tr><th scope="row">Learning rate</th><td>About 1e-5 to 2e-5 at this size (ours: 1e-5).</td><td>Often about ten times lower, near 1e-6 (approximate).</td></tr>
+        <tr><th scope="row">Hard parts</th><td>Fitting the KV cache beside the base, and keeping sampler and trainer probabilities in agreement.</td><td>Distributed training, weight sync, asynchronous staleness, numerics and cost.</td></tr>
+        <tr><th scope="row">Typical users</th><td>Individuals and small teams, one-GPU experiments, anyone using a serverless service.</td><td>Labs and companies with clusters, whose product is the model weights.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="sec" id="decide">
+  <p class="eyebrow">Decision guide</p>
+  <h2>Which route to take</h2>
+  <p>Start from what you have, not from what is fashionable. Three questions cover most cases.</p>
+
+  <figure class="fig wide">
+    <p class="swipe">Swipe sideways to see the whole figure.</p>
+    <div class="scroll">
+      <svg viewBox="0 0 760 424" style="--minw:680px" role="img" aria-label="Decision flowchart. Question 1: a multi-GPU cluster and a need for a large behaviour change? Yes: full fine-tuning RL. No: question 2, do you want to avoid running GPUs yourself? Yes: serverless LoRA RL with the service's fixed rank. No: question 3, one GPU? With 80 GB, LoRA on an 8-bit base; with 24 to 32 GB, QLoRA on a 4-bit base.">
+        <rect class="bx k-plain" x="16" y="20" width="280" height="70" rx="8"/>
+        <text class="b c" x="156" y="49">A multi-GPU cluster, and</text><text class="b c" x="156" y="68">a large behaviour change to make?</text>
+        <rect class="bx k-plain" x="16" y="150" width="280" height="70" rx="8"/>
+        <text class="b c" x="156" y="179">Do you want to avoid</text><text class="b c" x="156" y="198">running GPUs yourself?</text>
+        <rect class="bx k-plain" x="16" y="280" width="280" height="70" rx="8"/>
+        <text class="b c" x="156" y="309">You have one GPU.</text><text class="b c" x="156" y="328">How much memory?</text>
+
+        <rect class="bx k-trainer" x="420" y="20" width="324" height="70" rx="8"/>
+        <text class="b c" x="582" y="49" style="font-size:15px">Full fine-tuning RL</text><text class="s c" x="582" y="69">trainer cluster, sampler fleet, weight broadcast</text>
+        <rect class="bx k-lora" x="420" y="150" width="324" height="70" rx="8"/>
+        <text class="b c" x="582" y="179" style="font-size:15px">Serverless LoRA RL</text><text class="s c" x="582" y="199">use the service's fixed rank and alpha</text>
+        <rect class="bx k-lora" x="420" y="264" width="324" height="58" rx="8"/>
+        <text class="b c" x="582" y="289" style="font-size:15px">LoRA on an 8-bit base</text><text class="s c" x="582" y="306">bf16 fits too, but tightly (chapter 1.6)</text>
+        <rect class="bx k-lora" x="420" y="344" width="324" height="58" rx="8"/>
+        <text class="b c" x="582" y="369" style="font-size:15px">QLoRA: 4-bit NF4 base + LoRA</text><text class="s c" x="582" y="386">keep episodes short and few</text>
+
+        <path class="ar" d="M296 55 H418" marker-end="url(#ah)"/><text class="b c" x="357" y="47">yes</text>
+        <path class="ar" d="M156 90 V148" marker-end="url(#ah)"/><text class="b" x="166" y="124">no</text>
+        <path class="ar" d="M296 185 H418" marker-end="url(#ah)"/><text class="b c" x="357" y="177">yes</text>
+        <path class="ar" d="M156 220 V278" marker-end="url(#ah)"/><text class="b" x="166" y="254">no</text>
+        <path class="ar" d="M296 315 H336 V293 H418" marker-end="url(#ah)"/><text class="b" x="342" y="287">80 GB</text>
+        <path class="ar" d="M296 315 H336 V373 H418" marker-end="url(#ah)"/><text class="b" x="342" y="367">24-32 GB</text>
+      </svg>
+    </div>
+    <figcaption><b>Three questions.</b> Cluster and a big change: full fine-tuning. No wish to run hardware: serverless LoRA. Otherwise one GPU, and its memory chooses the base precision.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>If rank looks like the limit,</strong> raise it first. It costs a few hundred megabytes, not a cluster. Leave LoRA only when a higher rank still does not capture what the task needs.</li>
+    <li><strong>If you are unsure,</strong> start with LoRA. It is cheap to try, it exposes the same RL problems (reward design, mismatch, collapse) that full fine-tuning has, and what you learn carries over.</li>
+    <li><strong>If you run on a service,</strong> remember that rank and alpha are not yours to set. A rank experiment needs your own GPUs.</li>
+  </ul>
+</section>
+
+<section class="sec" id="glossary">
+  <p class="eyebrow">Reference</p>
+  <h2>Glossary</h2>
+  <dl class="gloss">
+    <dt>Rollout (episode)</dt><dd>One complete attempt by the policy at a task, ending in a reward. Multi-turn tasks include the tool calls and observations in the middle.</dd>
+    <dt>Group</dt><dd>The set of rollouts drawn for the same task in one step. Their rewards are compared with each other.</dd>
+    <dt>Advantage</dt><dd>How much better a rollout did than its group. In GRPO-style methods it is the reward minus the group mean, divided by the group's standard deviation. Positive advantages raise token probabilities, negative ones lower them.</dd>
+    <dt>KL (to the reference)</dt><dd>The average gap between the policy's and the reference model's log-probabilities on the sampled tokens. It measures how far the policy has drifted and, as a penalty, limits the drift.</dd>
+    <dt>CISPO / PPO clip</dt><dd>Two ways to limit the importance ratio. PPO's clip stops the gradient for tokens whose ratio has left a band such as 1 &plusmn; 0.2. CISPO clips the importance weight itself, as a constant, so every token keeps a gradient.</dd>
+    <dt>Importance ratio</dt><dd>A token's probability under the policy being trained divided by its probability under the policy that sampled it. It is 1 when the two agree.</dd>
+    <dt>LoRA rank / alpha</dt><dd>Rank r is the inner width of the two thin matrices, and sets the adapter's size and capacity. Alpha sets the scale &alpha;/r applied to the adapter's output.</dd>
+    <dt>QLoRA</dt><dd>LoRA on top of a base stored in 4-bit NF4. The base is expanded to bf16 inside each multiply, and the adapter is trained in bf16.</dd>
+    <dt>Colocate</dt><dd>Run the sampler and the trainer on the same GPUs, sharing weights and taking turns. The alternative is separate sampler and trainer hardware.</dd>
+    <dt><code>probs_corr</code></dt><dd>The correlation between the sampler's recorded token probabilities and the trainer's recomputed ones. Near 1 means the two copies agree.</dd>
+    <dt>Off-policy</dt><dd>Learning from data produced by a different policy than the one being updated, for example stale asynchronous rollouts or a batch reused for several optimizer steps. Importance weights correct for it.</dd>
+    <dt>KV cache</dt><dd>The stored keys and values of every token already processed, kept so the model does not recompute them. It grows with each live episode's length.</dd>
+  </dl>
+
+  <h3>Named in this book</h3>
+  <ul class="refs">
+    <li><em>LoRA Without Regret</em>, Thinking Machines, 2025.</li>
+    <li>LoRA (Hu et al., 2021) and QLoRA (Dettmers et al., 2023).</li>
+    <li>GRPO, introduced in the DeepSeekMath work; CISPO, introduced with MiniMax-M1; PPO (Schulman et al., 2017).</li>
+    <li>ZeRO (Rajbhandari et al., 2019), the idea behind sharded data parallelism such as FSDP; Megatron-LM for tensor and pipeline parallelism.</li>
+    <li>IMPALA and V-trace (Espeholt et al., 2018), for off-policy correction.</li>
+    <li>The DeepSeek-V3 technical report, for FP8 mixed-precision training.</li>
+    <li>Modal's 2026 post on mixed-precision samplers, which also reports the sampling share of RL time for MAI-Thinking-1.</li>
+    <li>ART (Agent Reinforcement Trainer) and W&amp;B Serverless RL, the tools behind the case study.</li>
+  </ul>
+  <footer class="end"><p class="small">Typical figures are marked &asymp;. Numbers tagged Our run come from prod-v2 and the earlier prod-v1.</p></footer>
+</section>
+
+</main>
+</div>
+
+<script>
+(function () {
+  /* contents: highlight the chapter in view */
+  var nav = document.querySelector('.toc');
+  if (nav) {
+    var list = nav.querySelector('ol');
+    var links = [].slice.call(nav.querySelectorAll('a[href^="#"]'));
+    var targets = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+    var current = -1, queued = false;
+    var update = function () {
+      queued = false;
+      var line = Math.min(200, window.innerHeight * 0.3), idx = 0, i;
+      for (i = 0; i < targets.length; i++) {
+        if (targets[i] && targets[i].getBoundingClientRect().top <= line) idx = i;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) idx = targets.length - 1;
+      if (idx === current) return;
+      current = idx;
+      links.forEach(function (a, j) {
+        if (j === idx) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current');
+      });
+      var li = links[idx].parentNode;
+      if (list.scrollWidth > list.clientWidth + 2) {
+        list.scrollLeft = li.offsetLeft - (list.clientWidth - li.offsetWidth) / 2;
+      } else if (nav.scrollHeight > nav.clientHeight + 2) {
+        var top = li.offsetTop + list.offsetTop;
+        if (top < nav.scrollTop + 8 || top > nav.scrollTop + nav.clientHeight - 48) nav.scrollTop = top - nav.clientHeight / 2;
+      }
+    };
+    var schedule = function () { if (!queued) { queued = true; window.requestAnimationFrame(update); } };
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    update();
+  }
+
+  /* memory budget calculator */
+  var form = document.getElementById('calc');
+  if (!form) return;
+  var $ = function (id) { return document.getElementById(id); };
+  var bar = $('c-bar'), verdict = $('c-verdict'), nums = $('c-nums');
+  var r1 = function (x) { return (Math.round(x * 10) / 10).toLocaleString('en-US'); };
+  var seg = function (cls, v, text) {
+    var s = document.createElement('span');
+    s.className = cls;
+    s.style.setProperty('--v', Math.max(v, 0.0001));
+    if (text) s.textContent = text;
+    return s;
+  };
+  var run = function () {
+    var gpu = +$('c-gpu').value, bpp = +$('c-prec').value, rank = +$('c-rank').value;
+    var tok = Math.max(1, +$('c-tok').value || 1);
+    var want = Math.max(1, Math.floor(+$('c-eps').value || 1));
+    var kv = Math.max(0.01, +$('c-kv').value || 0.3);
+    var res = Math.max(0, +$('c-res').value || 0);
+    var base = 27 * bpp, adapter = 0.1088 * rank;
+    var room = gpu - base - adapter - res;
+    var per = tok * kv / 1000;
+    var fit = room > 0 ? Math.floor(room / per) : 0;
+
+    bar.style.width = '100%';
+    bar.textContent = '';
+    bar.appendChild(seg('sg-base', base, 'base ' + r1(base)));
+    bar.appendChild(seg('sg-lora', adapter, ''));
+    bar.appendChild(seg('sg-act', res, r1(res)));
+    if (room > 0) bar.appendChild(seg('sg-kv', room, 'KV ' + r1(room)));
+    else bar.appendChild(seg('sg-bad', -room, 'over ' + r1(-room)));
+
+    var text;
+    if (room <= 0) {
+      text = 'Does not fit: the weights and training state need ' + r1(base + adapter + res) + ' GB and the card has ' + gpu + ' GB.';
+    } else if (fit >= want) {
+      text = 'Fits: room for ' + fit + ' episodes of ' + tok.toLocaleString('en-US') + ' tokens at once. You asked for ' + want + '.';
+    } else if (fit >= 1) {
+      text = 'Only ' + fit + ' of the ' + want + ' episodes you asked for can be live at once, so the rest would queue. Shorten episodes, lower concurrency, store the KV cache in FP8, or shrink the base.';
+    } else {
+      text = 'The weights fit, but not even one ' + tok.toLocaleString('en-US') + '-token episode fits in what is left for the KV cache.';
+    }
+    verdict.textContent = text;
+    nums.innerHTML =
+      '<li>Base weights <b>' + r1(base) + ' GB</b></li>' +
+      '<li>Adapter + optimizer <b>' + r1(adapter) + ' GB</b></li>' +
+      '<li>Activations + overhead <b>' + r1(res) + ' GB</b></li>' +
+      '<li>Left for KV cache <b>' + r1(Math.max(room, 0)) + ' GB</b></li>' +
+      '<li>One episode needs <b>' + r1(per) + ' GB</b></li>' +
+      '<li>Episodes that fit <b>' + fit + '</b></li>';
+  };
+  form.addEventListener('input', run);
+  form.addEventListener('change', run);
+  run();
+})();
+</script>

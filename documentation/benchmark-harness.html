@@ -1,0 +1,918 @@
+<title>RLM Benchmark Harness</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; each section opens with its table or chart, then the mechanism.
+   On wide screens the diagram sits beside the episode steps; on phones everything stacks and the
+   results table turns into cards. */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --track: #edf1f3;
+  --ink: #10181d;
+  --muted: #53636b;
+  --line: #d9e0e4;
+  --line-strong: #a9b7bf;
+  --ours: #0a6e86;
+  --ours-tint: #e0f0f4;
+  --base: #6e8794;
+  --base-tint: #e7edf0;
+  --pub: #b3640a;
+  --pub-tint: #fbf0de;
+  --sbx-tint: #eceff8;
+  --infer: #8a5a00;
+  --live: #0a6e86;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1316;
+    --surface: #141c20;
+    --track: #1a2429;
+    --ink: #e7eef1;
+    --muted: #94a6af;
+    --line: #26333a;
+    --line-strong: #435660;
+    --ours: #3db7d6;
+    --ours-tint: #10323c;
+    --base: #7e98a5;
+    --base-tint: #1d2a30;
+    --pub: #e2a047;
+    --pub-tint: #2f230f;
+    --sbx-tint: #1a2132;
+    --infer: #e5b252;
+    --live: #3db7d6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1316;
+  --surface: #141c20;
+  --track: #1a2429;
+  --ink: #e7eef1;
+  --muted: #94a6af;
+  --line: #26333a;
+  --line-strong: #435660;
+  --ours: #3db7d6;
+  --ours-tint: #10323c;
+  --base: #7e98a5;
+  --base-tint: #1d2a30;
+  --pub: #e2a047;
+  --pub-tint: #2f230f;
+  --sbx-tint: #1a2132;
+  --infer: #e5b252;
+  --live: #3db7d6;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.58 var(--sans); -webkit-text-size-adjust: 100%; }
+.page {
+  max-width: 1040px; margin: 0 auto;
+  padding-block: 28px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3, p, ul, ol, dl, figure { margin: 0; }
+h1 { font-size: clamp(1.75rem, 5vw, 2.6rem); line-height: 1.12; font-weight: 600; letter-spacing: -0.022em; text-wrap: balance; max-width: 22ch; }
+h2 { font-size: clamp(1.3rem, 3.4vw, 1.7rem); line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+h3 { font: 500 0.72rem/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+p { max-width: 68ch; }
+code, .mono { font-family: var(--mono); }
+code { font-size: 0.86em; font-weight: 500; background: var(--track); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+a { color: var(--ours); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
+small, .small { font-size: 0.8125rem; color: var(--muted); }
+.muted { color: var(--muted); }
+
+/* header */
+.eyebrow { font: 500 0.75rem/1.3 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 14px; }
+.lede { font-size: 1.08rem; max-width: 62ch; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 12px 3px 10px; font: 500 0.78rem/1.4 var(--mono); background: var(--surface); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--base); }
+.dot.done { background: var(--ours); }
+.dot.run { background: var(--pub); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: no-preference) { .dot.run { animation: pulse 1.6s ease-in-out infinite; } }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); font: 500 0.8rem/1.4 var(--mono); }
+.toc a { color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--ink); text-decoration: underline; }
+
+/* sections */
+section { margin-top: 56px; padding-top: 28px; border-top: 1px solid var(--line-strong); display: grid; gap: 22px; scroll-margin-top: 12px; }
+section, header, .sec-head, .block, .panel, .cmd, figure.fig { grid-template-columns: minmax(0, 1fr); }
+section > .sec-head { display: grid; gap: 8px; }
+.lead { font-size: 1.04rem; max-width: 66ch; }
+.block { display: grid; gap: 12px; }
+.block > h3 { margin-top: 6px; }
+
+/* tags */
+.tag { display: inline-block; font: 500 0.66rem/1.5 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 3px; vertical-align: 1px; white-space: nowrap; }
+.tag.ours { color: var(--ours); border-color: var(--ours); }
+.tag.pub { color: var(--pub); border-color: var(--pub); }
+.tag.inf { color: var(--infer); border: 1px dashed var(--infer); text-transform: lowercase; letter-spacing: 0.02em; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--base); }
+.sw.ckpt { background: var(--ours); }
+.sw.base { background: var(--base); }
+.sw.pub { background: repeating-linear-gradient(135deg, var(--pub) 0 3px, var(--pub-tint) 3px 6px); outline: 1.5px solid var(--pub); outline-offset: -1.5px; }
+.sw.judge { background: var(--ink); }
+.sw.free { background: var(--track); outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.8125rem; color: var(--muted); }
+
+/* tables */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+th { font: 500 0.68rem/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; background: var(--track); }
+tr:last-child > td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.score { font: 600 1.05rem/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+td small { display: block; white-space: nowrap; }
+tr.pub > td { background: var(--pub-tint); }
+table.results td.nm { font-weight: 600; min-width: 170px; }
+table.results td:nth-child(3) { min-width: 170px; }
+table.results td:nth-child(5) { min-width: 220px; }
+table.simple td:first-child { font-weight: 500; }
+table.simple { min-width: 460px; }
+.delta-pos { color: var(--ours); font-weight: 600; }
+.delta-neg { color: var(--pub); font-weight: 600; }
+.cellbar { height: 5px; margin-top: 5px; background: var(--track); border-radius: 2px; overflow: hidden; min-width: 70px; }
+.cellbar > i { display: block; height: 100%; background: var(--ours); }
+.cellbar > i.alt { background: var(--base); }
+
+/* bar chart */
+.chart { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 16px 12px; }
+.chart-title { font: 500 0.72rem/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+.bar-row, .axis { display: grid; grid-template-columns: minmax(120px, 230px) minmax(0, 1fr); gap: 4px 14px; align-items: center; }
+.bar-label { font-size: 0.9rem; line-height: 1.3; font-weight: 500; min-width: 0; }
+.bar-label small { display: block; font-weight: 400; margin-top: 1px; }
+.bar-track { position: relative; height: 32px; background-color: var(--track); background-image: linear-gradient(to right, var(--line-strong) 1px, transparent 1px); background-size: 25% 100%; border-right: 1px solid var(--line-strong); }
+.bar { position: absolute; left: 0; top: 6px; bottom: 6px; }
+.bar.ckpt { background: var(--ours); }
+.bar.base { background: var(--base); }
+.bar.pub { background: repeating-linear-gradient(135deg, var(--pub) 0 5px, var(--pub-tint) 5px 10px); outline: 1.5px solid var(--pub); outline-offset: -1.5px; }
+.whisker { position: absolute; top: 50%; height: 0; border-top: 2px solid var(--ink); }
+.whisker::before, .whisker::after { content: ""; position: absolute; top: -7px; height: 12px; border-left: 2px solid var(--ink); }
+.whisker::before { left: 0; }
+.whisker::after { right: 0; }
+.bar-val { position: absolute; top: 50%; transform: translate(10px, -50%); font: 600 0.86rem/1 var(--mono); font-variant-numeric: tabular-nums; }
+.axis .ticks { position: relative; height: 16px; font: 0.7rem/1 var(--mono); color: var(--muted); }
+.axis .ticks span { position: absolute; top: 2px; }
+.chart-foot { font-size: 0.78rem; color: var(--muted); }
+
+/* stacks and small bars */
+.stack { display: flex; gap: 2px; height: 28px; }
+.stack > i { display: block; min-width: 3px; }
+.stack .s0 { background: var(--ours); }
+.stack .s1 { background: var(--base); }
+.stack .s2 { background: var(--ink); }
+.stack .s3 { background: var(--track); outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.stack .f0 { background: var(--ours); }
+.stack .f1 { background: var(--pub); }
+.stack .f2 { background: var(--base); }
+.stack .f3 { background: var(--ink); opacity: 0.7; }
+.legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 20px; font-size: 0.875rem; }
+.legend-grid .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.legend-grid .row b { font: 600 0.86rem/1.3 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mini { display: grid; gap: 10px; }
+.mini-row { display: grid; grid-template-columns: minmax(130px, 220px) minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 0.875rem; }
+.mini-track { height: 14px; background: var(--track); position: relative; }
+.mini-track > i { position: absolute; left: 0; top: 0; bottom: 0; }
+.mini-row b { font: 600 0.86rem/1.2 var(--mono); font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+
+/* panels */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.panel > h3 { margin: 0; }
+.panel p { font-size: 0.9375rem; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.facts > div { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px; align-content: start; }
+.facts b { font: 600 1.3rem/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.facts span { font-size: 0.8125rem; color: var(--muted); }
+dl.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; font-size: 0.9rem; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; font-family: var(--mono); font-size: 0.86rem; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.served { font: 500 0.78rem/1.45 var(--mono); background: var(--track); padding: 8px 10px; border-radius: 4px; overflow-wrap: anywhere; }
+.ticklist { list-style: none; padding: 0; display: grid; gap: 8px; font-size: 0.9375rem; }
+.ticklist li { padding-left: 18px; position: relative; max-width: 68ch; }
+.ticklist li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 8px; height: 2px; background: var(--line-strong); }
+
+/* steps */
+ol.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 14px; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; font-size: 0.9375rem; }
+ol.steps li::before { content: counter(s); width: 26px; height: 26px; border: 1px solid var(--line-strong); border-radius: 50%; display: grid; place-items: center; font: 600 0.75rem/1 var(--mono); background: var(--surface); }
+.cmds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 16px; counter-reset: c; }
+.cmd { border-top: 2px solid var(--ink); padding-top: 10px; display: grid; gap: 6px; align-content: start; counter-increment: c; min-width: 0; }
+.cmd .name { font: 600 1rem/1.3 var(--mono); }
+.cmd .name::before { content: counter(c) "  "; color: var(--muted); font-weight: 500; white-space: pre; }
+.cmd p { font-size: 0.9rem; }
+
+/* figure */
+figure.fig { display: grid; gap: 12px; min-width: 0; }
+svg.dg { width: 100%; max-width: 560px; height: auto; display: block; margin: 0 auto; font-family: var(--sans); }
+figcaption { font-size: 0.8125rem; color: var(--muted); max-width: 60ch; }
+.dg-group { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.dg-host { fill: var(--surface); stroke: var(--ink); stroke-width: 1.4; }
+.dg-ours { fill: var(--ours-tint); stroke: var(--ours); stroke-width: 1.6; }
+.dg-base { fill: var(--base-tint); stroke: var(--base); stroke-width: 1.6; }
+.dg-sbx { fill: var(--sbx-tint); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg-chip { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg-data { fill: var(--track); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg-ln { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+.dg-ln.inf { stroke-dasharray: 4 3; }
+.dg-ah { fill: var(--ink); }
+.dg-t { fill: var(--ink); font-size: 11.5px; }
+.dg-b { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.dg-m { fill: var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.dg-mu { fill: var(--muted); }
+.dg-i { font-style: italic; }
+
+/* OOLONG */
+.running { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 6px; font-size: 1rem; }
+.running strong { font-weight: 600; }
+
+footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 8px; font-size: 0.8125rem; color: var(--muted); }
+footer p { max-width: 80ch; }
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+}
+@media (max-width: 640px) {
+  table.results, table.results tbody, table.results tr, table.results td { display: block; }
+  table.results thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.results tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.results tr:last-child { border-bottom: 0; }
+  table.results td { border: 0; padding: 3px 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; text-align: left; min-width: 0 !important; }
+  table.results td::before { content: attr(data-label); font: 500 0.66rem/1.8 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  table.results td.nm { display: block; font-size: 1rem; padding-bottom: 6px; }
+  table.results td.nm::before { content: none; }
+  table.results td.num { text-align: left; }
+  table.results td small { white-space: normal; }
+  tr.pub > td { background: transparent; }
+  tr.pub { background: var(--pub-tint); }
+}
+@media (max-width: 560px) {
+  .bar-row, .axis { grid-template-columns: minmax(0, 1fr); }
+  .axis > :first-child { display: none; }
+  .mini-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .mini-row .mini-track { grid-column: 1 / -1; grid-row: 2; }
+  .chart { padding: 14px 12px 10px; }
+  .panel { padding: 14px; }
+}
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1>How the RLM harness benchmarked checkpoint 18</h1>
+    <p class="lede" id="lede"></p>
+    <div class="pills" id="pills"></div>
+  </header>
+  <nav class="toc" aria-label="Sections">
+    <a href="#headline">Results</a>
+    <a href="#harness">The harness</a>
+    <a href="#aalcr">AA-LCR in detail</a>
+    <a href="#context">Training context</a>
+    <a href="#budget">Budget</a>
+    <a href="#oolong">OOLONG</a>
+  </nav>
+
+  <section id="headline">
+    <div class="sec-head">
+      <h2>AA-LCR v1.1 results</h2>
+      <p class="lead" id="headline-lead"></p>
+    </div>
+    <div id="headline-table"></div>
+    <div id="headline-chart"></div>
+    <p class="small" id="headline-foot"></p>
+  </section>
+
+  <section id="harness">
+    <div class="sec-head">
+      <h2>How the harness runs a benchmark</h2>
+      <p class="lead" id="harness-lead"></p>
+    </div>
+    <div class="split">
+      <figure class="fig" id="harness-fig"></figure>
+      <div class="block">
+        <h3>One episode</h3>
+        <ol class="steps" id="harness-steps"></ol>
+      </div>
+    </div>
+    <div class="block">
+      <h3>The two models</h3>
+      <div class="grid2" id="harness-models"></div>
+    </div>
+    <div class="block">
+      <h3>Proof the LoRA is attached</h3>
+      <div class="panel" id="harness-proof"></div>
+    </div>
+    <div class="block">
+      <h3>Limits</h3>
+      <div class="grid3" id="harness-limits"></div>
+    </div>
+    <div class="block">
+      <h3>The benchmark script, scripts/benchmark.py</h3>
+      <div class="cmds" id="harness-cmds"></div>
+    </div>
+  </section>
+
+  <section id="aalcr">
+    <div class="sec-head">
+      <h2>AA-LCR in detail</h2>
+      <p class="lead" id="aalcr-lead"></p>
+    </div>
+    <div class="facts" id="aalcr-facts"></div>
+    <div class="block" id="aalcr-cats"></div>
+    <div class="grid2" id="aalcr-paired"></div>
+    <div class="grid2" id="aalcr-judge"></div>
+    <div class="block" id="aalcr-reading"></div>
+  </section>
+
+  <section id="context">
+    <div class="sec-head">
+      <h2>Where checkpoint 18 comes from</h2>
+      <p class="lead" id="context-lead"></p>
+    </div>
+    <div class="grid2" id="context-top"></div>
+    <div class="block" id="context-vendor"></div>
+  </section>
+
+  <section id="budget">
+    <div class="sec-head">
+      <h2>Budget</h2>
+      <p class="lead" id="budget-lead"></p>
+    </div>
+    <div class="panel" id="budget-body"></div>
+  </section>
+
+  <section id="oolong">
+    <div class="sec-head">
+      <h2>OOLONG</h2>
+      <p class="lead" id="oolong-lead"></p>
+    </div>
+    <div id="oolong-results" class="block"></div>
+  </section>
+
+  <footer>
+    <p id="foot-sources"></p>
+    <p><span class="tag inf">inferred</span> marks a statement that was not measured or published. It is our reading of the facts around it.</p>
+  </footer>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------------
+   Every number on the page lives here. Row shape for any results set
+   (aalcr, oolong): { name, score, se?, correct?, of?, setting, costPerQ, note, role? }
+   score is a percentage. costPerQ is dollars (number) or null.
+   oolong: null shows the "running" panel; { arms: [...], published: [...] } shows a table and chart.
+   --------------------------------------------------------------------------- */
+const DATA = {
+  asOf: "2026-10-25",
+  status: { aalcr: "done", oolong: "done" },
+
+  harness: {
+    root: {
+      name: "Qwen3.8-27B + our LoRA",
+      short: "prod-v2:step18",
+      served: "wandb-artifact:///models-ontario-tech-university/rlm-production/prod-v2:step18",
+      host: "W&B Serverless (W&B Inference on CoreWeave)"
+    },
+    base: { name: "plain Qwen3.8-27B", short: "prod-v1:step0" },
+    lora: { format: "bf16 safetensors", sizeMB: 109, rank: 8, alpha: 32, paramsM: 54 },
+    loraCheck: { tokens: 77, baseVsBase: 0.0, baseVsCkpt: 0.106 },
+    contextChars: { min: 240000, max: 550000 },
+    rootLimits: { promptVersion: "v4", turns: 20, effort: "medium", tokensPerTurn: 4096, temperature: 1.0 },
+    subcalls: { charsIn: 60000, tokensOut: 4096, thinking: "off", maxPerEpisode: 80 },
+    sandbox: {
+      filesystem: "read-only",
+      scratch: "/scratch tmpfs (writable)",
+      network: "none",
+      isolation: "Landlock + Python audit hook",
+      cpu: 1, memoryMB: 512, secondsPerCell: 120, outputCapChars: 8000
+    }
+  },
+
+  aalcr: {
+    name: "AA-LCR",
+    version: "v1.1",
+    released: "Sept 2026",
+    questions: 100,
+    docTokensK: 100,
+    license: "Apache-2.0",
+    pubLegend: "Published, read directly, from Artificial Analysis",
+    arms: [
+      {
+        role: "ckpt", name: "Checkpoint 18 (ours)", score: 80, correct: 80, of: 100, se: 4.0,
+        setting: "RLM harness, medium reasoning", costPerQ: 0.034,
+        note: "Mean 0.8 sub-calls and 8.4 turns per question. 89 of 100 questions used no sub-calls.",
+        subcalls: 0.8, turns: 8.4, noSubcalls: 89
+      },
+      {
+        role: "base", name: "Base Qwen3.8-27B (ours)", score: 79, correct: 79, of: 100, se: 4.1,
+        setting: "Same RLM harness, base weights as root", costPerQ: 0.044,
+        note: "Mean 0.8 sub-calls and 9.6 turns per question.",
+        subcalls: 0.8, turns: 9.6, noSubcalls: 90
+      }
+    ],
+    published: [
+      {
+        name: "Qwen3.8 27B (Xhigh reasoning)", score: 82,
+        setting: "Whole document set read directly in one prompt", costPerQ: null,
+        note: "Artificial Analysis, AA-LCR v1.1. Not run by us."
+      },
+      {
+        name: "Gemma 4 31B (Reasoning)", score: 70,
+        setting: "Whole document set read directly in one prompt", costPerQ: null,
+        note: "Artificial Analysis, AA-LCR v1.1. Not run by us."
+      }
+    ],
+    notFound: ["Muse Glimmer (Meta, ~30B, Aug 2026)", "Gemma 4 26B A4B"],
+    docTypes: ["company reports", "industry reports", "government consultations", "academic papers", "legal and marketing texts"],
+    categories: [
+      { name: "Academia", n: 5, ckpt: 4, base: 4 },
+      { name: "Company Documents", n: 63, ckpt: 53, base: 50 },
+      { name: "Government Consultations", n: 11, ckpt: 7, base: 8 },
+      { name: "Industry Reports", n: 8, ckpt: 6, base: 5 },
+      { name: "Legal", n: 6, ckpt: 5, base: 6 },
+      { name: "Marketing", n: 6, ckpt: 4, base: 5 },
+      { name: "Survey Reports", n: 1, ckpt: 1, base: 1 }
+    ],
+    paired: { onlyCkpt: 6, onlyBase: 5, mcnemarP: 1.0 },
+    judge: {
+      model: "base Qwen3.8-27B at low reasoning effort",
+      aaJudge: "GPT-5.6 Luna",
+      spotChecked: 12, agreed: 11, lenient: 1,
+      lenientExample: { given: "Q2", gold: "Q2 2024" },
+      answersJudged: 200, costUSD: 0.11
+    }
+  },
+
+  oolong: {
+    pubLegend: "Published, read directly (OOLONG paper, mean of its 16K and 32K scores)",
+    pubSub: "read directly, OOLONG paper",
+    arms: [
+      {
+        role: "ckpt", name: "Checkpoint 18 (ours)", score: 51.3, se: 6.4,
+        setting: "RLM harness, Xhigh reasoning", costPerQ: 0.051,
+        note: "Exactly right 23 of 55 (41.8%). 16K 49.6, 32K 52.9. 28.5 sub-calls and 9.1 turns a question."
+      },
+      {
+        role: "base", name: "Base Qwen3.8-27B (ours)", score: 51.3, se: 7.2,
+        setting: "Same RLM harness, Xhigh reasoning", costPerQ: 0.080,
+        note: "Exactly right 19 of 44 (43.2%). 16K 51.8, 32K 50.8. 28.9 sub-calls and 11.1 turns a question."
+      }
+    ],
+    published: [
+      { name: "GPT-5", score: 80.3, setting: "Read directly", costPerQ: null, note: "OOLONG paper: 84.5 at 16K, 76.1 at 32K." },
+      { name: "GPT-5-mini", score: 71.1, setting: "Read directly", costPerQ: null, note: "77.7 at 16K, 64.6 at 32K." },
+      { name: "Claude Sonnet 4", score: 59.2, setting: "Read directly", costPerQ: null, note: "62.8 at 16K, 55.7 at 32K." },
+      { name: "o4-mini", score: 58.5, setting: "Read directly", costPerQ: null, note: "65.1 at 16K, 51.9 at 32K." },
+      { name: "GPT-5-nano", score: 51.2, setting: "Read directly", costPerQ: null, note: "54.5 at 16K, 47.8 at 32K." },
+      { name: "Llama 4 Maverick", score: 15.9, setting: "Read directly", costPerQ: null, note: "16.3 at 16K, 15.4 at 32K. Open weights, ~400B." },
+      { name: "DeepSeek-R1", score: 13.3, setting: "Read directly", costPerQ: null, note: "13.7 at 16K, 12.9 at 32K. Open weights, 671B." }
+    ],
+    notes: [
+      "Score is OOLONG's own metric: a count earns 0.75 to the power of its error, every other answer must match exactly.",
+      "Paired on the 44 questions both arms ran: exactly right 19 vs 19 (5 only checkpoint 18, 5 only base, McNemar p = 1.0); OOLONG score 50.1 vs 51.3. No measurable training effect.",
+      "Checkpoint 18 was about 36% cheaper a question than base (9.1 vs 11.1 turns), the same direction as on AA-LCR.",
+      "Unlike AA-LCR, both models delegated heavily here: about 28 sub-calls a question, with only 2 or 3 questions answered without any.",
+      "Our sample: 70 held-out test items at 16K and 32K tokens, both lengths alternating; the spending ceiling stopped checkpoint 18 at 55 and base at 44. The published scores average the paper's full 16K and 32K splits, read directly in one prompt. No OOLONG score was found for Qwen3.8, Gemma 4 or Muse Glimmer, so these are frontier and large open models, not near-size peers."
+    ]
+  },
+
+  context: {
+    run: "prod-v2",
+    method: "RL, CISPO/GRPO-style",
+    stack: "ART 0.5.20 on W&B Serverless RL",
+    steps: 18,
+    families: [
+      { name: "Context search (aggregation)", pct: 50 },
+      { name: "Research", pct: 10 },
+      { name: "Build from a spec", pct: 25 },
+      { name: "Find and fix", pct: 15 }
+    ],
+    heldOut: { tasks: 47, ckpt18: 36.2, ckpt11: 31.9 },
+    capability: { ckpt18: 76, base: 76 },
+    vendor: {
+      source: "Qwen's model card",
+      models: ["Qwen3.8-27B", "Muse Glimmer-30B"],
+      rows: [
+        { bench: "GPQA Diamond", a: 89.2, b: 83.5 },
+        { bench: "IFBench", a: 79.5, b: 77.0 },
+        { bench: "SWE-bench Pro", a: 61.7, b: 51.2 }
+      ]
+    }
+  },
+
+  budget: {
+    monthLeft: 15.90,
+    items: [
+      { name: "AA-LCR: checkpoint 18, base and the judge", usd: 7.89 },
+      { name: "OOLONG: checkpoint 18 and base at Xhigh", usd: 6.31 }
+    ]
+  }
+};
+
+/* ---------------------------------------------------------------- helpers */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtN = n => Number(n).toLocaleString("en-US");
+const fmtK = n => (n >= 1000 && n % 1000 === 0 ? (n / 1000) + "K" : fmtN(n));
+const usd = (v, d = 3) => v == null ? "—" : (typeof v === "number" ? "$" + v.toFixed(d) : esc(v));
+const pctTxt = v => typeof v === "number" ? v + "%" : esc(v);
+const setHTML = (sel, html) => { const el = $(sel); if (el) el.innerHTML = html; };
+const INF = '<span class="tag inf">inferred</span>';
+
+const A = DATA.aalcr, H = DATA.harness, C = DATA.context, B = DATA.budget;
+const ck = A.arms.find(r => r.role === "ckpt");
+const bs = A.arms.find(r => r.role === "base");
+const pubQwen = A.published[0];
+const pubGemma = A.published[1];
+
+function rowsOf(set) {
+  const ours = (set.arms || []).map((r, i) => ({ ...r, kind: "ours", role: r.role || (i === 0 ? "ckpt" : "base") }));
+  const pub = (set.published || []).map(r => ({ ...r, kind: "pub" }));
+  return ours.concat(pub);
+}
+
+function resultsTable(set) {
+  const rows = rowsOf(set).map(r => {
+    const tag = r.kind === "pub" ? '<span class="tag pub">published</span>' : '<span class="tag ours">ours</span>';
+    const sub = [
+      r.correct != null && r.of != null ? r.correct + "/" + r.of : "",
+      r.se != null ? "±" + Number(r.se).toFixed(1) + " SE" : ""
+    ].filter(Boolean).join(" · ");
+    return `<tr class="${r.kind}">
+      <td class="nm" data-label="Name">${esc(r.name)} ${tag}</td>
+      <td class="num" data-label="Score"><div><span class="score">${pctTxt(r.score)}</span>${sub ? `<small>${sub}</small>` : ""}</div></td>
+      <td data-label="Setting">${esc(r.setting || "")}</td>
+      <td class="num" data-label="Cost per question">${usd(r.costPerQ)}</td>
+      <td data-label="Note">${esc(r.note || "")}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="tablewrap"><table class="results">
+    <thead><tr><th>Name</th><th class="num">Score</th><th>Setting</th><th class="num">Cost per question</th><th>Note</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function barChart(set, opts = {}) {
+  const rows = rowsOf(set).filter(r => typeof r.score === "number").sort((a, b) => b.score - a.score);
+  const pubLegend = opts.pubLegend || set.pubLegend || "Published score";
+  const body = rows.map(r => {
+    const cls = r.kind === "pub" ? "pub" : r.role;
+    const sub = r.kind === "pub" ? (opts.pubSub || "read directly, from Artificial Analysis") : (r.setting || "");
+    const se = typeof r.se === "number" ? r.se : 0;
+    const whisker = se ? `<div class="whisker" style="left:${r.score - se}%;width:${2 * se}%"></div>` : "";
+    return `<div class="bar-row">
+      <div class="bar-label">${esc(r.name)}<small>${esc(sub)}</small></div>
+      <div class="bar-track" role="img" aria-label="${esc(r.name)}: ${r.score}%">
+        <div class="bar ${cls}" style="width:${r.score}%"></div>${whisker}
+        <div class="bar-val" style="left:${r.score + se}%">${r.score}%</div>
+      </div></div>`;
+  }).join("");
+  const ticks = [0, 25, 50, 75, 100].map(t => {
+    const pos = t === 0 ? "left:0" : t === 100 ? "right:0" : `left:${t}%;transform:translateX(-50%)`;
+    return `<span style="${pos}">${t}</span>`;
+  }).join("");
+  return `<div class="chart">
+    <div class="chart-title">${esc(opts.title || "Score, % correct")}</div>
+    <div class="legend">
+      <span><span class="sw ckpt"></span>Checkpoint 18 (ours)</span>
+      <span><span class="sw base"></span>Base model (ours)</span>
+      <span><span class="sw pub"></span>${esc(pubLegend)}</span>
+    </div>
+    ${body}
+    <div class="axis"><div></div><div class="ticks">${ticks}</div></div>
+    <div class="chart-foot">Whiskers on our bars show ±1 standard error. Published scores come with no error bar.</div>
+  </div>`;
+}
+
+/* ----------------------------------------------------------------- header */
+function renderHeader() {
+  setHTML("#eyebrow", `Benchmark readout · ${esc(DATA.asOf)}`);
+  setHTML("#lede", `The RL environment’s RLM harness has a root model write Python in a sandbox over documents it never sees in full. We reused it as a benchmark runner for prod-v2 checkpoint 18 and for the untrained base model. On ${esc(A.name)} ${esc(A.version)} the two scored ${ck.score}% and ${bs.score}%, so training left no measurable mark there.`);
+  const st = DATA.status;
+  setHTML("#pills", `
+    <span class="pill"><span class="dot ${st.aalcr === "done" ? "done" : "run"}"></span>${esc(A.name)} ${esc(A.version)}: ${esc(st.aalcr)}</span>
+    <span class="pill"><span class="dot ${st.oolong === "done" ? "done" : "run"}"></span>OOLONG: ${esc(st.oolong)}</span>`);
+}
+
+/* --------------------------------------------------------------- headline */
+function renderHeadline() {
+  setHTML("#headline-lead", `Checkpoint 18 scored ${ck.score}% and the base model ${bs.score}% in the same harness. Qwen’s published score, which reads the whole document set in one prompt, is ${pubQwen.score}%, and Gemma 4 31B’s is ${pubGemma.score}%.`);
+  setHTML("#headline-table", resultsTable(A));
+  setHTML("#headline-chart", barChart(A, { title: `${A.name} ${A.version}, % correct over ${A.questions} questions` }));
+  setHTML("#headline-foot", `No ${esc(A.name)} score was found for ${A.notFound.map(esc).join(" or ")}.`);
+}
+
+/* ---------------------------------------------------------------- diagram */
+function diagramSVG() {
+  const S = H.sandbox, cc = H.contextChars;
+  const label = "Architecture of one benchmark episode. The harness sends the root model the question and gets Python cells back, runs each cell in a Docker sandbox that holds the documents in a variable called context, and routes sub-calls and judge prompts to the base model.";
+  return `<svg class="dg" viewBox="0 0 440 566" role="img" aria-label="${esc(label)}" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+  <rect class="dg-group" x="4" y="4" width="432" height="140" rx="6"/>
+  <rect class="dg-ours" x="12" y="14" width="206" height="96" rx="4"/>
+  <text class="dg-b" x="22" y="35">Root model</text>
+  <text class="dg-t" x="22" y="53">${esc(H.root.name)}</text>
+  <text class="dg-m" x="22" y="70">${esc(H.root.short)}</text>
+  <text class="dg-t dg-mu" x="22" y="89">base arm: ${esc(H.base.short)} instead</text>
+  <rect class="dg-base" x="226" y="14" width="202" height="96" rx="4"/>
+  <text class="dg-b" x="236" y="35">Base model</text>
+  <text class="dg-t" x="236" y="53">${esc(H.base.name)}</text>
+  <text class="dg-m" x="236" y="70">${esc(H.base.short)}</text>
+  <text class="dg-t dg-mu" x="236" y="89">sub-calls · judge · base arm</text>
+  <text class="dg-t dg-mu" x="14" y="131">${esc(H.root.host)}</text>
+
+  <line class="dg-ln" x1="50" y1="146" x2="50" y2="194" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="dg-t" x="60" y="166">turns: messages out,</text>
+  <text class="dg-t" x="60" y="180">Python cell back</text>
+  <line class="dg-ln" x1="300" y1="146" x2="300" y2="194" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="dg-t" x="310" y="166">llm() calls,</text>
+  <text class="dg-t" x="310" y="180">judge prompts</text>
+
+  <rect class="dg-host" x="4" y="196" width="432" height="80" rx="4"/>
+  <text class="dg-b" x="16" y="216">scripts/benchmark.py + RLM harness</text>
+  <text class="dg-m" x="16" y="233">check · run · judge · summary</text>
+  <text class="dg-t" x="16" y="250">hard spend ceiling · fixed question order</text>
+  <text class="dg-t dg-mu" x="16" y="266">one episode record per question, with the root model name</text>
+
+  <line class="dg-ln" x1="50" y1="278" x2="50" y2="334" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="dg-t" x="60" y="302">cell code down,</text>
+  <text class="dg-t" x="60" y="316">output up (≤ ${fmtN(S.outputCapChars)} chars)</text>
+  <line class="dg-ln" x1="300" y1="278" x2="300" y2="334" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="dg-t" x="310" y="298">llm(), llm_batch()</text>
+  <text class="dg-t" x="310" y="311">submit(answer)</text>
+  <text class="dg-t dg-mu dg-i" x="310" y="324">over the bridge's Unix socket</text>
+
+  <rect class="dg-sbx" x="4" y="336" width="432" height="138" rx="6"/>
+  <text class="dg-b" x="16" y="357">Docker sandbox, one per episode (the REPL)</text>
+  <text class="dg-t dg-mu" x="16" y="374">read-only filesystem · writable /scratch tmpfs · no network</text>
+  <text class="dg-t dg-mu" x="16" y="389">Landlock · Python audit hook · ${S.cpu} CPU · ${S.memoryMB} MB · ${S.secondsPerCell} s per cell</text>
+  <rect class="dg-chip" x="12" y="400" width="150" height="62" rx="4"/>
+  <text class="dg-m" x="22" y="419">context</text>
+  <text class="dg-t" x="22" y="436">documents,</text>
+  <text class="dg-t" x="22" y="451">${fmtK(cc.min)}–${fmtK(cc.max)} chars</text>
+  <rect class="dg-chip" x="170" y="400" width="140" height="62" rx="4"/>
+  <text class="dg-m" x="180" y="419">llm() llm_batch()</text>
+  <text class="dg-t" x="180" y="436">to the base model,</text>
+  <text class="dg-t" x="180" y="451">max ${H.subcalls.maxPerEpisode} per episode</text>
+  <rect class="dg-chip" x="318" y="400" width="110" height="62" rx="4"/>
+  <text class="dg-m" x="328" y="419">submit()</text>
+  <text class="dg-t" x="328" y="436">ends the</text>
+  <text class="dg-t" x="328" y="451">episode</text>
+
+  <line class="dg-ln" x1="87" y1="512" x2="87" y2="464" marker-end="url(#ah)"/>
+  <text class="dg-t" x="98" y="494">loaded into context</text>
+  <rect class="dg-data" x="4" y="514" width="432" height="48" rx="4"/>
+  <text class="dg-b" x="16" y="534">${esc(A.name)} ${esc(A.version)} questions and document sets</text>
+  <text class="dg-t dg-mu" x="16" y="551">${A.questions} questions, about ${A.docTokensK}K tokens of real documents each</text>
+</svg>`;
+}
+
+/* ---------------------------------------------------------------- harness */
+function renderHarness() {
+  const S = H.sandbox, R = H.rootLimits, SC = H.subcalls, cc = H.contextChars, L = H.lora, K = H.loraCheck;
+
+  setHTML("#harness-lead", `The benchmark reuses the RL environment’s RLM harness. The root model does not get the documents in its prompt. They sit in a Python variable inside a sandbox, and the model writes code to search and read them.`);
+
+  setHTML("#harness-fig", `${diagramSVG()}
+    <div class="legend">
+      <span><span class="sw ckpt"></span>Root model, our LoRA</span>
+      <span><span class="sw base"></span>Base weights</span>
+    </div>
+    <figcaption>Everything the root model learns about the documents arrives as printed output from the sandbox. The sandbox has no network: an llm() call inside it goes over a Unix socket to the harness on the host (the bridge, rlm_rl/bridge.py), which makes the W&B call and passes the reply back in.</figcaption>`);
+
+  setHTML("#harness-steps", [
+    `A fresh Docker sandbox starts for the episode. The documents are loaded into a Python variable called <code>context</code>, ${fmtK(cc.min)} to ${fmtK(cc.max)} characters for ${esc(A.name)}.`,
+    `The root model’s prompt holds the question, the size of <code>context</code> and its first lines. It never sees the whole text.`,
+    `Each turn the root model writes a Python cell. The sandbox runs it with a ${S.secondsPerCell} s limit, and the printed output, capped at ${fmtN(S.outputCapChars)} characters, becomes the next message.`,
+    `To read at scale it calls <code>llm(prompt)</code> or <code>llm_batch(prompts)</code>. These sub-calls go to the base model: up to ${fmtN(SC.charsIn)} characters in, ${fmtN(SC.tokensOut)} tokens out, thinking ${esc(SC.thinking)}, at most ${SC.maxPerEpisode} per episode.`,
+    `It calls <code>submit(answer)</code> to end the episode. The limits are ${R.turns} turns, ${fmtN(R.tokensPerTurn)} tokens a turn, reasoning effort ${esc(R.effort)} and temperature ${R.temperature.toFixed(1)} (production prompt ${esc(R.promptVersion)}).`,
+    `The episode record is saved with the root model’s name. The judge grades it in a later step.`
+  ].map(t => `<li><div>${t}</div></li>`).join(""));
+
+  setHTML("#harness-models", `
+    <div class="panel">
+      <div><span class="tag ours">root model</span></div>
+      <p><strong>${esc(H.root.name)}</strong>, from prod-v2 checkpoint 18.</p>
+      <div class="served">${esc(H.root.served)}</div>
+      <p class="small">Served by ${esc(H.root.host)}. The serving stack attaches the LoRA to each request. W&amp;B does not publish its serving precision (likely BF16 ${INF}).</p>
+      <dl class="kv">
+        <dt>Adapter format</dt><dd>${esc(L.format)}</dd>
+        <dt>Size</dt><dd>about ${L.sizeMB} MB</dd>
+        <dt>Rank / alpha</dt><dd>${L.rank} / ${L.alpha}</dd>
+        <dt>Parameters</dt><dd>about ${L.paramsM}M</dd>
+      </dl>
+      <p class="small">Measured on an earlier adapter from the same ART setup and assumed the same for prod-v2 ${INF}.</p>
+    </div>
+    <div class="panel">
+      <div><span class="tag" style="color:var(--base);border-color:var(--base)">base model</span></div>
+      <p><strong>${esc(H.base.short)}</strong>, a freshly initialised LoRA. That makes it the plain Qwen3.8-27B weights.</p>
+      <p class="small">Used for sub-calls, for the judge and as the root of the base arm. In our check, base and base scored identically.</p>
+    </div>`);
+
+  const proofMax = 0.12;
+  setHTML("#harness-proof", `
+    <p>The same fixed conversation was scored under both models with prompt log-probabilities. If the LoRA were not attached, checkpoint 18 would score the same as base.</p>
+    <div class="mini">
+      <div class="mini-row"><span>base vs base</span><div class="mini-track"><i style="width:${K.baseVsBase / proofMax * 100}%;background:var(--base)"></i></div><b>${K.baseVsBase.toFixed(2)}</b></div>
+      <div class="mini-row"><span>base vs checkpoint 18</span><div class="mini-track"><i style="width:${K.baseVsCkpt / proofMax * 100}%;background:var(--ours)"></i></div><b>${K.baseVsCkpt.toFixed(3)}</b></div>
+    </div>
+    <p class="small">Mean absolute log-probability difference per token, over ${K.tokens} tokens. Every episode record also logs the root model name.</p>`);
+
+  setHTML("#harness-limits", `
+    <div class="panel"><h3>Root model</h3><dl class="kv">
+      <dt>Turns</dt><dd>up to ${R.turns}</dd>
+      <dt>Reasoning effort</dt><dd>${esc(R.effort)}</dd>
+      <dt>Tokens per turn</dt><dd>up to ${fmtN(R.tokensPerTurn)}</dd>
+      <dt>Temperature</dt><dd>${R.temperature.toFixed(1)}</dd>
+      <dt>Prompt</dt><dd>production ${esc(R.promptVersion)}</dd></dl></div>
+    <div class="panel"><h3>Sub-calls to the base model</h3><dl class="kv">
+      <dt>Input</dt><dd>up to ${fmtN(SC.charsIn)} chars</dd>
+      <dt>Output</dt><dd>up to ${fmtN(SC.tokensOut)} tokens</dd>
+      <dt>Thinking</dt><dd>${esc(SC.thinking)}</dd>
+      <dt>Per episode</dt><dd>at most ${SC.maxPerEpisode}</dd></dl></div>
+    <div class="panel"><h3>Sandbox</h3><dl class="kv">
+      <dt>Filesystem</dt><dd>${esc(S.filesystem)}</dd>
+      <dt>Writable</dt><dd>${esc(S.scratch)}</dd>
+      <dt>Network</dt><dd>${esc(S.network)}</dd>
+      <dt>Isolation</dt><dd>${esc(S.isolation)}</dd>
+      <dt>CPU / memory</dt><dd>${S.cpu} / ${S.memoryMB} MB</dd>
+      <dt>Per cell</dt><dd>${S.secondsPerCell} s</dd>
+      <dt>Printed output</dt><dd>capped at ${fmtN(S.outputCapChars)} chars</dd></dl></div>`);
+
+  setHTML("#harness-cmds", `
+    <div class="cmd"><div class="name">check</div><p>Runs the LoRA check shown above. One fixed conversation is scored under base and under checkpoint 18, and the two sets of log-probabilities are compared.</p></div>
+    <div class="cmd"><div class="name">run</div><p>Runs two arms on the same questions. <code>bench_ckpt</code> uses checkpoint 18 as root and <code>bench_base</code> uses base Qwen as root. The harness and the sub-call model are identical. A hard spending ceiling covers the whole run. Questions go in a fixed order that keeps ${esc(A.name)}’s category mix.</p></div>
+    <div class="cmd"><div class="name">judge</div><p>Grades every answer with Artificial Analysis’s own ${esc(A.version)} equality-checker prompts, copied verbatim from the dataset card. The judge is ${esc(A.judge.model)}. AA itself uses ${esc(A.judge.aaJudge)}.</p></div>
+    <div class="cmd"><div class="name">summary</div><p>Reports accuracy, standard error, a paired comparison of the two arms and the McNemar test.</p></div>`);
+}
+
+/* ------------------------------------------------------------------ AA-LCR */
+function renderAalcr() {
+  const J = A.judge, P = A.paired;
+  const nCats = A.categories.length;
+
+  setHTML("#aalcr-lead", `${esc(A.name)} is Artificial Analysis’s long-context benchmark. Each of its ${A.questions} questions comes with a set of real documents, and the answer has to be reasoned out across several of them. The questions are ${esc(A.license)}. This is ${esc(A.version)} (${esc(A.released)}).`);
+
+  setHTML("#aalcr-facts", `
+    <div><b>${A.questions}</b><span>questions</span></div>
+    <div><b>~${A.docTokensK}K</b><span>tokens per document set, on average</span></div>
+    <div><b>${fmtK(H.contextChars.min)}–${fmtK(H.contextChars.max)}</b><span>characters in <code>context</code></span></div>
+    <div><b>${nCats}</b><span>categories</span></div>`);
+
+  const cats = A.categories.map(c => {
+    const d = c.ckpt - c.base;
+    const dTxt = d === 0 ? "0" : (d > 0 ? "+" + d : "−" + Math.abs(d));
+    const dCls = d > 0 ? "delta-pos" : d < 0 ? "delta-neg" : "";
+    const cell = (k, alt) => `${k}/${c.n} <small style="display:inline;margin-left:4px">${Math.round(k / c.n * 100)}%</small><div class="cellbar"><i class="${alt ? "alt" : ""}" style="width:${k / c.n * 100}%"></i></div>`;
+    return `<tr><td>${esc(c.name)}</td><td class="num">${c.n}</td><td class="num">${cell(c.ckpt, false)}</td><td class="num">${cell(c.base, true)}</td><td class="num ${dCls}">${dTxt}</td></tr>`;
+  }).join("");
+  const totN = A.categories.reduce((s, c) => s + c.n, 0);
+  const totC = A.categories.reduce((s, c) => s + c.ckpt, 0);
+  const totB = A.categories.reduce((s, c) => s + c.base, 0);
+  const totD = totC - totB;
+  setHTML("#aalcr-cats", `
+    <h3>Correct answers by category</h3>
+    <div class="tablewrap"><table class="simple">
+      <thead><tr><th>Category</th><th class="num">Questions</th><th class="num">Checkpoint 18</th><th class="num">Base</th><th class="num">Difference</th></tr></thead>
+      <tbody>${cats}
+      <tr><td><strong>All</strong></td><td class="num"><strong>${totN}</strong></td><td class="num"><strong>${totC}/${totN}</strong></td><td class="num"><strong>${totB}/${totN}</strong></td><td class="num ${totD > 0 ? "delta-pos" : ""}"><strong>${totD > 0 ? "+" : ""}${totD}</strong></td></tr></tbody>
+    </table></div>
+    <p class="small">Company Documents is ${A.categories.find(c => c.name === "Company Documents").n} of the ${totN} questions, so it carries most of the total. Counts are derived from the per-category results.</p>`);
+
+  const bothRight = ck.correct - P.onlyCkpt;
+  const bothWrong = A.questions - bothRight - P.onlyCkpt - P.onlyBase;
+  setHTML("#aalcr-paired", `
+    <div class="panel">
+      <h3>Paired by question</h3>
+      <div class="tablewrap" style="border:0"><table class="simple" style="min-width:0">
+        <thead><tr><th></th><th class="num">Base right</th><th class="num">Base wrong</th></tr></thead>
+        <tbody>
+          <tr><td>Checkpoint 18 right</td><td class="num">${bothRight}</td><td class="num"><strong>${P.onlyCkpt}</strong></td></tr>
+          <tr><td>Checkpoint 18 wrong</td><td class="num"><strong>${P.onlyBase}</strong></td><td class="num">${bothWrong}</td></tr>
+        </tbody></table></div>
+      <p>${P.onlyCkpt} questions only checkpoint 18 got right, ${P.onlyBase} only base got right. McNemar p = ${P.mcnemarP.toFixed(1)}. There is no measurable training effect on ${esc(A.name)}.</p>
+      <p class="small">The two cells on the diagonal are derived from the totals.</p>
+    </div>
+    <div class="panel">
+      <h3>Per-question behaviour</h3>
+      <div class="tablewrap" style="border:0"><table class="simple" style="min-width:0">
+        <thead><tr><th></th><th class="num">Checkpoint 18</th><th class="num">Base</th></tr></thead>
+        <tbody>
+          <tr><td>Cost</td><td class="num">${usd(ck.costPerQ)}</td><td class="num">${usd(bs.costPerQ)}</td></tr>
+          <tr><td>Mean turns</td><td class="num">${ck.turns.toFixed(1)}</td><td class="num">${bs.turns.toFixed(1)}</td></tr>
+          <tr><td>Mean sub-calls</td><td class="num">${ck.subcalls.toFixed(1)}</td><td class="num">${bs.subcalls.toFixed(1)}</td></tr>
+          <tr><td>No sub-calls</td><td class="num">${ck.noSubcalls} of ${A.questions}</td><td class="num">${bs.noSubcalls} of ${A.questions}</td></tr>
+        </tbody></table></div>
+      <p class="small">${ck.noSubcalls} of ${A.questions} checkpoint 18 answers used no sub-calls at all, so on ${esc(A.name)} the model mostly searched and read in its own REPL.</p>
+    </div>`);
+
+  setHTML("#aalcr-judge", `
+    <div class="panel">
+      <h3>Judge spot-check</h3>
+      <p>${J.spotChecked} random “correct” verdicts were checked by hand against the gold answers. ${J.agreed} agreed and ${J.lenient} was lenient: “${esc(J.lenientExample.given)}” was accepted for “${esc(J.lenientExample.gold)}”.</p>
+      <p class="small">The check covered correct verdicts only, so it looks for leniency. Judging ${J.answersJudged} answers cost ${usd(J.costUSD, 2)}.</p>
+    </div>
+    <div class="panel">
+      <h3>What the documents are</h3>
+      <p>${A.docTypes.map(esc).join(", ")}.</p>
+      <p class="small">Each set averages about ${A.docTokensK}K tokens. In the harness the whole set is loaded into <code>context</code>, and the model reads slices of it.</p>
+    </div>`);
+
+  const gapQ = pubQwen.score - ck.score;
+  const gapG = ck.score - pubGemma.score;
+  const cheaper = Math.round((bs.costPerQ - ck.costPerQ) / bs.costPerQ * 100);
+  setHTML("#aalcr-reading", `
+    <h3>Reading the result</h3>
+    <ul class="ticklist">
+      <li>Reading only slices of each document set, our 27B model in the RLM harness lands ${gapQ} points below Qwen’s own Xhigh direct-reading score (${ck.score}% against ${pubQwen.score}%) and ${gapG} points above Gemma 4 31B (${ck.score}% against ${pubGemma.score}%). The ${gapQ}-point gap is smaller than one standard error of our score (${ck.se.toFixed(1)}).</li>
+      <li>Training did not move ${esc(A.name)}: ${ck.score}% against ${bs.score}%, McNemar p = ${P.mcnemarP.toFixed(1)}. That fits what was trained. Most ${esc(A.name)} questions are solved by searching and reading, while the training gains were in delegation-heavy aggregation. <span class="tag inf">interpretation</span></li>
+      <li>Checkpoint 18 was about ${cheaper}% cheaper per question than base (${usd(ck.costPerQ)} against ${usd(bs.costPerQ)}).</li>
+    </ul>
+    <h3>How loose the comparison with published scores is</h3>
+    <ul class="ticklist">
+      <li><strong>Reading mode.</strong> Published scores read the whole document set directly in one prompt. Ours read slices through code.</li>
+      <li><strong>Reasoning effort.</strong> Qwen’s published score is at Xhigh. Our root runs at ${esc(H.rootLimits.effort)}.</li>
+      <li><strong>Judge.</strong> Artificial Analysis grades with ${esc(J.aaJudge)}. We grade with ${esc(J.model)}, using AA’s own prompts. ${J.agreed} of ${J.spotChecked} spot-checked verdicts agreed with the gold answers.</li>
+      <li><strong>Sample size.</strong> ${A.questions} questions, with standard errors of ${ck.se.toFixed(1)} and ${bs.se.toFixed(1)} points on our two scores.</li>
+    </ul>`);
+}
+
+/* ----------------------------------------------------------------- context */
+function renderContext() {
+  const F = C.families, HO = C.heldOut, CAP = C.capability, V = C.vendor;
+  setHTML("#context-lead", `Checkpoint 18 comes from ${esc(C.run)}, an RL run (${esc(C.method)}, ${esc(C.stack)}) of ${C.steps} steps. These numbers show what it was trained on and how it scored on its own tests.`);
+
+  const stack = `<div class="stack" role="img" aria-label="Training task mix">${F.map((f, i) => `<i class="f${i}" style="flex:${f.pct}"></i>`).join("")}</div>`;
+  const famLegend = `<div class="legend-grid">${F.map((f, i) => `<div class="row"><span><span class="sw" style="background:${["var(--ours)", "var(--pub)", "var(--base)", "color-mix(in srgb, var(--ink) 70%, transparent)"][i]}"></span>${esc(f.name)}</span><b>${f.pct}%</b></div>`).join("")}</div>`;
+
+  setHTML("#context-top", `
+    <div class="panel">
+      <h3>Training task mix</h3>
+      ${stack}
+      ${famLegend}
+    </div>
+    <div class="panel">
+      <h3>The run’s own tests</h3>
+      <div class="mini">
+        <div class="mini-row"><span>Selection set, checkpoint 18</span><div class="mini-track"><i style="width:${HO.ckpt18}%;background:var(--ours)"></i></div><b>${HO.ckpt18.toFixed(1)}%</b></div>
+        <div class="mini-row"><span>Selection set, checkpoint 11</span><div class="mini-track"><i style="width:${HO.ckpt11}%;background:var(--base)"></i></div><b>${HO.ckpt11.toFixed(1)}%</b></div>
+        <div class="mini-row"><span>Capability check, checkpoint 18</span><div class="mini-track"><i style="width:${CAP.ckpt18}%;background:var(--ours)"></i></div><b>${CAP.ckpt18}%</b></div>
+        <div class="mini-row"><span>Capability check, base</span><div class="mini-track"><i style="width:${CAP.base}%;background:var(--base)"></i></div><b>${CAP.base}%</b></div>
+      </div>
+      <p class="small">The selection set is held out from training and has ${HO.tasks} tasks. The capability check matches base at ${CAP.ckpt18}%.</p>
+    </div>`);
+
+  const vrows = V.rows.map(r => {
+    const w = r.a >= r.b;
+    const cell = (v, win) => `<td class="num">${win ? "<strong>" + v.toFixed(1) + "</strong>" : v.toFixed(1)}<div class="cellbar"><i class="${win ? "" : "alt"}" style="width:${v}%"></i></div></td>`;
+    return `<tr><td>${esc(r.bench)}</td>${cell(r.a, w)}${cell(r.b, !w)}</tr>`;
+  }).join("");
+  setHTML("#context-vendor", `
+    <h3>Vendor-published scores for near-sized models</h3>
+    <div class="tablewrap"><table class="simple">
+      <thead><tr><th>Benchmark</th><th class="num">${esc(V.models[0])}</th><th class="num">${esc(V.models[1])}</th></tr></thead>
+      <tbody>${vrows}</tbody></table></div>
+    <p class="small">From ${esc(V.source)}, for context only. We did not run these.</p>`);
+}
+
+/* ------------------------------------------------------------------ budget */
+function renderBudget() {
+  const spent = B.items.reduce((s, i) => s + i.usd, 0);
+  const left = B.monthLeft - spent;
+  const segs = B.items.map((it, i) => ({ ...it, cls: "s" + i })).concat([{ name: "Left in October (derived)", usd: left, cls: "s3" }]);
+  setHTML("#budget-lead", `W&amp;B inference spent on these benchmarks is ${usd(spent, 2)} of the ${usd(B.monthLeft, 2)} left in October, by our own cost estimates; W&amp;B's meter is the final word. About ${usd(left, 2)} is left.`);
+  setHTML("#budget-body", `
+    <div class="stack" role="img" aria-label="Spend against the October budget">${segs.map(s => `<i class="${s.cls}" style="flex:${s.usd}"></i>`).join("")}</div>
+    <div class="legend-grid">${segs.map(s => `<div class="row"><span><span class="sw ${s.cls === "s0" ? "ckpt" : s.cls === "s1" ? "base" : s.cls === "s2" ? "judge" : "free"}"></span>${esc(s.name)}</span><b>${usd(s.usd, 2)}</b></div>`).join("")}</div>
+    <p class="small">${usd(B.monthLeft, 2)} is the October amount left before this benchmark. The remainder (${usd(left, 2)}) is derived.</p>`);
+}
+
+/* ------------------------------------------------------------------ OOLONG */
+function renderOolong() {
+  setHTML("#oolong-lead", `OOLONG-synth is the RLM paper’s flagship long-context aggregation benchmark. The model labels every line of a long input and then counts. That is the skill our training targeted. It is held out and was never trained on.`);
+  const O = DATA.oolong;
+  if (!O) {
+    setHTML("#oolong-results", `<div class="running"><span class="dot run"></span><strong>Running now: results to come</strong></div>`);
+    return;
+  }
+  const notes = (O.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+  setHTML("#oolong-results", `${resultsTable(O)}${barChart(O, { title: "OOLONG-synth score at 16K and 32K tokens", pubLegend: O.pubLegend || "Published score", pubSub: O.pubSub || "published score" })}${notes ? `<ul class="small">${notes}</ul>` : ""}`);
+}
+
+/* ------------------------------------------------------------------ footer */
+function renderFooter() {
+  setHTML("#foot-sources", `Published scores: Artificial Analysis, ${esc(A.name)} ${esc(A.version)}, and ${esc(C.vendor.source)} for the vendor figures. Everything else was measured by us with scripts/benchmark.py.`);
+}
+
+renderHeader(); renderHeadline(); renderHarness(); renderAalcr(); renderContext(); renderBudget(); renderOolong(); renderFooter();
+</script>
