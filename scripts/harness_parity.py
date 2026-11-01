@@ -63,8 +63,8 @@ ZERO_USAGE = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "ca
               "reasoning_tokens": 0, "cost_usd": 0.0}
 MODEL_ERROR, INTERNAL_ERROR = -32001, -32603
 
-# Stripped from the engine's environment, as the app does (D-29); git's env config goes as a whole (D-62).
-KEY_LIKE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH", re.I)
+# Stripped from the engine's environment, as the app does (D-29, D-133); git's env config goes as a whole (D-62).
+KEY_LIKE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|HEADERS", re.I)
 GIT_ENV_CONFIG = re.compile(r"^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$", re.I)
 
 ENGINE_STOP_S = 10
@@ -102,6 +102,16 @@ ENGINE_FIXES: tuple[tuple[str, str, str], ...] = (
     ("d0e7a1c", "the worker names its own files in a traceback as training did, /opt/rlm/repl_worker.py and "
                 "/opt/rlm/repl_tools.py, never the install folder (D-109); line numbers stay its own",
      "engine/tests/test_worker.py::test_traceback_names_training_files"),
+    ("807eca5", "shell() maps /work/repo in the command to the workspace, as the tools do (D-150); training's "
+                "sandbox had that folder, so `cd /work/repo && ...` failed natively",
+     "engine/tests/test_tools.py::test_shell_maps_the_repo_alias"),
+    ("807eca5", "on Windows /tmp is one folder (<scratch>/tmp) for the file tools and the shell, as training's one "
+                "/tmp was (D-150)", "engine/tests/test_tools.py::test_tmp_is_one_folder_for_the_tools_and_the_shell"),
+    ("807eca5", "on Windows the shell's \\r\\n reaches the model as \\n, as on training's Linux (D-150)",
+     "engine/tests/test_tools.py::test_shell_lines_end_as_in_training"),
+    ("807eca5", "the model's commands no longer inherit the engine's PYTHONUNBUFFERED, which put a child "
+                "Python's traceback after its buffered prints (D-150)",
+     "engine/tests/test_worker.py::test_env_strips_keys_and_temp_is_scratch"),
 )
 
 TIME_RE = re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s|sec|seconds)\b")
