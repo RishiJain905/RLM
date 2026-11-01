@@ -441,7 +441,7 @@ class SmokeCase(unittest.TestCase):
 
     def cli(self, mode, *extra, models=(MODEL_A, MODEL_B), date=DATE):
         argv = [mode, "--rlmh", str(self.stub), "--catalog", str(self.catalog), "--tokens-from", str(self.tokens),
-                "--date", date]
+                "--date", date, "--harness", str(self.tmp / "no-harness")]
         if models:
             argv += ["--model-a", models[0], "--model-b", models[1]]
         return self.main(*argv, *extra)
@@ -763,6 +763,38 @@ class EstimateTests(SmokeCase):
             price, tool_call = hs.load_prices(f"{provider}/{name}", catalog, None, "a")
             self.assertEqual(set(price), {"input", "output", "cache_read", "cache_write"})
             self.assertIsInstance(tool_call, bool)
+
+    def test_profile_limits(self):
+        # rlm-harness D-152: a profile's [read] keys go on top of READ_LIMITS_V4, and the ceiling follows them
+        with tempfile.TemporaryDirectory() as tmp:
+            harness, home = Path(tmp) / "harness", Path(tmp) / "home"
+            built_in = harness / "engine" / "rlm_engine" / "profiles" / "default"
+            built_in.mkdir(parents=True)
+            (built_in / "profile.toml").write_text('contract = "v4"\n[read]\nmax_turns = 50\nroot_max_tokens = 16384\n'
+                                                   'subcall_max_tokens = 16384\n[repo]\nmax_turns = 150\n', encoding="utf-8")
+            mine = home / "profiles" / "mine"
+            mine.mkdir(parents=True)
+            (mine / "profile.toml").write_text('contract = "v4"\n[read]\nmax_turns = 7\n', encoding="utf-8")
+            lim, source = hs.profile_limits("default", harness, home)
+            self.assertEqual((lim.max_turns, lim.root_max_tokens, lim.subcall_max_tokens, lim.max_subcalls),
+                             (50, 16384, 16384, bridge.READ_LIMITS_V4.max_subcalls))
+            self.assertEqual(source, "the `default` profile's read limits")
+            self.assertEqual(hs.profile_limits("mine", harness, home)[0].max_turns, 7)
+            lim0, source0 = hs.profile_limits("nowhere", harness, home)
+            self.assertEqual(lim0, bridge.READ_LIMITS_V4)
+            self.assertIn("no `nowhere` profile.toml", source0)
+            # each slot's ceiling uses its own limits; the report's line shows the largest
+            a = hs.Slot("a", "openrouter/x", "default", "auto", PRICE_A, True, limits=lim, limits_source=source)
+            b = hs.Slot("b", "openrouter/y", "training-v4", "fenced", PRICE_A, True)
+            est = hs.estimate([a, b], hs.Reference(), 5, 1.5, None)
+            self.assertEqual(est["ceiling_tokens"], hs.ceiling_tokens(lim))
+            self.assertEqual(est["ceiling_source"], source)
+            self.assertGreater(est["slots"]["a"]["ceiling_run"], 4 * est["slots"]["b"]["ceiling_run"])
+            self.assertAlmostEqual(est["slots"]["b"]["ceiling_run"], hs.run_cost(hs.ceiling_tokens(), PRICE_A), places=9)
+            # each slot keeps its own source, so a slot that fell back to training's limits is named
+            self.assertEqual((est["slots"]["a"]["ceiling_source"], est["slots"]["b"]["ceiling_source"]),
+                             (source, "`READ_LIMITS_V4`"))
+            self.assertEqual(est["slots"]["b"]["ceiling_tokens"], hs.ceiling_tokens())
 
     def test_estimate_math(self):
         ref = hs.Reference(n=2, root_in=REF_TOKENS["root_in"], root_out=REF_TOKENS["root_out"],
@@ -1572,7 +1604,9 @@ class ReportTests(SmokeCase):
         # the estimate against the actual cost
         self.assertIn("| a | $2.1000 | $3.1500 | $23.0165 | $1.2500 |", report)
         self.assertIn("| b | $1.0500 | $1.5750 | $11.5083 | $2.5000 |", report)
-        self.assertIn("Ceiling per run: 2,964,907 tokens in, 409,600 out (`READ_LIMITS_V4`). Cost cap $9.4500.", report)
+        # no profile.toml under the test's --harness: training's limits, and the report says why (rlm-harness D-152)
+        self.assertIn("Ceiling per run: 2,964,907 tokens in, 409,600 out (`READ_LIMITS_V4`: no `default` profile.toml "
+                      "under --harness or the harness home). Cost cap $9.4500.", report)
         self.assertIn("Reference runs: 2", report)
         self.assertIn("RLM commit `0123456789abcdef`", report)
         self.assertIn("`rlmh 0.1.0`", report)

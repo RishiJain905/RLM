@@ -44,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,8 @@ class Slot:
     price: dict  # USD per 1M tokens: input, output, cache_read, cache_write
     tool_call: bool | None = None  # the catalog's flag; None when the catalog has no entry
     expected: str = ""  # the call format run.started should report
+    limits: Any = None  # the profile's read-mode limits, for the ceiling; None is training's READ_LIMITS_V4
+    limits_source: str = "`READ_LIMITS_V4`"  # where `limits` came from, as the report names it
 
     @property
     def provider(self) -> str:
@@ -192,8 +195,30 @@ def make_slots(args, catalog: dict | None) -> list[Slot]:
         price, tool_call = load_prices(ref, catalog, getattr(args, f"price_{name}"), name)
         profile = getattr(args, f"profile_{name}") or ("training-v4" if provider == "local" else "default")
         fmt = getattr(args, f"format_{name}") or DEFAULT_FORMAT[name]
-        slots.append(Slot(name, ref, profile, fmt, price, tool_call))
+        harness = getattr(args, "harness", None)
+        limits, source = profile_limits(profile, Path(harness)) if harness else (None, "`READ_LIMITS_V4`")
+        slots.append(Slot(name, ref, profile, fmt, price, tool_call, limits=limits, limits_source=source))
     return slots
+
+
+CEILING_KEYS = ("max_turns", "max_subcalls", "root_max_tokens", "output_max_chars", "subcall_max_chars",
+                "subcall_max_tokens")
+
+
+def profile_limits(profile: str, harness: Path, home: Path | None = None) -> tuple[Any, str]:
+    """The read-mode limits `profile` runs under, read as rlm-harness reads them: training's READ_LIMITS_V4 with the
+    profile's `[read]` keys on top. rlm-harness's `default` profile has more turns and output tokens than training's
+    (its D-152), so its ceiling is several times training's. A built-in profile is read from the harness checkout
+    (a built-in shadows a user's of the same name), a user's from the harness home. A profile in neither gets
+    READ_LIMITS_V4, and the source says so, since that ceiling may be low."""
+    home = home or Path(os.environ.get("RLMH_HOME") or Path.home() / ".rlm-harness")
+    for path in (harness / "engine" / "rlm_engine" / "profiles" / profile / "profile.toml",
+                 home / "profiles" / profile / "profile.toml"):
+        if path.is_file():
+            read = tomllib.loads(path.read_text(encoding="utf-8")).get("read", {})
+            changes = {k: read[k] for k in CEILING_KEYS if k in read}
+            return dataclasses.replace(bridge.READ_LIMITS_V4, **changes), f"the `{profile}` profile's read limits"
+    return bridge.READ_LIMITS_V4, f"`READ_LIMITS_V4`: no `{profile}` profile.toml under --harness or the harness home"
 
 
 # ----------------------------------------------------------------------------- reference tokens and the estimate
@@ -292,13 +317,19 @@ def ceiling_tokens(lim: Any = bridge.READ_LIMITS_V4) -> dict:
 def estimate(slots: list[Slot], ref: Reference, runs: int, margin: float, cap: float | None) -> dict:
     """Expected (reference tokens, no cache reads), planned (x margin) and ceiling cost per slot. With no reference
     runs the ceiling stands in for planned (D-115)."""
-    ceil = ceiling_tokens()
-    out = {"runs": runs, "margin": margin, "reference_runs": ref.n, "ceiling_tokens": ceil, "slots": {}}
+    ceilings = {s.name: ceiling_tokens(s.limits or bridge.READ_LIMITS_V4) for s in slots}
+    # the report's one ceiling line shows the largest; each slot's cost uses its own profile's
+    widest = max(slots, key=lambda s: sum(ceilings[s.name].values()), default=None)
+    out = {"runs": runs, "margin": margin, "reference_runs": ref.n,
+           "ceiling_tokens": ceilings[widest.name] if widest else ceiling_tokens(),
+           "ceiling_source": widest.limits_source if widest else "`READ_LIMITS_V4`", "slots": {}}
     for s in slots:
+        ceil = ceilings[s.name]
         ceiling_run = run_cost(ceil, s.price)
         expected_run = run_cost(ref.tokens(), s.price) if ref.n else None
         planned_run = expected_run * margin if expected_run is not None else ceiling_run
-        out["slots"][s.name] = {"expected_run": expected_run, "planned_run": planned_run, "ceiling_run": ceiling_run,
+        out["slots"][s.name] = {"ceiling_tokens": ceil, "ceiling_source": s.limits_source,
+                                "expected_run": expected_run, "planned_run": planned_run, "ceiling_run": ceiling_run,
                                 "expected": None if expected_run is None else expected_run * runs,
                                 "planned": planned_run * runs, "ceiling": ceiling_run * runs}
     out["planned_total"] = sum(v["planned"] for v in out["slots"].values())
@@ -818,8 +849,12 @@ def render(run: dict, slots: list[tuple[dict, list, dict]], problems: list[str],
         lines += [f"Reference runs: {est.get('reference_runs')} ({'; '.join(run.get('reference_notes') or [])}). "
                   f"Margin {est.get('margin')}. Ceiling per run: {est['ceiling_tokens']['root_in'] + est['ceiling_tokens']['sub_in']:,.0f} "
                   f"tokens in, {est['ceiling_tokens']['root_out'] + est['ceiling_tokens']['sub_out']:,.0f} out "
-                  f"(`READ_LIMITS_V4`). Cost cap {_usd(est.get('cap'))}.", "",
-                  "| Slot | Expected | Planned | Ceiling | Actual spend |", "|---|---|---|---|---|"]
+                  f"({est.get('ceiling_source', '`READ_LIMITS_V4`')}). Cost cap {_usd(est.get('cap'))}.", ""]
+        sources = {name: e.get("ceiling_source") for name, e in est["slots"].items() if e.get("ceiling_source")}
+        if len(set(sources.values())) > 1:  # a slot priced differently, a fallback to training's limits included
+            lines += ["Each slot's ceiling: " + "; ".join(f"slot {name} from {src}" for name, src in sorted(sources.items()))
+                      + ".", ""]
+        lines += ["| Slot | Expected | Planned | Ceiling | Actual spend |", "|---|---|---|---|---|"]
         for meta, _, st in slots:
             e = est["slots"].get(meta["slot"], {})
             lines.append(f"| {meta['slot']} | {_usd(e.get('expected'))} | {_usd(e.get('planned'))} | "
@@ -928,7 +963,8 @@ def print_estimate(slots: list[Slot], est: dict, ref: Reference, task_list: list
               f"{ref.sub_out:,.0f} out, {ref.turns:.1f} turns, {ref.subcalls:.1f} sub-calls")
     else:
         print("    no reference runs: expected is unknown, and the ceiling stands in for planned (D-115)")
-    print(f"  ceiling per run (READ_LIMITS_V4): root {ceil['root_in']:,.0f} in / {ceil['root_out']:,.0f} out, "
+    print(f"  ceiling per run ({est['ceiling_source'].replace('`', '')}): root {ceil['root_in']:,.0f} in / "
+          f"{ceil['root_out']:,.0f} out, "
           f"sub {ceil['sub_in']:,.0f} in / {ceil['sub_out']:,.0f} out")
     for s in slots:
         e = est["slots"][s.name]
@@ -937,6 +973,7 @@ def print_estimate(slots: list[Slot], est: dict, ref: Reference, task_list: list
               f"({'auto' if s.fmt == 'auto' else '--call-format ' + s.fmt}); catalog tool_call {s.tool_call}")
         print(f"    price per 1M: in ${p['input']}, out ${p['output']}, cache read ${p['cache_read']}, "
               f"cache write ${p['cache_write']}")
+        print(f"    ceiling from {e['ceiling_source'].replace('`', '')}")
         print(f"    per run: expected {_usd(e['expected_run'])}, planned {_usd(e['planned_run'])}, "
               f"ceiling {_usd(e['ceiling_run'])}")
         print(f"    {est['runs']} runs: expected {_usd(e['expected'])}, planned {_usd(e['planned'])}, "
