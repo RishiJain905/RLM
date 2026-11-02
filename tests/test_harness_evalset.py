@@ -637,6 +637,15 @@ class TestPython(unittest.TestCase):
         self.assertEqual(he.leak_reason(w), "")
         w.spec_titles, w.leak_texts = ["common/Question.js"], ["1. Create common/Question.js."]
         self.assertEqual(he.leak_reason(w), "")  # a title naming the file the request asks for (D-229)
+        w.spec_titles, w.leak_texts = ["toolbar area"], ["2. Append a button in the toolbar area."]
+        self.assertEqual(he.leak_reason(w), "")  # two words name a part of the page the request names (D-236)
+        # check applies the same web rule, on whole titles (a dot in a title is not a pytest separator)
+        line = '{"task": "2. In the toolbar area, add a button. Make sure Check Header is on the top of Main."}'
+        self.assertFalse(he.names_test("task-3.spec.js::toolbar area", "playwright", line))
+        self.assertTrue(he.names_test("task-1.spec.js::Check Header is on the top of Main", "playwright", line))
+        self.assertFalse(he.names_test("task-1.spec.js::common/Question.js", "playwright", line + " common/Question.js"))
+        self.assertTrue(he.names_test("tests/test_r.py::test_reader_handles_empty", "pytest",
+                                      "Fix test_reader_handles_empty."))
         w.hidden["test/util/index.js"] = b""
         w.leak_texts = ["1. Export it from index.js."]
         self.assertEqual(he.leak_reason(w), "")  # a helper, not a spec
@@ -660,6 +669,20 @@ class TestPython(unittest.TestCase):
         self.assertEqual(he.import_root(tmp), "src")
         put(tmp, {"my_pkg/__init__.py": ""})
         self.assertEqual(he.import_root(tmp), ".")
+
+    def test_runtime_file_and_extras(self):
+        # D-230: a setup.py that reads requirements.txt, and an extra a test imports
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        put(tmp, {"setup.py": "from setuptools import setup\nsetup(name='pkg', install_requires=read_reqs(),\n"
+                              "      extras_require={'cli': ['click'], 'test': ['pytest'], 'all': ['pkg[cli]']})\n",
+                  "requirements.txt": "orderly-set==5.2.2\n# a comment\n",
+                  "setup.cfg": "[options.extras_require]\ndiagrams =\n    railroad-diagrams\n    jinja2\n"})
+        test, runtime, own = he.project_requirements(tmp)
+        self.assertEqual(runtime, ["orderly-set==5.2.2"])
+        self.assertEqual(he.project_extras(tmp), ["railroad-diagrams", "jinja2", "click"])
+        self.assertEqual(he.PYTEST_ENV["PYTHONUTF8"], "1")
+        self.assertTrue(any(a.startswith("tzdata==") for a in he.ALWAYS))
 
 
 # ----------------------------------------------------------------------------- web
@@ -1012,6 +1035,24 @@ class TestGuard(unittest.TestCase):
             harness.mkdir()
             self.assertEqual(he.main(["check", "--data", str(harness / "data"), "--harness", str(harness)]), 2)
             self.assertEqual(he.main(["check", "--data", str(Path(t) / "data"), "--harness", str(harness)]), 1)
+
+    def test_web_cache(self):
+        # D-235: the web track can live on another drive; the choice is remembered, and it must be outside both repos
+        with tempfile.TemporaryDirectory() as t:
+            harness, data_ = Path(t) / "harness", Path(t) / "data"
+            harness.mkdir()
+            self.assertEqual(he.main(["check", "--data", str(data_), "--harness", str(harness),
+                                      "--web-cache", str(harness / "web")]), 2)
+            paths = he.Paths(data_.resolve(), he.SET, harness.resolve())
+            self.assertEqual(paths.web_cache, paths.cache)
+            he.resolve_web_root(paths, Path(t) / "ntfs")
+            self.assertEqual(paths.web_cache, (Path(t) / "ntfs").resolve() / "build" / he.SET)
+            again = he.Paths(data_.resolve(), he.SET, harness.resolve())
+            he.resolve_web_root(again, None)
+            self.assertEqual(again.web_cache, paths.web_cache)
+            runner = he.Runner(paths.cache, he.Envs(paths.cache), None, paths.web_cache / "work")
+            with runner.folder("web") as w, runner.folder("python") as p:
+                self.assertEqual((w.parent, p.parent), (paths.web_cache / "work", paths.cache / "work"))
 
 
 if __name__ == "__main__":

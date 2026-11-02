@@ -8,7 +8,8 @@
 apply to all three. The set goes to <data>/harness-eval/<set>/ in rlm-harness v1 architecture §6.1's layout, and the
 build cache (candidates, gold, build venvs, the Web-Bench clone, the pnpm store, Chromium, the kernel sources and the
 validation results) to <data>/harness-eval/build/<set>/, so a rerun resumes. Both must sit outside the RLM repo and the
-rlm-harness checkout: task data never enters git.
+rlm-harness checkout: task data never enters git. `--web-cache DIR` moves the web track's clone, projects, pnpm store,
+Chromium and work folders to <DIR>/build/<set>/ (pnpm needs links, which exFAT lacks; D-235), and is remembered.
 
 Tracks (D-176): `python` (training's edit tasks, plus the `edit_large` family built here, D-181), `web` (Web-Bench
 projects, D-222), `kernel` (GPU kernels in one CUDA/HIP dialect, written for this set and kept in the build cache,
@@ -159,6 +160,25 @@ class Paths:
     def cache(self) -> Path:
         return self.data / "harness-eval" / "build" / self.name
 
+    web_root: Path | None = None  # --web-cache (D-235)
+
+    @property
+    def web_cache(self) -> Path:
+        """The web track's Web-Bench clone, projects, pnpm store, Chromium and work folders. pnpm needs symlinks,
+        junctions and hard links, and exFAT (D:) has none, so they may live on another drive (D-235)."""
+        return self.web_root / "build" / self.name if self.web_root else self.cache
+
+
+def resolve_web_root(paths: Paths, given: Path | None) -> None:
+    """--web-cache is remembered in the build cache, so a rerun without it uses the same folder."""
+    note = paths.cache / "web-cache.json"
+    if given:
+        paths.web_root = given.resolve()
+        paths.cache.mkdir(parents=True, exist_ok=True)
+        write_json(note, {"dir": str(paths.web_root)})
+    elif note.exists():
+        paths.web_root = Path(json.loads(note.read_text(encoding="utf-8"))["dir"])
+
 
 def _inside(path: Path, root: Path) -> bool:
     path, root = path.resolve(), root.resolve()
@@ -167,7 +187,7 @@ def _inside(path: Path, root: Path) -> bool:
 
 def check_outside(paths: Paths) -> None:
     """The set and the build cache resolve outside the RLM repo and the harness checkout (task data never enters git)."""
-    for target in (paths.set_dir, paths.cache):
+    for target in (paths.set_dir, paths.cache, paths.web_cache):
         for root in (ROOT, paths.harness):
             if _inside(target, root):
                 raise SetupError(f"{target} is inside {root}: task data never enters git; pass --data outside both "
@@ -297,6 +317,24 @@ def clean_env(extra: dict | None = None, drop: tuple = ()) -> dict:
     env = {k: v for k, v in env.items() if not k.startswith("GIT_CONFIG_")}
     env.update(extra or {})
     return env
+
+
+# Every pytest run, here and in rlmh eval's grading (architecture §6.4): UTF-8 mode, so a test that opens a data file
+# with the default encoding reads it as on Linux, where the tasks were made, not as cp1252 on Windows (D-230)
+PYTEST_ENV = {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONUTF8": "1"}
+
+
+def which(name: str) -> str | None:
+    """shutil.which, except that on Windows only a PATHEXT form counts. Python 3.12.0's which returns npm's
+    extensionless `pnpm` shell shim, which CreateProcess can't run (WinError 193)."""
+    if os.name != "nt":
+        return shutil.which(name)
+    exts = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";") if e]
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        for ext in exts:
+            if folder and (Path(folder) / (name + ext)).is_file():
+                return str(Path(folder) / (name + ext))
+    return None
 
 
 def run(argv: list[str], cwd: Path | None = None, env: dict | None = None, timeout: float = 1800,
@@ -481,7 +519,8 @@ class Cand:
         return self.source.get("repo") or self.source.get("project") or self.source.get("op") or self.key
 
 
-VALIDATOR = 2  # bump when validation rules change, so cached verdicts are redone
+VALIDATOR = 3  # bump when validation rules change, so cached verdicts are redone (3: PYTHONUTF8, D-230)
+WEB_RULES = 2  # the same for rules that touch only the web track (2: the three-word title rule, D-236)
 
 
 def cand_key(*parts) -> str:
@@ -773,6 +812,9 @@ def spec_titles(texts: list[str]) -> list[str]:
 class WebBench:
     def __init__(self, cache: Path):
         self.dir = cache / "web-bench"
+        # A drive that records no ownership (exFAT, FAT32, some network shares) fails git's safe.directory check;
+        # trusting the clone on the command line touches no global config
+        self.git = ["git", "-c", f"safe.directory={self.dir.resolve().as_posix()}", "-C", str(self.dir)]
 
     def ensure(self) -> None:
         url, pin = WEBBENCH
@@ -780,12 +822,12 @@ class WebBench:
             self.dir.parent.mkdir(parents=True, exist_ok=True)
             code, out, _ = run(["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "clone", "-q",
                                 "--filter=blob:none", "--no-checkout", url, str(self.dir)], timeout=1800)
-            subprocess.run(["git", "-C", str(self.dir), "config", "core.autocrlf", "false"], capture_output=True)
             if code:
                 raise SetupError(f"can't clone Web-Bench: {out[-300:]}")
-        head = subprocess.run(["git", "-C", str(self.dir), "rev-parse", "HEAD"], capture_output=True, text=True).stdout
+        subprocess.run([*self.git, "config", "core.autocrlf", "false"], capture_output=True)
+        head = subprocess.run([*self.git, "rev-parse", "HEAD"], capture_output=True, text=True).stdout
         if head.strip() != pin or not (self.dir / "rush.json").exists():  # a --no-checkout clone has no files yet
-            code, out, _ = run(["git", "-C", str(self.dir), "-c", "advice.detachedHead=false", "-c", "core.autocrlf=false",
+            code, out, _ = run([*self.git, "-c", "advice.detachedHead=false", "-c", "core.autocrlf=false",
                                 "-c", "core.eol=lf", "checkout", "-q", pin], timeout=1800)
             if code:
                 raise SetupError(f"can't check out Web-Bench {pin}: {out[-300:]}")
@@ -887,7 +929,7 @@ class Pnpm:
         self.cache = cache
         self.store = cache / "pnpm-store"
         self.browsers = cache / "ms-playwright"
-        self.exe = shutil.which("pnpm") or "pnpm"
+        self.exe = which("pnpm") or "pnpm"
 
     def check(self) -> None:
         node = shutil.which("node")
@@ -929,6 +971,10 @@ class Pnpm:
         marker = self.browsers / f".rlmh-{version}"
         if marker.exists():
             return
+        if not list((folder / "node_modules" / ".bin").glob("playwright*")):  # fetched, not installed: no binary yet
+            code, out = self.install(folder)
+            if code:
+                raise RuntimeError(f"pnpm install before playwright install failed: {out[-500:]}")
         code, out, _ = self.cmd(folder, "exec", "playwright", "install", "chromium", timeout=3600)
         if code:
             raise RuntimeError(f"playwright install chromium failed: {out[-500:]}")
@@ -964,7 +1010,7 @@ def web_cand(wb: WebBench, cache: Path, project: str, split: str, size: str, imp
         put_files(target, gold_src)
 
     files = sorted(p for p in hidden if p.endswith(".spec.js"))
-    return Cand(key=cand_key("web", project, size, sha256(json.dumps({k: sha256(v) for k, v in base.items()},
+    return Cand(key=cand_key("web", WEB_RULES, project, size, sha256(json.dumps({k: sha256(v) for k, v in base.items()},
                                                                       sort_keys=True).encode())),
                 track="web", split=split, size=size, source={"family": "webbench", "project": project, "level": size},
                 task=text, runner="playwright", env=key, files=files, base=write_base, hidden=hidden, gold=gold,
@@ -1181,6 +1227,9 @@ def project_requirements(tree: Path) -> tuple[list[str], list[str], str]:
     for pattern in ("requirements*test*.txt", "requirements-dev.txt"):
         for f in sorted(tree.glob(pattern)):
             test += f.read_text(encoding="utf-8", errors="replace").splitlines()
+    req = tree / "requirements.txt"  # a setup.py that reads it gives no literal install_requires (D-230)
+    if req.exists():
+        runtime += req.read_text(encoding="utf-8", errors="replace").splitlines()
     tox = tree / "tox.ini"
     if tox.exists():
         cp = configparser.ConfigParser(interpolation=None)
@@ -1194,6 +1243,41 @@ def project_requirements(tree: Path) -> tuple[list[str], list[str], str]:
         test.append("pytest")
     dedup = lambda xs: list(dict.fromkeys(xs))  # noqa: E731
     return dedup(test), dedup(runtime), own
+
+
+def project_extras(tree: Path) -> list[str]:
+    """Every extra the snapshot declares, beyond the test ones: a test may import an optional feature's dependency
+    (D-230). Installed when they resolve; a venv without them is the fallback."""
+    extras: list = []
+    own = project_requirements(tree)[2]
+    pp = tree / "pyproject.toml"
+    if pp.exists():
+        try:
+            opt = (tomllib.loads(pp.read_text(encoding="utf-8")).get("project") or {}).get("optional-dependencies")
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+            opt = None
+        for name, v in sorted((opt or {}).items()):
+            if name not in TEST_EXTRAS:
+                extras += [x for x in v if isinstance(x, str)]
+    cfg = tree / "setup.cfg"
+    if cfg.exists():
+        cp = configparser.ConfigParser(interpolation=None)
+        try:
+            cp.read_string(cfg.read_text(encoding="utf-8"))
+        except (configparser.Error, UnicodeDecodeError):
+            cp = configparser.ConfigParser(interpolation=None)
+        if cp.has_section("options.extras_require"):
+            for name, v in sorted(cp.items("options.extras_require")):
+                if name not in TEST_EXTRAS:
+                    extras += v.splitlines()
+    sp = tree / "setup.py"
+    if sp.exists():
+        kw = _setup_py_kwargs(sp.read_text(encoding="utf-8", errors="replace"))
+        found = kw.get("extras_require") if isinstance(kw.get("extras_require"), dict) else {}
+        for name, v in sorted(found.items()):
+            if name not in TEST_EXTRAS:
+                extras += [v] if isinstance(v, str) else list(v)
+    return list(dict.fromkeys(_clean_reqs(extras, own)))
 
 
 def import_root(tree: Path) -> str:
@@ -1219,6 +1303,10 @@ def commit_date(entry: dict, tree: Path) -> tuple[str, bool]:
 
 
 RESOLVED_LOCK = threading.Lock()
+RESOLVER = 2  # bump when resolution rules change, so envs/resolved.json entries are redone (2: D-230)
+# Windows has no IANA time zone database, so zoneinfo needs the tzdata package there; Linux has /usr/share/zoneinfo.
+# Pinned, and installed apart from the commit-date cutoff: it is data only, and older commits predate its first release.
+ALWAYS = ("tzdata==2025.2",)
 DOCKER = (["docker"], ["wsl", "-d", "Ubuntu", "docker"])
 
 
@@ -1250,19 +1338,34 @@ def resolve_python_env(cache: Path, key: str, entry: dict, tree: Path, python: s
     rk = f"{key}@{python}"
     with RESOLVED_LOCK:
         done = _resolved(cache)
-    if rk in done:
+    if rk in done and done[rk].get("resolver") == RESOLVER:
         return done[rk]
     test, runtime, own = project_requirements(tree)
+    extras = project_extras(tree)
     date, approx = commit_date(entry, tree)
     venv = cache / "envs" / "resolve" / rk.replace("@", "-")
-    rmtree(venv)
     method, frozen, why, py = "uv", [], "", python
-    code, out, _ = run([uv(), "venv", "-q", "--python", python, str(venv)], env=clean_env(), timeout=1800)
+    # every declared extra first, then without the non-test extras when they don't resolve at the commit's date
+    attempts = [test + runtime + extras, test + runtime] if extras else [test + runtime]
+    for k, attempt in enumerate(attempts):
+        rmtree(venv)
+        code, out, _ = run([uv(), "venv", "-q", "--python", python, str(venv)], env=clean_env(), timeout=1800)
+        if code == 0:
+            reqs = venv / "requirements.in"
+            reqs.write_bytes("".join(r + "\n" for r in attempt).encode("utf-8"))
+            code, out, _ = run([uv(), "pip", "install", "-q", "--python", str(venv_python(venv)), "--exclude-newer",
+                                f"{date}T23:59:59Z", "-r", str(reqs)], env=clean_env(), timeout=3600)
+        if code == 0:
+            method = "uv (no extras)" if k else "uv"
+            break
     if code == 0:
-        reqs = venv / "requirements.in"
-        reqs.write_bytes("".join(r + "\n" for r in test + runtime).encode("utf-8"))
-        code, out, _ = run([uv(), "pip", "install", "-q", "--python", str(venv_python(venv)), "--exclude-newer",
-                            f"{date}T23:59:59Z", "-r", str(reqs)], env=clean_env(), timeout=3600)
+        code, out, _ = run([uv(), "pip", "freeze", "--python", str(venv_python(venv))], env=clean_env(),
+                           stdout_only=True)
+        have = {_req_name(x) for x in out.split("\n")}
+        missing = [a for a in ALWAYS if _req_name(a) not in have and _req_name(a) != own]
+        if missing:
+            code, out, _ = run([uv(), "pip", "install", "-q", "--python", str(venv_python(venv)), *missing],
+                               env=clean_env(), timeout=1800)
     if code == 0:
         code, out, _ = run([uv(), "pip", "freeze", "--python", str(venv_python(venv))], env=clean_env(),
                            stdout_only=True)
@@ -1272,8 +1375,11 @@ def resolve_python_env(cache: Path, key: str, entry: dict, tree: Path, python: s
         py, frozen, dwhy = docker_freeze(entry.get("tag") or entry.get("image") or "", own)
         method = "docker" if py else "failed"
         why += dwhy
+        if py:  # a Linux image has the system database, not the package
+            frozen += [a for a in ALWAYS if _req_name(a) not in {_req_name(x) for x in frozen}]
     rmtree(venv)
-    result = {"method": method, "python": py, "date": date, "date_approx": approx, "why": why.strip(),
+    result = {"resolver": RESOLVER, "method": method, "python": py, "date": date, "date_approx": approx,
+              "why": why.strip(),
               "spec": {"python": py, "requirements": frozen, "import_root": import_root(tree)}}
     with RESOLVED_LOCK:
         done = _resolved(cache)
@@ -1347,15 +1453,17 @@ def playwright_key(classname: str, name: str) -> str | None:
 class Runner:
     """Runs one candidate's tests in a fresh work folder, exactly as rlmh eval grades (architecture §6.4)."""
 
-    def __init__(self, cache: Path, envs: Envs, pn: Pnpm | None):
+    def __init__(self, cache: Path, envs: Envs, pn: Pnpm | None, web_work: Path | None = None):
         self.cache, self.envs, self.pn = cache, envs, pn
         self.work = cache / "work"
+        self.web_work = web_work or self.work  # web runs need a file system with links (D-235)
         self.gpu = threading.Lock()
 
     @contextlib.contextmanager
-    def folder(self):
-        self.work.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix="v-", dir=self.work))
+    def folder(self, track: str = ""):
+        work = self.web_work if track == "web" else self.work
+        work.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix="v-", dir=work))
         try:
             yield tmp
         finally:
@@ -1385,7 +1493,7 @@ class Runner:
         argv = [str(py), "-c", grader.PYTEST_BOOT_TEMPLATE % str(work.resolve()), "-p", "no:cacheprovider",
                 "-o", "junit_family=xunit1", f"--junitxml={junit}", "--tb=short", "-q", *files]
         with self.envs.src_root(c.env, work):
-            code, out, secs = run(argv, cwd=work, env=clean_env({"PYTHONDONTWRITEBYTECODE": "1"}), timeout=timeout)
+            code, out, secs = run(argv, cwd=work, env=clean_env(PYTEST_ENV), timeout=timeout)
         return junit_results(junit, "pytest"), code, out, secs
 
     def playwright(self, c: Cand, work: Path, tmp: Path, files: list[str], timeout: float = 1800):
@@ -1408,7 +1516,7 @@ class Runner:
 
     def validate(self, c: Cand) -> Verdict:
         lock = self.gpu if c.track == "kernel" else contextlib.nullcontext()
-        with lock, self.folder() as tmp:
+        with lock, self.folder(c.track) as tmp:
             return self._validate(c, tmp)
 
     def _validate(self, c: Cand, tmp: Path) -> Verdict:
@@ -1490,7 +1598,7 @@ class Runner:
             py = self.envs.python(c.env)
             argv = [str(py), "-m", "pytest", "-q", "--collect-only", "-p", "no:cacheprovider"]
             with self.envs.src_root(c.env, work):
-                code, out, _ = run(argv, cwd=work, env=clean_env({"PYTHONDONTWRITEBYTECODE": "1"}), timeout=900)
+                code, out, _ = run(argv, cwd=work, env=clean_env(PYTEST_ENV), timeout=900)
             return "" if code in (0, 5) else f"the visible tests don't collect (exit {code}): {out[-200:]}"
         if c.track == "kernel":
             _, code, out, _ = self.pytest(c, work, tmp, ["tests/test_smoke.py"], timeout=900)
@@ -1527,8 +1635,9 @@ def leak_reason(c: Cand) -> str:
             if Path(name).name in texts:
                 return f"the task text names a hidden spec file ({Path(name).name})"
         for title in c.spec_titles:
-            # a title that is a file path names a file the request asks for, not a test (D-229)
-            if len(title) >= 8 and title in texts and not FILE_TITLE.search(title):
+            # a title that is a file path names a file the request asks for, not a test (D-229); one of one or two
+            # words names a class, page or panel the request has to name (D-236)
+            if len(title) >= 8 and len(title.split()) >= 3 and title in texts and not FILE_TITLE.search(title):
                 return "the task text names a spec title"
     return ""
 
@@ -1550,6 +1659,7 @@ class Results:
     def __init__(self, cache: Path):
         self.path = cache / "validation.jsonl"
         self.rows = {r["key"]: r for r in read_jsonl(self.path)}
+        self.used: set[str] = set()  # the keys this build drew, cached or validated now: the report counts only these
         self.lock = threading.Lock()
 
     def get(self, key: str) -> dict | None:
@@ -1581,6 +1691,8 @@ class Validator:
         if not self.validate_on:
             return unvalidated(c)
         row = self.results.get(c.key)
+        with self.results.lock:
+            self.results.used.add(c.key)
         if row is not None and row.get("env") == c.env:
             return row
         try:
@@ -1736,8 +1848,8 @@ def build_python(paths: Paths, val: Validator, envs: Envs, built: Built, seed: i
 def build_web(paths: Paths, val: Validator, built: Built, validate: bool) -> None:
     """Per split, walk the projects in preference order: the first that validates takes L (requests 1-12), the next
     two M (1-6), the next two S (1-3). A project gives at most one task."""
-    pn = val.runner.pn if val.runner else Pnpm(paths.cache)
-    wb = WebBench(paths.cache)
+    pn = val.runner.pn if val.runner else Pnpm(paths.web_cache)
+    wb = WebBench(paths.web_cache)
     wb.ensure()
     importers = wb.importers()
     order = {}
@@ -1761,13 +1873,14 @@ def build_web(paths: Paths, val: Validator, built: Built, validate: bool) -> Non
                 if project in used:
                     continue
                 try:
-                    c = web_cand(wb, paths.cache, project, split, size, importers, pn, built.nodeenvs, validate)
+                    c = web_cand(wb, paths.web_cache, project, split, size, importers, pn, built.nodeenvs, validate)
                     if validate:
-                        folder = paths.cache / "web" / f"{project}-{size}"
+                        folder = paths.web_cache / "web" / f"{project}-{size}"
                         pn.fetch(folder)
                         pn.browser(folder, built.nodeenvs[c.env]["playwright"])
                 except (SetupError, RuntimeError, OSError) as e:
                     built.notes.append(f"web {split}: {project} at {size} skipped: {str(e)[:200]}")
+                    log(f"    web {split} {size} {project}: skipped, {str(e)[-200:]}")
                     continue
                 row = val.one(c)
                 if row["kept"]:
@@ -1898,10 +2011,10 @@ def cmd_build(paths: Paths, only: list[str], jobs: int, validate: bool, force: b
     check_ignored()
     paths.cache.mkdir(parents=True, exist_ok=True)
     envs = Envs(paths.cache)
-    pn = Pnpm(paths.cache) if "web" in only else None
+    pn = Pnpm(paths.web_cache) if "web" in only else None
     if pn and validate:
         pn.check()
-    runner = Runner(paths.cache, envs, pn) if validate else None
+    runner = Runner(paths.cache, envs, pn, paths.web_cache / "work") if validate else None
     val = Validator(runner, Results(paths.cache), jobs, validate)
     built = Built()
     seed = tasks.private_seed_list("harness-eval-v1-repo", 1)[0] if {"python"} & set(only) else 0
@@ -1928,16 +2041,17 @@ def cmd_build(paths: Paths, only: list[str], jobs: int, validate: bool, force: b
             backend = kernel_backend(envs, key, paths)
             kernel_on = [backend] if backend else []
     manifest = assemble(paths, built, validate, kernel_on)
-    print_counts(paths, built, manifest)
+    print_counts(paths, built, manifest, val.results.used)
     for n in built.notes:
         log(f"  note: {n}")
     return EXIT_OK
 
 
-def print_counts(paths: Paths, built: Built, manifest: dict) -> None:
+def print_counts(paths: Paths, built: Built, manifest: dict, used: set[str] | None = None) -> None:
     rows = read_jsonl(paths.cache / "validation.jsonl")
-    last = {r["key"]: r for r in rows}
-    dropped = collections.Counter(re.sub(r"[:(].*", "", r["why"]).strip() for r in last.values() if not r["kept"])
+    last = {r["key"]: r for r in rows if not used or r["key"] in used}  # stale verdicts from older rules stay out
+    dropped = collections.Counter(re.sub(r"[:(].*", "", r["why"], flags=re.S).strip()
+                                  for r in last.values() if not r["kept"])
     log(f"set {paths.set_dir}")
     for k, n in manifest["counts"].items():
         log(f"  {k}: {n}")
@@ -1948,8 +2062,10 @@ def print_counts(paths: Paths, built: Built, manifest: dict) -> None:
         cells[r.get("cell") or r["track"]][1] += bool(r["kept"])
     for cell, (n, k) in sorted(cells.items()):
         log(f"  {cell}: {n} candidates validated, {k} kept")
-    resolved = _resolved(paths.cache)
-    kinds = collections.Counter(f"python venv by {r['method']}, Python {r['python']}" for r in resolved.values())
+    resolved = [r for r in _resolved(paths.cache).values() if r.get("resolver") == RESOLVER]
+    in_set = [r for r in resolved if r["spec"]["python"] and env_key("py", r["spec"]) in built.venvs]
+    kinds = collections.Counter(f"python venv in the set by {r['method']}, Python {r['python']}" for r in in_set)
+    kinds.update(f"python venv tried by {r['method']}" for r in resolved)
     kinds.update(f"{'kernel venv' if k.startswith('kernel') else 'python venv'} in the set" for k in built.venvs)
     kinds.update("node env" for _ in built.nodeenvs)
     for what, n in sorted(kinds.items()):
@@ -1986,6 +2102,18 @@ TASK_KEYS = {"read": {"id", "kind", "track", "split", "size", "question", "input
              "repo": {"id", "kind", "track", "split", "size", "task", "base", "test_hint"}}
 GRADE_KEYS = {"answer": {"id", "grader", "gold", "grading", "pass_score"},
               "tests": {"id", "grader", "runner", "hidden", "f2p", "p2p", "files", "timeout_s"}}
+
+
+def names_test(name: str, runner: str, text: str) -> bool:
+    """Whether a task line names one of its tests: a pytest function, or a Playwright spec title by the build's web
+    rule (three or more words and not a file path, D-229, D-236)."""
+    if runner == "playwright":
+        short = name.split("::", 1)[-1]
+        if len(short.split()) < 3 or FILE_TITLE.search(short):
+            return False
+    else:
+        short = name.split("::")[-1].split(".")[-1].split("/")[0]
+    return len(short) >= 8 and bool(re.search(rf"(?<![\w]){re.escape(short)}(?![\w])", text))
 
 
 def cmd_check(paths: Paths) -> list[str]:
@@ -2113,12 +2241,8 @@ def cmd_check(paths: Paths) -> list[str]:
             golds = g["gold"] if isinstance(g["gold"], list) else [g["gold"]]
             if any(len(str(x).strip()) >= 4 and str(x).strip().lower() in text.lower() for x in golds):
                 problems.append(f"{g['id']}: a gold string is in tasks.jsonl")
-        else:
-            for name in g.get("f2p", []) + g.get("p2p", []):
-                short = name.split("::")[-1].split(".")[-1].split("/")[0]
-                if len(short) >= 8 and re.search(rf"(?<![\w]){re.escape(short)}(?![\w])", text):
-                    problems.append(f"{g['id']}: a test name is in tasks.jsonl")
-                    break
+        elif any(names_test(name, g.get("runner", ""), text) for name in g.get("f2p", []) + g.get("p2p", [])):
+            problems.append(f"{g['id']}: a test name is in tasks.jsonl")
     plan = plan_counts()
     for k in sorted(set(plan) | set(counts)):
         if plan.get(k, 0) != counts.get(k, 0):
@@ -2200,6 +2324,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--set", default=SET)
     ap.add_argument("--data", type=Path, default=None)
     ap.add_argument("--harness", type=Path, default=ROOT.parent / "rlm-harness")
+    ap.add_argument("--web-cache", type=Path, default=None,
+                    help="a folder on a file system with links (NTFS) for the web track; remembered (D-235)")
     ap.add_argument("--only", default=",".join(TRACKS))
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--no-validate", action="store_true")
@@ -2217,6 +2343,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.data:
             os.environ[data.DATA_ENV] = str(a.data)
         paths = Paths(Path(root).resolve(), a.set, a.harness.resolve())
+        resolve_web_root(paths, a.web_cache)
         if a.command == "build":
             return cmd_build(paths, only, a.jobs, not a.no_validate, a.force)
         check_outside(paths)
