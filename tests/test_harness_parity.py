@@ -1028,12 +1028,12 @@ class EngineLinkTests(unittest.TestCase):
         th = hp.TRAINING_HASH
         self.assertEqual(th, bridge.PROMPT_HASHES["v4"])  # the literal in the script is training's
         profiles = (hp.PROFILE, hp.PROFILE_NOPACE)
-        info = {"protocol": 1, "training_hash": th, "version": "0.1.0", "python": "3.12.3",
+        info = {"protocol": 2, "training_hash": th, "version": "0.1.0", "python": "3.12.3",
                 "profiles": [{"name": "training-v4", "prompt_hash": th},
                              {"name": "training-v4-nopace", "prompt_hash": th},
                              {"name": "default", "prompt_hash": "0" * 64}]}
         self.assertIsNone(hp.check_info(info, profiles))
-        bad = [dict(info, protocol=2), dict(info, protocol=None), dict(info, training_hash="0" * 64),
+        bad = [dict(info, protocol=1), dict(info, protocol=None), dict(info, training_hash="0" * 64),
                {k: v for k, v in info.items() if k != "training_hash"},
                dict(info, profiles=info["profiles"][:1]), dict(info, profiles=info["profiles"][1:]),
                dict(info, profiles=None),

@@ -56,7 +56,7 @@ EXIT_PASS, EXIT_FAIL, EXIT_SETUP = 0, 1, 2
 
 # rlm-harness engine/rlm_engine/contract.py TRAINING_HASH; checked against engine.info and bridge.PROMPT_HASHES["v4"].
 TRAINING_HASH = "a71401e2e3bb2e94a424309d2ac01b58ec53a3407a7d9053e589512742b8a1d6"
-PROTOCOL = 1
+PROTOCOL = 2  # rlm-harness protocol 2 since its v1 step 3 (run.start.window, run.compacted)
 PROFILE, PROFILE_NOPACE = "training-v4", "training-v4-nopace"
 MODEL_REF = {"provider": "parity", "model": "recorded", "thinking": None}
 ZERO_USAGE = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0,
@@ -643,7 +643,7 @@ def kill_tree(proc: subprocess.Popen) -> None:
 
 
 def check_info(info: dict, profiles: tuple[str, ...]) -> None:
-    """engine.info: protocol 1, training's hash, and each profile hashing to it. Raises SetupError."""
+    """engine.info: protocol 2, training's hash, and each profile hashing to it. Raises SetupError."""
     if info.get("protocol") != PROTOCOL:
         raise SetupError(f"engine protocol {info.get('protocol')!r}, this script speaks {PROTOCOL}")
     if not (info.get("training_hash") == TRAINING_HASH == bridge.PROMPT_HASHES["v4"]):
