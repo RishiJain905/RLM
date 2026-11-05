@@ -132,3 +132,67 @@ rlm-harness v1 step 5: the `default` profile at the commit below, frozen as the 
 - No run compacted, in either split.
 - Did not pass (one run each): `harness-eval-v1-research-R-02`, `harness-eval-v1-research-R-01`, `harness-eval-v1-research-R-03`, `harness-eval-v1-search-R-02`, `harness-eval-v1-kernel-M-02`, `harness-eval-v1-research-R-06`, `harness-eval-v1-research-R-05`, `harness-eval-v1-research-R-07`, `harness-eval-v1-search-R-04`, `harness-eval-v1-search-R-03`, `harness-eval-v1-python-M-04`.
 - Hit the turn limit: `harness-eval-v1-kernel-M-02` (150).
+
+## Step 7: tuning
+
+rlm-harness v1 step 7, stopped after one round (D-258). Numbers and ids only. Rishi changed the base from `v1-baseline` (prompt v4) to the built-in `default` on rlmh-1 (D-256), so round 1's reference is a new tune-split eval of `default`, not step 5's tune half.
+
+- date (UTC): 2026-11-05; `harness_commit` `26ae4e2df585294b7e6ee4e32fc87e2478eefbbc` (`rlmh` 0.2.0)
+- set: tasks_sha256 `2e3e600f56cb15531359540d318df6935d92a95309aea4728c0bd5fd7a3949fc`, grades_sha256 `347f53ba43b2f1e1409d9c543b58a0632b7ec001615af12c1414eac987ecd82c`
+- model: root and sub `openrouter/deepseek/deepseek-v4.1-flash-1017`, root thinking `high`; GPU backend `hip`
+- base: built-in `default`, contract `rlmh-1`, profile hash `fcfb93777a14b4d5131e53763fbe1fdd7bcdf7f1fce97f0234931969633b443c`
+- probe: 10 tasks, seed `0`: `harness-eval-v1-research-R-01`, `harness-eval-v1-research-R-03`, `harness-eval-v1-search-R-01`, `harness-eval-v1-python-S-01`, `harness-eval-v1-python-M-01`, `harness-eval-v1-python-L-01`, `harness-eval-v1-web-S-02`, `harness-eval-v1-web-M-02`, `harness-eval-v1-kernel-S-01`, `harness-eval-v1-kernel-M-02`
+- cap: $11 (the $9 ceiling plus $2 of step 5's unspent money, Rishi); spent $3.7911 (reference eval $1.9413, arm A $1.8499)
+
+### `default` (rlmh-1), tune split: round 1's reference
+
+Out `results/harness-eval/2026-11-05-baseline-rlmh1/tune/`; estimate $0.96, cap $2.50, cost $1.9413.
+
+| | n | passed | pass rate | mean f2p share | mean turns | mean sub-calls | mean compactions | cost | cache hit | mean wall s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| total | 24 | 21 | 87.5% | 1.000 | 31.2 | 8.5 | 0.00 | $1.9413 | 90.2% | 355 |
+| kernel | 5 | 5 | 100.0% | 1.000 | 44.8 | 17.2 | 0.00 | $1.2839 | 93.1% | 980 |
+| python | 8 | 8 | 100.0% | 1.000 | 32.5 | 2.0 | 0.00 | $0.2453 | 92.1% | 190 |
+| research | 4 | 2 | 50.0% | - | 11.5 | 14.8 | 0.00 | $0.0949 | 44.1% | 58 |
+| search | 2 | 1 | 50.0% | - | 16.5 | 3.5 | 0.00 | $0.0240 | 77.8% | 60 |
+| web | 5 | 5 | 100.0% | 1.000 | 37.4 | 7.4 | 0.00 | $0.2932 | 89.9% | 348 |
+| L | 4 | 4 | 100.0% | 1.000 | 41.8 | 9.8 | 0.00 | $0.4634 | 93.2% | 537 |
+| M | 7 | 7 | 100.0% | 1.000 | 37.0 | 6.6 | 0.00 | $0.7247 | 91.9% | 467 |
+| R | 6 | 3 | 50.0% | - | 13.2 | 11.0 | 0.00 | $0.1189 | 56.3% | 59 |
+| S | 7 | 7 | 100.0% | 1.000 | 35.0 | 7.7 | 0.00 | $0.6342 | 91.9% | 392 |
+
+- infra errors: 0; reruns: none; capped: false; `test_tamper` 5; `leak_suspect` 11
+- mean score 0.899; cost per run $0.0809
+- against step 5's `v1-baseline` tune half, on the 23 ids both ran: both pass 18, `default` only 2, `v1-baseline` only 0, neither 3; McNemar exact p 0.50; cost ratio 0.89. `harness-eval-v1-kernel-L-01`, which step 5 never finished, passed.
+- did not pass: `harness-eval-v1-research-R-01`, `harness-eval-v1-search-R-02`, `harness-eval-v1-research-R-03`
+
+### Arm A (`v1-tuned`, no gate), round 1
+
+Out `results/harness-eval/2026-11-05-tune/`; estimate $2.20, cap $4.25, cost $1.8499; `stopped` null, `budget_stop` null, no round accepted, so `final/` is the base (`fcfb93777a14b4d5…`).
+
+| stage | decision | attempts | fell back | changed | cost |
+|---|---|---|---|---|---|
+| inv | EDIT | 1 | false | `guidance`, `scripts/ctx_index.py`, `skills/read-pass/SKILL.md` | $0.0421 |
+| dom | EDIT | 1 | false | `guidance`, `system`, `scripts/docindex.py`, `skills/codesearch/SKILL.md`, `skills/read-answer/SKILL.md` | $0.1522 |
+| compose | MERGE | 1 | false | `guidance`, `system`, `scripts/ctxmap.py`, `skills/codesearch/SKILL.md`, `skills/read-corpus/SKILL.md` | $0.0965 |
+| reflect | KEEP_BASE | 2 | true | - | $0.0000 |
+
+| eval | n | passed | infra | cost | reference, same ids |
+|---|---|---|---|---|---|
+| probe inv | 10 | 7 | 0 | $1.1009 | 8 of 10 |
+| probe dom | 10 | 3 | 4 | $0.3340 | 8 of 10 |
+| accept (composed) | 24 | 1 | 23 | $0.1241 | 21 of 24 |
+
+- accept: 1 task compared, 23 excluded as infra; rejected, reason `infra`. The composed profile (`796b1f4d1f6092ba…`) was never measured.
+- Every infra line, from probe dom on, is OpenRouter HTTP 402 (the account ran out of credit). The composed side's transient rerun hit 402 again, and both of the reflector's attempts ended on 402, so it fell back with no library entry. D-257 (rlm-harness 92307a4) now stops an eval or a tune at the first such error.
+- Rollouts R: 44 task runs (10 + 10 + 24, the composed side's rerun not counted); sessions P: 5 (inv, dom, compose, and the reflector twice).
+
+### Not run
+
+- Arm B (`--gated`) and round 2: Rishi stopped tuning after arm A (D-258). D-234's comparison did not happen, so agents and nudges (C5, C8) stay out of `TUNABLE`, untested.
+
+### Notes
+
+- The tuner's estimates ran low: $2.20 for arm A's round against about $3.6 to $4.5 for a full round at real costs, mostly the kernel tasks (probe inv's two kernel tasks cost $0.79).
+- `leak_suspect` stays noisy, as in step 5 (the model's own test names in REPL output); the `test_tamper` lines are kernel passes whose protected-file edits grading reverted.
+- One replicate per task (D-170). Tune-split numbers are what a tuner optimises, so step 8's held-out check is the real test.
