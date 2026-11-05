@@ -196,3 +196,56 @@ Out `results/harness-eval/2026-11-05-tune/`; estimate $2.20, cap $4.25, cost $1.
 - The tuner's estimates ran low: $2.20 for arm A's round against about $3.6 to $4.5 for a full round at real costs, mostly the kernel tasks (probe inv's two kernel tasks cost $0.79).
 - `leak_suspect` stays noisy, as in step 5 (the model's own test names in REPL output); the `test_tamper` lines are kernel passes whose protected-file edits grading reverted.
 - One replicate per task (D-170). Tune-split numbers are what a tuner optimises, so step 8's held-out check is the real test.
+
+## Step 8: held-out check
+
+rlm-harness v1 step 8. Step 7 accepted no round (D-258), so the profile checked is the built-in `default` itself, on rlmh-1 (D-256), against step 5's held-out run of `v1-baseline` (prompt v4). Numbers and ids only.
+
+- date (UTC): 2026-11-05; `harness_commit` `2825ad12f154a715f504e06c894dbe4af4299146` (`rlmh` 0.2.0)
+- model: root and sub `openrouter/deepseek/deepseek-v4.1-flash-1017`, call format `auto`, root thinking `high`, `--jobs 4`; GPU backend `hip`; repo tasks in `bypass` (D-172)
+- profiles: `default` (rlmh-1) `fcfb93777a14b4d5131e53763fbe1fdd7bcdf7f1fce97f0234931969633b443c`; `v1-baseline` (v4) `83f0257bcf41091b34bc796f3a2f8771dc043c6653ef46888ef324aa887f83ac`
+- `changed` (against `v1-baseline`): not a tuner edit; D-256 replaced the system prompt (`system.md`), the guidance and the contract's first messages and observations, and D-251 added `read.submit_check` and `scan()`
+- out `results/harness-eval/2026-11-05-heldout-default/`; estimate $0.90, cap $3.00, cost $1.4854; capped false, `account_stop` null
+
+### `default` (rlmh-1), held-out split
+
+| | n | passed | pass rate | mean f2p share | mean turns | mean sub-calls | mean compactions | cost | cache hit | mean wall s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| total | 24 | 18 | 75.0% | 0.991 | 27.5 | 12.9 | 0.00 | $1.4854 | 82.7% | 258 |
+| kernel | 5 | 5 | 100.0% | 1.000 | 37.8 | 14.6 | 0.00 | $0.5769 | 93.3% | 570 |
+| python | 8 | 7 | 87.5% | 0.993 | 25.8 | 1.9 | 0.00 | $0.2467 | 91.4% | 94 |
+| research | 4 | 2 | 50.0% | - | 9.8 | 28.2 | 0.00 | $0.0971 | 48.7% | 35 |
+| search | 2 | 0 | 0.0% | - | 19.0 | 20.5 | 0.00 | $0.0752 | 71.7% | 65 |
+| web | 5 | 4 | 80.0% | 0.978 | 37.6 | 13.6 | 0.00 | $0.4896 | 73.2% | 463 |
+| L | 4 | 3 | 75.0% | 0.972 | 36.5 | 11.2 | 0.00 | $0.4102 | 72.0% | 494 |
+| M | 7 | 6 | 85.7% | 0.992 | 33.3 | 8.4 | 0.00 | $0.5354 | 90.5% | 286 |
+| R | 6 | 2 | 33.3% | - | 12.8 | 25.7 | 0.00 | $0.1723 | 57.4% | 45 |
+| S | 7 | 7 | 100.0% | 1.000 | 29.1 | 7.4 | 0.00 | $0.3676 | 93.4% | 277 |
+
+- infra errors: 0; reruns: none; `test_tamper` 6; `leak_suspect` 7
+- mean score 0.793; cost per run $0.0619
+- did not pass: `harness-eval-v1-research-R-06`, `harness-eval-v1-search-R-04`, `harness-eval-v1-research-R-07`, `harness-eval-v1-python-M-04`, `harness-eval-v1-search-R-03`, `harness-eval-v1-web-L-02`
+
+### Against `v1-baseline` (D-173)
+
+- compared: 23 ids; excluded: `harness-eval-v1-kernel-L-02` (`v1-baseline`'s one infra line; `default` passed it)
+- P_b 17, P_t 17; both pass 16, `default` only 1 (`harness-eval-v1-research-R-05`), `v1-baseline` only 1 (`harness-eval-v1-web-L-02`), neither 5; McNemar exact p 1.00
+- mean `f2p_share` (repo tasks) 0.997 against 0.990
+- C_b $0.0311, C_t $0.0579 per task; ratio 1.86
+- on all 24 (step 5 counting its infra line as a fail): 17 against 18, $0.7156 against $1.4854 in the grade lines
+
+| track | n | `v1-baseline` passed | `default` passed | `v1-baseline` cost | `default` cost | `v1-baseline` sub-calls | `default` sub-calls |
+|---|---|---|---|---|---|---|---|
+| kernel | 4 | 4 | 4 | $0.2771 | $0.4238 | 33 | 53 |
+| python | 8 | 7 | 7 | $0.1213 | $0.2467 | 4 | 15 |
+| research | 4 | 1 | 2 | $0.0338 | $0.0971 | 9 | 113 |
+| search | 2 | 0 | 0 | $0.0096 | $0.0752 | 1 | 41 |
+| web | 5 | 5 | 4 | $0.2739 | $0.4896 | 16 | 68 |
+
+**Verdict: the rule does not hold.** P_t = P_b (needs P_b + 1) and C_t / C_b = 1.86 (needs at most 1.5). Nothing changes in rlm-harness; the choice is Rishi's (D-259).
+
+### Notes
+
+- The cost difference is sub-calls: `default` made 310 on the held-out split against `v1-baseline`'s 63, in every track; turns rose less (27.5 against 24.1 a run). On the tune split the same profiles' cost ratio was 0.89, because `v1-baseline`'s tune half had a kernel run that hit the 150-turn limit.
+- The held-out split has now been run twice (step 5 and here); any later held-out check reuses the same 24 tasks.
+- One replicate on 24 tasks can't show a significant difference (D-170).
